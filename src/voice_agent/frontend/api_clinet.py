@@ -76,7 +76,7 @@ class ApiClient:
         for attempt in range(retry_count):
             try:
                 r = requests.get(
-                    f"{self.base_url}/v1/session/state",
+                    f"{self.base_url}/session/state",
                     timeout=self.timeout_s,
                     headers={"X-Session-Id": session_id},
                 )

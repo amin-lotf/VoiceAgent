@@ -7,7 +7,7 @@ from voice_agent.proc import popen
 def run(*, host: str = "0.0.0.0", port: int = 8000, reload: bool = True):
     api_cmd = [
         sys.executable, "-m", "uvicorn",
-        "voice_agent.core.api.v1.fastapi_app:app",
+        "voice_agent.core.api.v1.fastapi_app:fastapi_app",
         "--host", host,
         "--port", str(port),
         "--log-level", "info",

@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from voice_agent.const import DEFAULT_SQLALCHEMY_DATABASE_URL, DEFAULT_TEST_SQLALCHEMY_DATABASE_URL, \
     DEFAULT_REPLY_PROVIDER, DEFAULT_REPLY_TEMPERATURE, DEFAULT_REPLY_MODEL, DEFAULT_REPLY_MAX_OUTPUT_TOKENS, \
-    DEFAULT_REPLY_MAX_CONTEXT_CHARS
+    DEFAULT_REPLY_MAX_CONTEXT_CHARS, DEFAULT_STREAMLIT_API_BASE_URL
 
 
 class Settings(BaseSettings):
@@ -66,6 +66,10 @@ class Settings(BaseSettings):
         default=DEFAULT_REPLY_MAX_CONTEXT_CHARS,
         ge=1,
         description="Maximum context characters passed into reply prompts.",
+    )
+    RANDOM_SEED: int | None = Field(
+        default=None,
+        description="Random seed for deterministic behavior. None for non-deterministic.",
     )
 
 

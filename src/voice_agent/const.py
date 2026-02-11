@@ -2,8 +2,7 @@
 
 DEFAULT_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/talk_to_pdf"
 DEFAULT_TEST_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/talk_to_pdf_test"
-
-
+DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1"
 DEFAULT_REPLY_PROVIDER = "openai"
 DEFAULT_REPLY_MODEL = "gpt-4o-mini"
 DEFAULT_REPLY_TEMPERATURE = 0.2
