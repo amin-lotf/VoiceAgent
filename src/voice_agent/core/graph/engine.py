@@ -73,7 +73,7 @@ class InterviewEngine:
             state["event"] = event
             state["user_text"] = user_text
             state["meta"] = meta or {}
-
+            state["assistant_text"] = ""
             # We'll update this once we receive final values from LangGraph
             final_state: CallState | None = None
 
