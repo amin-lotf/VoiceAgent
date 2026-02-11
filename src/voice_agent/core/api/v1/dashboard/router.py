@@ -6,10 +6,6 @@ from voice_agent.core.api.v1.session_store import _sid, get_public_state
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-
-
-
-
 @router.get("/session/state")
 async def get_session_state(
     request: Request,

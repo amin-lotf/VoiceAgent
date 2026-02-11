@@ -4,20 +4,41 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Annotated
 
+import redis
 from fastapi import FastAPI, Header,Request
 
 from voice_agent.core.api.v1.router import api_router
 from voice_agent.core.api.v1.session_store import init_session_store, get_public_state, _sid
 from voice_agent.core.api.v1.exception_handlers import register_exception_handlers
 from voice_agent.core.graph.engine import InterviewEngine
+from voice_agent.core.store.redis_store import RedisStateStore
 
 logger = logging.getLogger('voice_agent')
 
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(f_app: FastAPI):
-        f_app.state.engine = InterviewEngine()
-        yield
+        r = redis.Redis(
+            host="localhost",
+            port=6379,
+            decode_responses=True,
+        )
+        store = RedisStateStore(r, ttl_seconds=60 * 60)
+        engine = InterviewEngine(store=store)
+
+        app.state.redis = r
+        app.state.store = store
+        app.state.engine = engine
+
+        try:
+            yield
+        finally:
+            # Cancel active generation tasks (clean deploy)
+            for t in list(engine._active.values()):
+                if t and not t.done():
+                    t.cancel()
+            await r.aclose()
+
     app = FastAPI(
         title="Voice Agent API",
         description="Voice Agent API",
