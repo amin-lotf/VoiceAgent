@@ -39,6 +39,9 @@ source = ["src"]
 include = ["voice_agent*"]
 omit = ["*/tests/*", "*/test_*.py"]
 
+# optional CLI commands
+[project.scripts]
+talk = "voice_agent.cli:main"
 
 
 [tool.coverage.report]
