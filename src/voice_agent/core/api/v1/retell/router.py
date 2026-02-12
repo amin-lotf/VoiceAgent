@@ -159,6 +159,15 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
         ),
     )
 
+    await ws_send(
+        websocket,
+        RetellResponseOut(
+            response_id=0,
+            content="",
+            content_complete=True,
+        ),
+    )
+
     # 2) Keepalive (Retell uses ping/pong with auto_reconnect) :contentReference[oaicite:1]{index=1}
     stop_ping = asyncio.Event()
 
@@ -169,6 +178,21 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
                 await asyncio.wait_for(stop_ping.wait(), timeout=2.0)
             except asyncio.TimeoutError:
                 pass
+
+    # Agent speaks first: stream greeting under response_id=0
+    greeting_cancel = asyncio.Event()
+    greeting_task = asyncio.create_task(
+        stream_engine_to_retell(
+            websocket=websocket,
+            engine=engine,
+            call_id=call_id,
+            response_id=0,
+            event=CallEvent.CALL_STARTED,
+            user_text=None,
+            meta={"retell_phase": "call_started"},
+            cancel_guard=greeting_cancel,
+        )
+    )
 
     ping_task = asyncio.create_task(_ping_loop())
 
@@ -194,9 +218,9 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
 
             if isinstance(inbound, RetellResponseRequiredIn):
                 # Barge-in: stop greeting + stop any active stream
-                # greeting_cancel.set()
-                # if not greeting_task.done():
-                #     greeting_task.cancel()
+                if greeting_task is not None and not greeting_task.done():
+                    greeting_cancel.set()
+                    greeting_task.cancel()
 
                 if active_stream_cancel is not None:
                     active_stream_cancel.set()
@@ -234,5 +258,6 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
             active_stream_cancel.set()
         if active_stream_task is not None:
             active_stream_task.cancel()
-        # greeting_cancel.set()
-        # greeting_task.cancel()
+        if greeting_task is not None and not greeting_task.done():
+            greeting_cancel.set()
+            greeting_task.cancel()

@@ -93,7 +93,6 @@ class InterviewEngine:
 
             # 2) load state
             state = await self._load_state(call_id=call_id)
-            logger.warning(f"? state: {state}")
 
             # 3) inject event envelope
             state["event"] = event
