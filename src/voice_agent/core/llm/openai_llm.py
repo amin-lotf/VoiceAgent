@@ -5,8 +5,8 @@ from langchain_openai import ChatOpenAI
 from voice_agent.core.settings import settings
 
 LLM = ChatOpenAI(
-    model=settings.RREPLY_MODEL,
+    model=settings.REPLY_MODEL,
     temperature=settings.REPLY_TEMPERATURE,
     api_key=settings.OPENAI_API_KEY,
-    seed=settings.RANDOM_SEED
+    seed=settings.RANDOM_SEED,
 )

@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-import redis
+import redis.asyncio as redis
 from fastapi import FastAPI, Header,Request
 
 from voice_agent.core.api.v1.router import api_router

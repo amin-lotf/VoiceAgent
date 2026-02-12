@@ -67,7 +67,6 @@ class EngineChunk:
 
 
 
-
 class CallState(TypedDict, total=False):
     # Identity
     call_id: Required[str]
@@ -96,7 +95,16 @@ class CallState(TypedDict, total=False):
 
     # Control flags
     end_call: NotRequired[bool]
+    triage_triggered: NotRequired[bool]
 
     # Metadata
     started_at: NotRequired[str]
+
+
+
+@dataclass(frozen=True, slots=True)
+class RunResult:
+    """Return type for non-streaming runs."""
+    assistant_text: str
+    state: CallState
 

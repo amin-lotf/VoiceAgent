@@ -1,7 +1,4 @@
-from typing import Dict, Any, Annotated
-
-from fastapi import APIRouter, HTTPException, Header,Request
-
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/hubspot", tags=["hubspot"])
 

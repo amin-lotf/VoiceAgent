@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from voice_agent.const import DEFAULT_SQLALCHEMY_DATABASE_URL, DEFAULT_TEST_SQLALCHEMY_DATABASE_URL, \
     DEFAULT_REPLY_PROVIDER, DEFAULT_REPLY_TEMPERATURE, DEFAULT_REPLY_MODEL, DEFAULT_REPLY_MAX_OUTPUT_TOKENS, \
-    DEFAULT_REPLY_MAX_CONTEXT_CHARS, DEFAULT_STREAMLIT_API_BASE_URL
+    DEFAULT_REPLY_MAX_CONTEXT_CHARS
 
 
 class Settings(BaseSettings):
@@ -39,6 +39,15 @@ class Settings(BaseSettings):
         description="OpenAI API key for embedding, rerank, and chat calls.",
     )
 
+    HUBSPOT_ACCESS_TOKEN: str | None = Field(
+        default=None,
+        description="HubSpot private app token (PAT).",
+    )
+
+    CALENDLY_ACCESS_TOKEN: str | None = Field(
+        default=None,
+        description="Calendly personal access token.",
+    )
 
 
     # Reply generation
