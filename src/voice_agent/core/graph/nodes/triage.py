@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 from langgraph.config import get_stream_writer
@@ -9,15 +10,30 @@ from voice_agent.core.prompts.triage import build_triage_prompt
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent
 from .utils import ensure_spoken_on_user_turn
 
-
 EMERGENCY_FALLBACK_MESSAGE = (
     "I'm not able to help with medical emergencies. "
     "Please hang up and call 911 or your local emergency services right away."
 )
 
+TRIAGE_TIMEOUT_S = 4.0
+
+def _clean_jsonish(text: str) -> str:
+    t = (text or "").strip()
+    if not t:
+        return ""
+    # Remove fenced code blocks
+    if t.startswith("```"):
+        t = t.strip().strip("`").strip()
+        if t.lower().startswith("json"):
+            t = t[4:].strip()
+    # Try to extract first {...} if model adds extra text
+    l = t.find("{")
+    r = t.rfind("}")
+    if l != -1 and r != -1 and r > l:
+        t = t[l:r+1]
+    return t.strip()
 
 async def node_triage_precheck(state: CallState) -> CallState:
-    """Lightweight emergency detection before normal routing."""
     state["triage_triggered"] = False
     if state.get("event") != CallEvent.USER_TURN:
         return state
@@ -27,21 +43,12 @@ async def node_triage_precheck(state: CallState) -> CallState:
         return state
 
     prompt = build_triage_prompt(user_text)
-    writer = get_stream_writer()
     decision = "safe"
     emergency_message = ""
-    raw_response = ""
 
     try:
-        async for chunk in LLM.astream(prompt):
-            raw_response += chunk.content or ""
-
-        cleaned = raw_response.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.strip("`")
-            if cleaned.lower().startswith("json"):
-                cleaned = cleaned[4:].strip()
-
+        resp = await asyncio.wait_for(LLM.ainvoke(prompt), timeout=TRIAGE_TIMEOUT_S)
+        cleaned = _clean_jsonish(resp.content or "")
         data = json.loads(cleaned) if cleaned else {}
         decision = str(data.get("decision", decision)).lower()
         emergency_message = (data.get("message") or "").strip()
@@ -50,9 +57,12 @@ async def node_triage_precheck(state: CallState) -> CallState:
 
     if decision == "emergency":
         emergency_message = emergency_message or EMERGENCY_FALLBACK_MESSAGE
-        if writer and emergency_message:
-            for token in emergency_message.split():
-                writer(("assistant_token", token + " "))
+
+        writer = get_stream_writer()
+        if writer:
+            # Stream the emergency guidance (okay to stream user-facing message)
+            for word in emergency_message.split():
+                writer(("assistant_token", word + " "))
 
         state["intent"] = ClinicIntent.URGENT_SYMPTOM
         state["phase"] = CallPhase.TRIAGE
@@ -61,6 +71,7 @@ async def node_triage_precheck(state: CallState) -> CallState:
         state["assistant_text"] = emergency_message
 
     return state
+
 
 
 def node_triage_respond(state: CallState) -> CallState:

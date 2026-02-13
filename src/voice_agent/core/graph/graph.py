@@ -1,3 +1,5 @@
+import logging
+
 from langgraph.graph import END, START, StateGraph
 
 from voice_agent.core.types import CallEvent, CallPhase, CallState
@@ -25,7 +27,7 @@ from voice_agent.core.graph.nodes.triage import (
     node_triage_respond,
 )
 
-
+logger = logging.getLogger(__name__)
 
 def build_call_graph():
     graph = StateGraph(state_schema=CallState)
@@ -72,7 +74,7 @@ def build_call_graph():
 
     def _route_phase(state: CallState) -> str:
         phase = state.get("phase") or CallPhase.INTENT_ROUTING
-
+        logger.warning(f"🔥Routing phase: {phase.value}")
         # normalize enums that became strings after JSON persistence
         if isinstance(phase, str):
             try:
@@ -110,7 +112,6 @@ def build_call_graph():
             CallPhase.INTENT_ROUTING.value: "detect_intent",
             CallPhase.SLOT_FILL.value: "fill_appointment_slot",
             CallPhase.TOOL_EXECUTION.value: "execute_schedule_appointment",
-            CallPhase.TRIAGE.value: "triage_respond",
             CallPhase.HANDOFF.value: "handoff_fallback",
             CallPhase.DONE.value: END,
         },
@@ -123,8 +124,6 @@ def build_call_graph():
         phase = state.get("phase")
         if state.get("assistant_text"):
             return "respond"
-        if phase == CallPhase.TRIAGE:
-            return "triage"
         if phase == CallPhase.SLOT_FILL:
             return "slot_fill"
         if phase == CallPhase.HANDOFF:
@@ -135,7 +134,6 @@ def build_call_graph():
         "detect_intent",
         _after_intent,
         {
-            "triage": "triage_respond",
             "slot_fill": "fill_appointment_slot",
             "handoff": "handoff_fallback",
             "respond": "finalize_response",

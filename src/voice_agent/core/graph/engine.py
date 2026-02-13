@@ -98,7 +98,6 @@ class InterviewEngine:
             state["event"] = event
             state["user_text"] = user_text
             state["meta"] = meta or {}
-
             final_state: CallState | None = None
 
             async def _drive_graph(queue: asyncio.Queue[EngineChunk | None]) -> None:

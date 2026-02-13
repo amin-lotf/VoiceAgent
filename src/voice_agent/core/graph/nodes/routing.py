@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from voice_agent.core.types import CallEvent, CallPhase, ClinicIntent, CallState
 from .utils import (
     detect_emergency,
@@ -7,6 +9,7 @@ from .utils import (
     ensure_spoken_on_user_turn,
 )
 
+logger = logging.getLogger(__name__)
 
 def node_route_event(state: CallState) -> CallState:
     """
@@ -74,12 +77,8 @@ def node_detect_intent(state: CallState) -> CallState:
     """
     user_text = (state.get("user_text") or "").strip()
     lower_text = user_text.lower()
+    logger.warning(f"🔥detect_intent: {lower_text}")
 
-    if detect_emergency(user_text):
-        state["intent"] = ClinicIntent.URGENT_SYMPTOM
-        state["phase"] = CallPhase.TRIAGE
-        state["pending_question"] = None
-        return state
 
     if not user_text:
         state["assistant_text"] = (

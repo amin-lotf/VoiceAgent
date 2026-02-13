@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 
 from voice_agent.core.settings import settings
 
+
 LLM = ChatOpenAI(
     model=settings.REPLY_MODEL,
     temperature=settings.REPLY_TEMPERATURE,
