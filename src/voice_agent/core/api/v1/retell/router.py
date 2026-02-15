@@ -143,28 +143,28 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
             )
         ),
     )
-    begin = await engine.run_event(
-        call_id=call_id,
-        event=CallEvent.CALL_STARTED,
-        user_text=None,
-        meta={"retell_phase": "call_started"},
-    )
-
-    await ws_send(
-        websocket,
-        RetellResponseOut(
-            response_id=0,
-            content=begin.assistant_text or "",
-            content_complete=True,
-        ),
-    )
+    # begin = await engine.run_event(
+    #     call_id=call_id,
+    #     event=CallEvent.CALL_STARTED,
+    #     user_text=None,
+    #     meta={"retell_phase": "call_started"},
+    # )
+    #
+    # await ws_send(
+    #     websocket,
+    #     RetellResponseOut(
+    #         response_id=0,
+    #         content=begin.assistant_text or "",
+    #         content_complete=True,
+    #     ),
+    # )
 
     await ws_send(
         websocket,
         RetellResponseOut(
             response_id=0,
             content="",
-            content_complete=True,
+            content_complete=False,
         ),
     )
 

@@ -1,15 +1,41 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 
+from langgraph.config import get_stream_writer
+
+from voice_agent.core.llm.openai_llm import LLM
+from voice_agent.core.prompts.intent_router import build_intent_router_prompt
 from voice_agent.core.types import CallEvent, CallPhase, ClinicIntent, CallState
-from .utils import (
-    detect_emergency,
-    ensure_appointment,
-    ensure_spoken_on_user_turn,
-)
+from .utils import  ensure_spoken_on_user_turn
 
 logger = logging.getLogger(__name__)
+INTENT_ROUTER_TIMEOUT_S = 4.5
+FALLBACK_ASSISTANT_TEXT = "Let me connect you with a staff member."
+
+
+def _clean_jsonish(text: str) -> str:
+    """
+    Strip code fences / surrounding prose and return the best-effort JSON substring.
+    """
+    t = (text or "").strip()
+    if not t:
+        return ""
+    if t.startswith("```"):
+        t = t.strip("`").strip()
+        if t.lower().startswith("json"):
+            t = t[4:].strip()
+    l = t.find("{")
+    r = t.rfind("}")
+    if l != -1 and r != -1 and r > l:
+        t = t[l : r + 1]
+    return t.strip()
+
+
+
+
 
 def node_route_event(state: CallState) -> CallState:
     """
@@ -18,106 +44,55 @@ def node_route_event(state: CallState) -> CallState:
     """
     # Clear any previous response so downstream checks use fresh text.
     state["assistant_text"] = ""
-    ensure_appointment(state)
     event = state.get("event")
     if event == CallEvent.CALL_STARTED:
         state["phase"] = CallPhase.GREETING
         state["pending_question"] = None
-    elif event == CallEvent.HANGUP:
+    elif event == CallEvent.CALL_ENDED:
         state["end_call"] = True
         state["phase"] = CallPhase.DONE
+    else:
+        state["phase"] = CallPhase.INTENT_ROUTING
     return state
 
 
-def node_route_phase(state: CallState) -> str:
+
+
+async def node_detect_intent(state: CallState) -> CallState:
     """
-    Router for user_turn events based on current CallPhase.
-    Returns a routing label string for conditional edges.
-    """
-
-    # Default safety
-    phase = state.get("phase")
-
-    if phase is None:
-        state["phase"] = CallPhase.INTENT_ROUTING
-        return CallPhase.INTENT_ROUTING.value
-
-    # Greeting phase should never persist into user_turn routing
-    if phase == CallPhase.GREETING:
-        state["phase"] = CallPhase.INTENT_ROUTING
-        return CallPhase.INTENT_ROUTING.value
-
-    # Special split for CONFIRM phase
-    if phase == CallPhase.CONFIRM:
-        if state.get("pending_question") == "confirm_yes_no":
-            return "confirm_handle"
-        return "confirm_prompt"
-
-    # Normal phases
-    if phase in {
-        CallPhase.INTENT_ROUTING,
-        CallPhase.SLOT_FILL,
-        CallPhase.TOOL_EXECUTION,
-        CallPhase.TRIAGE,
-        CallPhase.HANDOFF,
-        CallPhase.DONE,
-    }:
-        return phase.value
-
-    # Ultimate safety fallback
-    state["phase"] = CallPhase.INTENT_ROUTING
-    return CallPhase.INTENT_ROUTING.value
-
-
-
-def node_detect_intent(state: CallState) -> CallState:
-    """
-    Basic intent classifier focused on booking and office info.
-    Falls back to handoff for unsupported asks.
+    LLM-based intent router. Non-streaming call with JSON output; streams assistant_text if present.
     """
     user_text = (state.get("user_text") or "").strip()
-    lower_text = user_text.lower()
-    logger.warning(f"🔥detect_intent: {lower_text}")
+    cur_phase = state.get("phase") or CallPhase.INTENT_ROUTING
+    cur_intent = state.get("intent") or None
+    prompt = build_intent_router_prompt(user_text, state)
 
+    data = {}
+    llm_failed = False
+    try:
+        resp = await asyncio.wait_for(LLM.ainvoke(prompt), timeout=INTENT_ROUTER_TIMEOUT_S)
+        cleaned = _clean_jsonish(resp.content or "")
+        data = json.loads(cleaned) if cleaned else {}
+    except Exception:
+        logger.warning("Intent router failed; using fallback", exc_info=True)
+        llm_failed = True
 
+    intent_raw = data.get("intent")
+    confidence = data.get("confidence")
+    try:
+        intent = ClinicIntent(intent_raw)
+    except Exception:
+        intent = cur_intent
     if not user_text:
-        state["assistant_text"] = (
-            "I can help with scheduling and basic office questions. "
-            "How can I assist you today?"
-        )
-        state["phase"] = CallPhase.INTENT_ROUTING
-        state["pending_question"] = None
-        ensure_spoken_on_user_turn(state)
-        return state
-
-    if any(keyword in lower_text for keyword in ["book", "schedule", "appointment", "visit"]):
-        state["intent"] = ClinicIntent.BOOK_APPOINTMENT
-        state["phase"] = CallPhase.SLOT_FILL
-        state["pending_question"] = None
-        return state
-
-    if any(keyword in lower_text for keyword in ["hours", "open", "close", "address", "location", "parking"]):
-        state["intent"] = ClinicIntent.OFFICE_INFO
-        state["phase"] = CallPhase.INTENT_ROUTING
-        state["pending_question"] = None
-        state["assistant_text"] = (
-            "We're open Monday through Friday, 9 AM to 5 PM, and the clinic is at our main office location. "
-            "Would you like me to help book you an appointment?"
-        )
-        ensure_spoken_on_user_turn(state)
-        return state
-
-    state["intent"] = ClinicIntent.HUMAN_HANDOFF
-    state["phase"] = CallPhase.HANDOFF
+        intent = ClinicIntent.CLARIFY
+    if intent is None:
+        intent = ClinicIntent.HUMAN_HANDOFF if user_text else None
+    if llm_failed:
+        intent = ClinicIntent.HUMAN_HANDOFF
+    state["intent"] = intent
     state["pending_question"] = None
-    return state
-
-
-def node_handle_hangup(state: CallState) -> CallState:
-    """Cleanup node for hangups."""
-    state["assistant_text"] = state.get("assistant_text") or "Thanks for calling. If you need anything else, reach out anytime."
-    state["end_call"] = True
-    state["phase"] = CallPhase.DONE
+    if confidence is not None:
+        state["intent_confidence"] = confidence
     return state
 
 

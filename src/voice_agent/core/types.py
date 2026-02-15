@@ -4,27 +4,22 @@ from typing import Any, Literal
 from typing import TypedDict, NotRequired, Required
 
 
-
-
 class ChunkKind(StrEnum):
     TOKEN = "token"
     FINAL = "final"
     DEBUG = "debug"
 
+
 class CallEvent(StrEnum):
     CALL_STARTED = "call_started"
     USER_TURN = "user_turn"
-    HANGUP = "hangup"
+    CALL_ENDED = "call_ended"
 
 
 class CallPhase(StrEnum):
     GREETING = "greeting"
     INTENT_ROUTING = "intent_routing"
-    SLOT_FILL = "slot_fill"
-    CONFIRM = "confirm"
-    TOOL_EXECUTION = "tool_execution"
     TRIAGE = "triage"
-    HANDOFF = "handoff"
     DONE = "done"
 
 
@@ -32,13 +27,20 @@ class ClinicIntent(StrEnum):
     BOOK_APPOINTMENT = "book_appointment"
     RESCHEDULE = "reschedule"
     CANCEL = "cancel"
-    NEW_PATIENT = "new_patient"
-    EXISTING_PATIENT = "existing_patient"
-    INSURANCE_QUESTION = "insurance_question"
-    PRICING_QUESTION = "pricing_question"
     OFFICE_INFO = "office_info"
-    URGENT_SYMPTOM = "urgent_symptom"
     HUMAN_HANDOFF = "human_handoff"
+    CLARIFY = "clarify"
+    HANGUP = "hangup"
+
+
+
+
+
+class OfficeTopic(StrEnum):
+    HOURS = "hours"
+    ADDRESS = "address"
+    LOCATION = "location"
+    PARKING = "parking"
 
 
 class AppointmentSlots(TypedDict, total=False):
@@ -48,23 +50,25 @@ class AppointmentSlots(TypedDict, total=False):
     date_iso: str
     time_requested: str
     time_iso: str
-    provider: str
     phone: str
-    email: str
     reason_for_visit: str
-    insurance_provider: str
 
-
-
+REQUIRED_FIELDS: tuple[str, ...] = (
+    "patient_type",
+    "name",
+    "date_requested",
+    "date_iso",
+    "time_requested",
+    "time_iso",
+    "phone",
+    "reason_for_visit",
+)
 
 
 @dataclass(frozen=True)
 class EngineChunk:
     kind: ChunkKind
     data: Any
-
-
-
 
 
 class CallState(TypedDict, total=False):
@@ -79,6 +83,7 @@ class CallState(TypedDict, total=False):
     # Flow control
     phase: Required[CallPhase]
     intent: NotRequired[ClinicIntent | None]
+    intent_confidence: NotRequired[float]
 
     # Slot container
     appointment: NotRequired[AppointmentSlots]
@@ -92,14 +97,14 @@ class CallState(TypedDict, total=False):
     # Transcript memory
     messages: NotRequired[list[dict]]
     assistant_text: NotRequired[str]
-
+    assistant_streamed: NotRequired[bool]
     # Control flags
     end_call: NotRequired[bool]
     triage_triggered: NotRequired[bool]
 
     # Metadata
     started_at: NotRequired[str]
-
+    office_topics: NotRequired[list[OfficeTopic]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,4 +112,3 @@ class RunResult:
     """Return type for non-streaming runs."""
     assistant_text: str
     state: CallState
-

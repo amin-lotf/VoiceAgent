@@ -55,6 +55,7 @@ class InterviewEngine:
                 "call_id": call_id,
                 "messages": [],
                 "assistant_text": "",
+                "assistant_streamed": False,
                 "phase": CallPhase.GREETING,
                 "pending_question": None,
                 "event": None,
@@ -72,7 +73,7 @@ class InterviewEngine:
         event: CallEvent,
     ) -> None:
         end_call = bool(final_state.get("end_call", False))
-        if end_call or event == CallEvent.HANGUP:
+        if end_call or event == CallEvent.CALL_ENDED:
             await self._store.delete(call_id)
         else:
             await self._store.set(call_id, final_state)

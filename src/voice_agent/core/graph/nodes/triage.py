@@ -63,12 +63,14 @@ async def node_triage_precheck(state: CallState) -> CallState:
             # Stream the emergency guidance (okay to stream user-facing message)
             for word in emergency_message.split():
                 writer(("assistant_token", word + " "))
+            state["assistant_streamed"] = True
 
         state["intent"] = ClinicIntent.URGENT_SYMPTOM
         state["phase"] = CallPhase.TRIAGE
         state["pending_question"] = None
         state["triage_triggered"] = True
         state["assistant_text"] = emergency_message
+
 
     return state
 
