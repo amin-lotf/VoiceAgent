@@ -45,12 +45,11 @@ def node_office_info(state: CallState) -> CallState:
     state["phase"] = CallPhase.INTENT_ROUTING
     state["pending_question"] = None
 
-    # Stream templates here if you want (same style as triage_precheck)
-    if state.get("event") == CallEvent.USER_TURN:
-        writer = get_stream_writer()
-        if writer:
-            for word in text.split():
-                writer(("assistant_token", word + " "))
-            state["assistant_streamed"] = True
+
+    writer = get_stream_writer()
+    if writer:
+        for word in text.split():
+            writer(("assistant_token", word + " "))
+        state["assistant_streamed"] = True
 
     return state

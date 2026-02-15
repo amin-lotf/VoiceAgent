@@ -87,14 +87,10 @@ def build_call_graph():
     )
 
     graph.add_edge("fill_appointment_slot",'finalize_response')
-
+    graph.add_edge("get_office_info",'finalize_response')
     graph.add_conditional_edges("finalize_response",
                                 lambda state:  'end_call' if bool(state.get("end_call")) else 'keep_call',
                                 {"end_call": 'on_call_ended', 'keep_call': END},
                    )
     graph.add_edge("ask_clarify_intent", "finalize_response")
-
-
-
-
     return graph.compile()
