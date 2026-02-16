@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from langgraph.config import get_stream_writer
 
-from voice_agent.core.types import CallPhase, CallState
+from voice_agent.core.types import CallPhase, CallState, ClinicIntent
 from .utils import ensure_spoken_on_user_turn
 
 EMERGENCY_FALLBACK_MESSAGE = (
@@ -12,7 +12,7 @@ EMERGENCY_FALLBACK_MESSAGE = (
 
 
 def node_handoff_fallback(state: CallState) -> CallState:
-    if state.get('triage_triggered'):
+    if state.get('intent') == ClinicIntent.TRIAGE:
         state["assistant_text"] = EMERGENCY_FALLBACK_MESSAGE
     else:
         state["assistant_text"] = "I Will have our staff call you back."

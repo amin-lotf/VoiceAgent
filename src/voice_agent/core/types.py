@@ -31,6 +31,15 @@ class ClinicIntent(StrEnum):
     HUMAN_HANDOFF = "human_handoff"
     CLARIFY = "clarify"
     HANGUP = "hangup"
+    CHECK_PENDING= "check_pending"
+    TRIAGE= "triage"
+
+ACTIVE_INTENTS = {
+    ClinicIntent.BOOK_APPOINTMENT,
+    ClinicIntent.RESCHEDULE,
+    ClinicIntent.CANCEL,
+    ClinicIntent.HANGUP
+}
 
 
 
@@ -83,7 +92,8 @@ class CallState(TypedDict, total=False):
     # Flow control
     phase: Required[CallPhase]
     intent: NotRequired[ClinicIntent | None]
-    intent_confidence: NotRequired[float]
+    intent_confidence: NotRequired[float | None]
+    pending_intent: NotRequired[ClinicIntent | None]
 
     # Slot container
     appointment: NotRequired[AppointmentSlots]

@@ -23,7 +23,7 @@ def build_call_graph():
     graph.add_node("route_event", node_route_event)
     # graph.add_node("route_phase", lambda state: state)
     graph.add_node("on_call_started", node_on_call_started)
-    graph.add_node("triage_precheck", node_triage_precheck)
+    # graph.add_node("triage_precheck", node_triage_precheck)
     graph.add_node("detect_intent", node_detect_intent)
     graph.add_node("get_office_info", node_office_info)
     graph.add_node("fill_appointment_slot", node_fill_appointment_slot)
@@ -41,7 +41,8 @@ def build_call_graph():
         lambda state: state.get("event"),
         {
             CallEvent.CALL_STARTED: "on_call_started",
-            CallEvent.USER_TURN: "triage_precheck",
+            # CallEvent.USER_TURN: "triage_precheck",
+            CallEvent.USER_TURN: "detect_intent",
             CallEvent.CALL_ENDED: "on_call_ended",
             None: "finalize_response",
         },
@@ -50,11 +51,11 @@ def build_call_graph():
     graph.add_edge("on_call_started", 'finalize_response')
     graph.add_edge("handle_hangup", "finalize_response")
 
-    graph.add_conditional_edges(
-        "triage_precheck",
-        lambda state: bool(state.get("triage_triggered")),
-        {True: "handoff_fallback", False: "detect_intent"},
-    )
+    # graph.add_conditional_edges(
+    #     "triage_precheck",
+    #     lambda state: bool(state.get("triage_triggered")),
+    #     {True: "handoff_fallback", False: "detect_intent"},
+    # )
 
 
     graph.add_edge("handoff_fallback", 'finalize_response')
@@ -64,7 +65,7 @@ def build_call_graph():
         match intent:
             case ClinicIntent.BOOK_APPOINTMENT | ClinicIntent.RESCHEDULE | ClinicIntent.CANCEL:
                 return "slot_fill"
-            case ClinicIntent.HUMAN_HANDOFF:
+            case ClinicIntent.HUMAN_HANDOFF | ClinicIntent.TRIAGE:
                 return "handoff"
             case ClinicIntent.HANGUP:
                 return "hangup"

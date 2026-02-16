@@ -3,38 +3,39 @@ from __future__ import annotations
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from voice_agent.core.types import CallPhase, CallState, ClinicIntent
-
+from voice_agent.core.prompts.utils import _enum_values
+from voice_agent.core.types import CallPhase, CallState, ClinicIntent, OfficeTopic
 
 INTENT_ROUTER_SYSTEM_PROMPT = (
     "You are a routing brain for a medical clinic voice agent. "
-    "Your only job is to choose (1) ClinicIntent and (2) CallPhase for the next step. "
+    "Your only job is to choose ClinicIntent the next step. "
     "Return ONLY a single JSON object. No markdown. No prose. No extra keys.\n\n"
 
     "Valid ClinicIntent values: "
-    "book_appointment, reschedule, cancel, new_patient, existing_patient, "
-    "insurance_question, pricing_question, office_info, urgent_symptom, human_handoff.\n"
-    "Valid CallPhase values: "
-    "greeting, intent_routing, slot_fill, confirm, tool_execution, triage, handoff, done.\n\n"
+    "book_appointment, reschedule, cancel, "
+    "office_info,  human_handoff, clarify.\n\n"
+    
 
     "Decision rules (pick the best match):\n"
-    "- If the caller reports urgent or life-threatening symptoms (e.g., chest pain, trouble breathing, "
-    "severe bleeding, stroke signs, suicidal intent) -> intent=urgent_symptom, phase=triage.\n"
-    "- If the caller wants to BOOK an appointment -> intent=book_appointment, phase=slot_fill.\n"
-    "- If the caller wants to RESCHEDULE an existing appointment -> intent=reschedule, phase=slot_fill.\n"
-    "- If the caller wants to CANCEL an appointment -> intent=cancel, phase=slot_fill.\n"
-    "- If the caller asks if they are a new or existing patient, or says they are new -> "
-    "intent=new_patient or existing_patient, phase=slot_fill.\n"
-    "- If the caller asks about insurance coverage, network, copay, eligibility -> "
-    "intent=insurance_question, phase=handoff.\n"
-    "- If the caller asks about prices/fees/cost estimates -> intent=pricing_question, phase=handoff.\n"
-    "- If the caller asks about clinic hours, address, location, parking -> intent=office_info, phase=intent_routing.\n"
-    "- If the caller's request is unclear -> phase=intent_routing (NOT handoff) and set confidence<=0.4.\n"
-    "- Use intent=human_handoff, phase=handoff only when the request is clearly outside scope.\n\n"
-
+    "- If the caller wants to BOOK an appointment -> intent=book_appointment.\n"
+    "- If the caller wants to RESCHEDULE an existing appointment -> intent=reschedule.\n"
+    "- If the caller wants to CANCEL an appointment -> intent=cancel.\n"
+    "- If the caller asks about office topics, e.g., hours, address, location, and parking, -> intent=office_info.\n"
+    "- if the caller's message describes a potential medical emergency that requires 911 or local emergency services -> intent=triage.\n"
+    "- if the caller "
+    "- If the caller's request is unclear -> intent=clarify and set confidence<=0.4.\n"
+    "- Use intent=human_handoff,  when the request is clearly outside scope.\n\n"
+    f"- Valid OfficeTopic values: {_enum_values(OfficeTopic)}.\n\n"
     "Output schema (JSON only; keys must be exactly these): "
-    "{\"intent\":\"<ClinicIntent>\",\"phase\":\"<CallPhase>\",\"end_call\":false,\"confidence\":0.0}\n"
-    "Always include confidence between 0 and 1."
+    "{\"intent\":\"<ClinicIntent>\",\"office_topics\":[],\"end_call\":false,\"confidence\":0.0}\n"
+    "Rules:\n"
+    "- ALWAYS include office_topics as an array.\n"
+    "- If intent is NOT office_info, office_topics MUST be [].\n"
+    "- If intent is office_info, choose one or more topics from OfficeTopic that match the caller's request.\n"
+    "- If the caller asks for multiple office details in one turn, include multiple topics.\n"
+    "- If the caller asks for book/reschedule/cancel appointment actions AND office info in the same turn, "
+    "prioritize the appointment action (intent=book_appointment/reschedule/cancel) and set office_topics.\n"
+    "- confidence must be between 0 and 1.\n"
 )
 
 
@@ -52,7 +53,6 @@ def _intent_value(intent: ClinicIntent | str | None) -> str:
 
 
 def build_intent_router_prompt(user_text: str, state: CallState):
-    phase = _phase_value(state.get("phase"))
     pending_question = state.get("pending_question") or "none"
     prior_intent = _intent_value(state.get("intent"))
 
@@ -68,7 +68,7 @@ def build_intent_router_prompt(user_text: str, state: CallState):
         [
             f"Caller said: {user_text or '[silence]'}",
             "Context:",
-            f"- current_phase: {phase}",
+
             f"- pending_question: {pending_question}",
             f"- prior_intent: {prior_intent}",
             f"- appointment_summary: {json.dumps(appt_summary, ensure_ascii=False)}",

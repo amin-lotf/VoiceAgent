@@ -8,7 +8,7 @@ from langgraph.config import get_stream_writer
 
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.intent_router import build_intent_router_prompt
-from voice_agent.core.types import CallEvent, CallPhase, ClinicIntent, CallState
+from voice_agent.core.types import CallEvent, CallPhase, ClinicIntent, CallState, ACTIVE_INTENTS, OfficeTopic
 from .utils import  ensure_spoken_on_user_turn
 
 logger = logging.getLogger(__name__)
@@ -63,8 +63,8 @@ async def node_detect_intent(state: CallState) -> CallState:
     LLM-based intent router. Non-streaming call with JSON output; streams assistant_text if present.
     """
     user_text = (state.get("user_text") or "").strip()
-    cur_phase = state.get("phase") or CallPhase.INTENT_ROUTING
-    cur_intent = state.get("intent") or None
+    prev_intent = state.get("intent") or None
+    pending_intent = state.get("pending_intent") or None
     prompt = build_intent_router_prompt(user_text, state)
 
     data = {}
@@ -80,19 +80,42 @@ async def node_detect_intent(state: CallState) -> CallState:
     intent_raw = data.get("intent")
     confidence = data.get("confidence")
     try:
-        intent = ClinicIntent(intent_raw)
+        if not user_text:
+            intent = ClinicIntent.CLARIFY
+        else:
+            intent = ClinicIntent(intent_raw)
     except Exception:
-        intent = cur_intent
-    if not user_text:
-        intent = ClinicIntent.CLARIFY
+        intent = None
+
     if intent is None:
-        intent = ClinicIntent.HUMAN_HANDOFF if user_text else None
+        intent = ClinicIntent.HUMAN_HANDOFF if user_text else ClinicIntent.CLARIFY
     if llm_failed:
         intent = ClinicIntent.HUMAN_HANDOFF
+
+    if intent == ClinicIntent.CHECK_PENDING:
+        intent = pending_intent or ClinicIntent.CLARIFY
+
     state["intent"] = intent
     state["pending_question"] = None
-    if confidence is not None:
-        state["intent_confidence"] = confidence
+    if intent not in ACTIVE_INTENTS and prev_intent in ACTIVE_INTENTS:
+        state['pending_intent'] = intent
+    else:
+        state['pending_intent'] = None
+
+    state["intent_confidence"] = confidence
+
+    office_topics_raw = data.get("office_topics", [])
+    office_topics: list[OfficeTopic] = []
+    if isinstance(office_topics_raw, list):
+        for t in office_topics_raw:
+            try:
+                office_topics.append(OfficeTopic(str(t)))
+            except Exception:
+                continue
+
+    # Always set it (empty list is fine)
+    state["office_topics"] = office_topics
+
     return state
 
 
