@@ -8,8 +8,8 @@ from langgraph.config import get_stream_writer
 
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.intent_router import build_intent_router_prompt
-from voice_agent.core.types import CallEvent, CallPhase, ClinicIntent, CallState, ACTIVE_INTENTS, OfficeTopic
-from .utils import  ensure_spoken_on_user_turn
+from voice_agent.core.types import CallEvent, CallPhase, ClinicIntent, CallState, APPOINTMENT_INTENTS, OfficeTopic
+from .utils import ensure_spoken_on_user_turn
 
 logger = logging.getLogger(__name__)
 INTENT_ROUTER_TIMEOUT_S = 4.5
@@ -30,11 +30,8 @@ def _clean_jsonish(text: str) -> str:
     l = t.find("{")
     r = t.rfind("}")
     if l != -1 and r != -1 and r > l:
-        t = t[l : r + 1]
+        t = t[l: r + 1]
     return t.strip()
-
-
-
 
 
 def node_route_event(state: CallState) -> CallState:
@@ -56,16 +53,11 @@ def node_route_event(state: CallState) -> CallState:
     return state
 
 
-
-
 async def node_detect_intent(state: CallState) -> CallState:
     """
-    LLM-based intent router. Non-streaming call with JSON output; streams assistant_text if present.
+    LLM-based intent router. Non-streaming call with JSON output.
     """
-    user_text = (state.get("user_text") or "").strip()
-    prev_intent = state.get("intent") or None
-    pending_intent = state.get("pending_intent") or None
-    prompt = build_intent_router_prompt(user_text, state)
+    prompt = build_intent_router_prompt(state)
 
     data = {}
     llm_failed = False
@@ -80,29 +72,12 @@ async def node_detect_intent(state: CallState) -> CallState:
     intent_raw = data.get("intent")
     confidence = data.get("confidence")
     try:
-        if not user_text:
-            intent = ClinicIntent.CLARIFY
-        else:
-            intent = ClinicIntent(intent_raw)
+        intent = ClinicIntent(intent_raw)
     except Exception:
         intent = None
 
-    if intent is None:
-        intent = ClinicIntent.HUMAN_HANDOFF if user_text else ClinicIntent.CLARIFY
-    if llm_failed:
+    if intent is None or llm_failed:
         intent = ClinicIntent.HUMAN_HANDOFF
-
-    if intent == ClinicIntent.CHECK_PENDING:
-        intent = pending_intent or ClinicIntent.CLARIFY
-
-    state["intent"] = intent
-    state["pending_question"] = None
-    if intent not in ACTIVE_INTENTS and prev_intent in ACTIVE_INTENTS:
-        state['pending_intent'] = intent
-    else:
-        state['pending_intent'] = None
-
-    state["intent_confidence"] = confidence
 
     office_topics_raw = data.get("office_topics", [])
     office_topics: list[OfficeTopic] = []
@@ -113,9 +88,12 @@ async def node_detect_intent(state: CallState) -> CallState:
             except Exception:
                 continue
 
-    # Always set it (empty list is fine)
     state["office_topics"] = office_topics
-
+    if office_topics and intent in APPOINTMENT_INTENTS:
+        state['pending_intent'] = intent
+        intent = ClinicIntent.OFFICE_INFO
+    state["intent"] = intent
+    state["intent_confidence"] = confidence
     return state
 
 
@@ -135,4 +113,6 @@ def node_finalize_response(state: CallState) -> CallState:
     Ensures a spoken response exists before ending a USER_TURN.
     """
     ensure_spoken_on_user_turn(state)
+    state['prev_user_text'] = state.get('user_text')
+    state['prev_assistant_text'] = state.get('assistant_text')
     return state

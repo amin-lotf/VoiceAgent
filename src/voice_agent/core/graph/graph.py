@@ -1,5 +1,7 @@
 import logging
 from langgraph.graph import END, START, StateGraph
+
+from voice_agent.core.graph.nodes.check_pending import node_check_pending
 from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent
 from voice_agent.core.graph.nodes.greeting import node_on_call_started
@@ -12,7 +14,6 @@ from voice_agent.core.graph.nodes.routing import (
 )
 from voice_agent.core.graph.nodes.hangup import node_handle_hangup, node_on_call_ended
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
-from voice_agent.core.graph.nodes.triage import node_triage_precheck
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ def build_call_graph():
     graph.add_node("route_event", node_route_event)
     # graph.add_node("route_phase", lambda state: state)
     graph.add_node("on_call_started", node_on_call_started)
-    # graph.add_node("triage_precheck", node_triage_precheck)
+    graph.add_node("check_pending", node_check_pending)
     graph.add_node("detect_intent", node_detect_intent)
     graph.add_node("get_office_info", node_office_info)
     graph.add_node("fill_appointment_slot", node_fill_appointment_slot)
@@ -71,6 +72,16 @@ def build_call_graph():
                 return "hangup"
             case ClinicIntent.OFFICE_INFO:
                 return "office_info"
+            case ClinicIntent.CHECK_PENDING:
+                return 'check_pending'
+            case _:
+                return "clarify"
+
+    def _after_pending(state: CallState):
+        intent = state.get("intent")
+        match intent:
+            case ClinicIntent.BOOK_APPOINTMENT | ClinicIntent.RESCHEDULE | ClinicIntent.CANCEL:
+                return "slot_fill"
             case _:
                 return "clarify"
 
@@ -84,8 +95,15 @@ def build_call_graph():
             "hangup": "handle_hangup",
             "office_info": "get_office_info",
             "clarify": "ask_clarify_intent",
+            'check_pending': 'check_pending'
         },
     )
+
+    graph.add_conditional_edges('check_pending',
+                                _after_pending,
+                                {"slot_fill": "fill_appointment_slot",
+                                 'clarify': 'ask_clarify_intent'},
+                                )
 
     graph.add_edge("fill_appointment_slot",'finalize_response')
     graph.add_edge("get_office_info",'finalize_response')

@@ -34,11 +34,10 @@ class ClinicIntent(StrEnum):
     CHECK_PENDING= "check_pending"
     TRIAGE= "triage"
 
-ACTIVE_INTENTS = {
+APPOINTMENT_INTENTS = {
     ClinicIntent.BOOK_APPOINTMENT,
     ClinicIntent.RESCHEDULE,
     ClinicIntent.CANCEL,
-    ClinicIntent.HANGUP
 }
 
 
@@ -87,6 +86,7 @@ class CallState(TypedDict, total=False):
     # Event envelope (per webhook)
     event: Required[CallEvent]
     user_text: NotRequired[str | None]
+    prev_user_text: NotRequired[str | None]
     meta: NotRequired[dict]
 
     # Flow control
@@ -107,6 +107,7 @@ class CallState(TypedDict, total=False):
     # Transcript memory
     messages: NotRequired[list[dict]]
     assistant_text: NotRequired[str]
+    prev_assistant_text: NotRequired[str]
     assistant_streamed: NotRequired[bool]
     # Control flags
     end_call: NotRequired[bool]
