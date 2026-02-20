@@ -115,7 +115,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
 
     # graph.add_edge("fill_appointment_slot",'finalize_response')
     graph.add_conditional_edges("fill_appointment_slot",
-                                lambda state: 'true' if bool(state.get("read_to_confirm")) else 'false',
+                                lambda state: 'true' if bool(state.get("ready_to_confirm")) else 'false',
                                 {'true': 'confirm_appointment_slot', 'false': 'finalize_response'})
     graph.add_edge("get_office_info",'finalize_response')
     graph.add_conditional_edges("finalize_response",

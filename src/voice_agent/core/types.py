@@ -110,7 +110,7 @@ class CallState(TypedDict, total=False):
     # Slot container
     appointment_create: NotRequired[AppointmentCreate]
     appointment_view: NotRequired[AppointmentView]
-    read_to_confirm: NotRequired[bool]
+    ready_to_confirm: NotRequired[bool]
     # If you later support more flows:
     # reschedule: NotRequired[RescheduleSlots]
     # cancellation: NotRequired[CancelSlots]

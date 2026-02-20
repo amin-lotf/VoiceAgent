@@ -5,8 +5,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.nodes.utils import is_appointment_complete
-from voice_agent.core.types import  CallState
-
+from voice_agent.core.types import CallState, ClinicIntent
 
 
 def node_fill_appointment_slot(state: CallState) -> CallState:
@@ -18,7 +17,8 @@ def node_fill_appointment_slot(state: CallState) -> CallState:
         for word in text.split():
             writer(("assistant_token", word + " "))
         state["assistant_streamed"] = True
-    state['read_to_confirm'] = is_appointment_complete(appointment)
+    state['ready_to_confirm'] = is_appointment_complete(appointment)
+    state['pending_intent'] = ClinicIntent.BOOK_APPOINTMENT
     return state
 
 
