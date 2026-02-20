@@ -1,5 +1,8 @@
 import logging
+from functools import partial
+
 from langgraph.graph import END, START, StateGraph
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from voice_agent.core.graph.nodes.check_pending import node_check_pending
 from voice_agent.core.graph.nodes.office_info import node_office_info
@@ -13,11 +16,11 @@ from voice_agent.core.graph.nodes.routing import (
     node_route_event,
 )
 from voice_agent.core.graph.nodes.hangup import node_handle_hangup, node_on_call_ended
-from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
+from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot, node_confirm_appointment_slot
 
 logger = logging.getLogger(__name__)
 
-def build_call_graph():
+def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph = StateGraph(state_schema=CallState)
 
     # Nodes
@@ -27,7 +30,12 @@ def build_call_graph():
     graph.add_node("check_pending", node_check_pending)
     graph.add_node("detect_intent", node_detect_intent)
     graph.add_node("get_office_info", node_office_info)
+
     graph.add_node("fill_appointment_slot", node_fill_appointment_slot)
+    graph.add_node("confirm_appointment_slot", partial(
+            node_confirm_appointment_slot,
+            sessionmaker=sessionmaker,
+        ),)
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node("on_call_ended", node_on_call_ended)
@@ -105,7 +113,10 @@ def build_call_graph():
                                  'clarify': 'ask_clarify_intent'},
                                 )
 
-    graph.add_edge("fill_appointment_slot",'finalize_response')
+    # graph.add_edge("fill_appointment_slot",'finalize_response')
+    graph.add_conditional_edges("fill_appointment_slot",
+                                lambda state: 'true' if bool(state.get("read_to_confirm")) else 'false',
+                                {'true': 'confirm_appointment_slot', 'false': 'finalize_response'})
     graph.add_edge("get_office_info",'finalize_response')
     graph.add_conditional_edges("finalize_response",
                                 lambda state:  'end_call' if bool(state.get("end_call")) else 'keep_call',

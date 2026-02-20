@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from langgraph.config import get_stream_writer
-from voice_agent.core.types import AppointmentSlots, CallEvent, CallState, REQUIRED_FIELDS
+from voice_agent.core.types import CallEvent, CallState, AppointmentCreate
 
 
 def ensure_spoken_on_user_turn(state: CallState) -> CallState:
@@ -34,15 +34,8 @@ def normalize_phone(text: str | None) -> str | None:
     return digits
 
 
-def is_appointment_complete(slots: AppointmentSlots) -> bool:
-    return all(slots.get(field) for field in REQUIRED_FIELDS)
+def is_appointment_complete(data: AppointmentCreate) -> bool:
+    required_keys = AppointmentCreate.__annotations__.keys()
+    return required_keys <= data.keys()
 
 
-def next_missing_slot(appointment: AppointmentSlots) -> str | None:
-    if not appointment.get("date_requested") or not appointment.get("time_requested"):
-        return "ask_datetime"
-    if not appointment.get("name"):
-        return "ask_name"
-    if not appointment.get("phone"):
-        return "ask_phone"
-    return None

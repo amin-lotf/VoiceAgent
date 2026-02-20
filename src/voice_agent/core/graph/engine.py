@@ -5,6 +5,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
 from voice_agent.core.graph.graph import build_call_graph
 from voice_agent.core.store.redis_store import RedisStateStore
 from voice_agent.core.types import CallState, EngineChunk, ChunkKind, CallPhase, CallEvent, RunResult
@@ -26,8 +28,8 @@ class InterviewEngine:
     Also supports non-streaming runs via run_event().
     """
 
-    def __init__(self, *, store: RedisStateStore):
-        self._graph = build_call_graph()
+    def __init__(self, *, store: RedisStateStore,sessionmaker: async_sessionmaker[AsyncSession]):
+        self._graph = build_call_graph(sessionmaker)
         self._store = store
         self._locks: dict[str, asyncio.Lock] = {}
         self._active: dict[str, asyncio.Task] = {}
