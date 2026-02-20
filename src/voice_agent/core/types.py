@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
 from typing import TypedDict, NotRequired, Required
+from uuid import UUID
 
 
 class ChunkKind(StrEnum):
@@ -50,27 +52,37 @@ class OfficeTopic(StrEnum):
     LOCATION = "location"
     PARKING = "parking"
 
+class PatientType(StrEnum):
+    NEW = "new"
+    EXISTING = "existing"
 
-class AppointmentSlots(TypedDict, total=False):
-    patient_type: Literal["new", "existing"]
+class AppointmentStatus(StrEnum):
+    HELD = "held"         # optional: temporary hold before confirmation
+    SCHEDULED = "scheduled"
+    CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True)
+class TimeSlot:
+    start_at: datetime
+    end_at: datetime
+
+
+
+class AppointmentCreate(TypedDict):
     name: str
-    date_requested: str
-    date_iso: str
-    time_requested: str
-    time_iso: str
     phone: str
     reason_for_visit: str
+    start_at: datetime
+    end_at: datetime
+    notes: list[str]
 
-REQUIRED_FIELDS: tuple[str, ...] = (
-    "patient_type",
-    "name",
-    "date_requested",
-    "date_iso",
-    "time_requested",
-    "time_iso",
-    "phone",
-    "reason_for_visit",
-)
+class AppointmentView(AppointmentCreate, total=False):
+    id: int
+    status: AppointmentStatus
+    patient_type: PatientType  # CRM-derived
+    created_at: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True)
@@ -96,8 +108,8 @@ class CallState(TypedDict, total=False):
     pending_intent: NotRequired[ClinicIntent | None]
 
     # Slot container
-    appointment: NotRequired[AppointmentSlots]
-
+    appointment_create: NotRequired[AppointmentCreate]
+    appointment_view: NotRequired[AppointmentView]
     # If you later support more flows:
     # reschedule: NotRequired[RescheduleSlots]
     # cancellation: NotRequired[CancelSlots]
