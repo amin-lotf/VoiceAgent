@@ -22,15 +22,15 @@ def _ensure_tz(dt: datetime) -> None:
 def _validate_slot_start(slot_start: datetime) -> datetime:
     _ensure_tz(slot_start)
     normalized = slot_start.replace(second=0, microsecond=0)
-    aligned = ceil_to_grid(normalized, settings.appointment_duration_min)
+    aligned = ceil_to_grid(normalized, settings.APPOINTMENT_DURATION_MIN)
 
     # Require exact alignment (strict grid)
     if aligned != normalized:
-        raise InvalidSlot(f"slot_start must align to {settings.appointment_duration_min}-minute grid")
+        raise InvalidSlot(f"slot_start must align to {settings.APPOINTMENT_DURATION_MIN}-minute grid")
 
     # Require within opening hours (start must be >= opening, and start < closing)
-    open_dt = normalized.replace(hour=settings.opening_time.hour, minute=settings.opening_time.minute)
-    close_dt = normalized.replace(hour=settings.closing_time.hour, minute=settings.closing_time.minute)
+    open_dt = normalized.replace(hour=settings.OPENING_TIME.hour, minute=settings.OPENING_TIME.minute)
+    close_dt = normalized.replace(hour=settings.CLOSING_TIME.hour, minute=settings.CLOSING_TIME.minute)
     if not (open_dt <= normalized < close_dt):
         raise InvalidSlot("slot_start must be within opening hours")
 
@@ -85,7 +85,7 @@ async def list_free_slots(
 
     cur_day = day
     while cur_day <= end_day:
-        for slot in iter_daily_slots(cur_day, settings.opening_time, settings.closing_time, settings.appointment_duration_min):
+        for slot in iter_daily_slots(cur_day, settings.OPENING_TIME, settings.CLOSING_TIME, settings.APPOINTMENT_DURATION_MIN):
             if slot.start_at < start_range or slot.start_at >= end_range:
                 continue
             if slot.start_at in busy_starts:
@@ -109,7 +109,7 @@ async def hold_slot(
     Creates HELD appointment at a fixed slot. If slot already taken, raises SlotNotAvailable.
     """
     slot_start = _validate_slot_start(slot_start)
-    slot_end = slot_start + timedelta(minutes=settings.appointment_duration_min)
+    slot_end = slot_start + timedelta(minutes=settings.APPOINTMENT_DURATION_MIN)
 
     try:
         async with uow:

@@ -31,11 +31,20 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("detect_intent", node_detect_intent)
     graph.add_node("get_office_info", node_office_info)
 
-    graph.add_node("fill_appointment_slot", node_fill_appointment_slot)
-    graph.add_node("confirm_appointment_slot", partial(
+    graph.add_node(
+        "fill_appointment_slot",
+        partial(
+            node_fill_appointment_slot,
+            sessionmaker=sessionmaker,
+        ),
+    )
+    graph.add_node(
+        "confirm_appointment_slot",
+        partial(
             node_confirm_appointment_slot,
             sessionmaker=sessionmaker,
-        ),)
+        ),
+    )
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node("on_call_ended", node_on_call_ended)

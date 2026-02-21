@@ -26,8 +26,9 @@ def ensure_spoken_on_user_turn(state: CallState) -> CallState:
 def normalize_phone(text: str | None) -> str | None:
     if not text:
         return None
-    digits = "".join(re.findall(r"\\d", text))
-    if len(digits) < 10 or len(digits) > 15:
+    digits = "".join(re.findall(r"\d", text))
+    # Accept local numbers down to 7 digits; cap at 15 for international formats.
+    if len(digits) < 7 or len(digits) > 15:
         return None
     if len(digits) == 11 and digits.startswith("1"):
         digits = digits[1:]
@@ -39,3 +40,19 @@ def is_appointment_complete(data: AppointmentCreate) -> bool:
     return required_keys <= data.keys()
 
 
+def safe_json_parse(text: str) -> str:
+    """
+    Strip code fences / surrounding prose and return the best-effort JSON substring.
+    """
+    t = (text or "").strip()
+    if not t:
+        return ""
+    if t.startswith("```"):
+        t = t.strip("`").strip()
+        if t.lower().startswith("json"):
+            t = t[4:].strip()
+    l = t.find("{")
+    r = t.rfind("}")
+    if l != -1 and r != -1 and r > l:
+        t = t[l: r + 1]
+    return t.strip()

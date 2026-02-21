@@ -9,29 +9,14 @@ from langgraph.config import get_stream_writer
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.intent_router import build_intent_router_prompt
 from voice_agent.core.types import CallEvent, CallPhase, ClinicIntent, CallState, APPOINTMENT_INTENTS, OfficeTopic
-from .utils import ensure_spoken_on_user_turn
+from .utils import ensure_spoken_on_user_turn, safe_json_parse
 
 logger = logging.getLogger(__name__)
 INTENT_ROUTER_TIMEOUT_S = 4.5
 FALLBACK_ASSISTANT_TEXT = "Let me connect you with a staff member."
 
 
-def _clean_jsonish(text: str) -> str:
-    """
-    Strip code fences / surrounding prose and return the best-effort JSON substring.
-    """
-    t = (text or "").strip()
-    if not t:
-        return ""
-    if t.startswith("```"):
-        t = t.strip("`").strip()
-        if t.lower().startswith("json"):
-            t = t[4:].strip()
-    l = t.find("{")
-    r = t.rfind("}")
-    if l != -1 and r != -1 and r > l:
-        t = t[l: r + 1]
-    return t.strip()
+
 
 
 def node_route_event(state: CallState) -> CallState:
@@ -63,7 +48,7 @@ async def node_detect_intent(state: CallState) -> CallState:
     llm_failed = False
     try:
         resp = await asyncio.wait_for(LLM.ainvoke(prompt), timeout=INTENT_ROUTER_TIMEOUT_S)
-        cleaned = _clean_jsonish(resp.content or "")
+        cleaned = safe_json_parse(resp.content or "")
         data = json.loads(cleaned) if cleaned else {}
     except Exception:
         logger.warning("Intent router failed; using fallback", exc_info=True)

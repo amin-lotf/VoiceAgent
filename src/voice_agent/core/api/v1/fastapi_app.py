@@ -10,6 +10,7 @@ from fastapi import FastAPI, Header,Request
 from voice_agent.core.api.v1.router import api_router
 from voice_agent.core.api.v1.session_store import init_session_store, get_public_state, _sid
 from voice_agent.core.api.v1.exception_handlers import register_exception_handlers
+from voice_agent.core.db.session import AsyncSessionLocal
 from voice_agent.core.graph.engine import InterviewEngine
 from voice_agent.core.store.redis_store import RedisStateStore
 
@@ -24,7 +25,7 @@ def create_app() -> FastAPI:
             decode_responses=True,
         )
         store = RedisStateStore(r, ttl_seconds=60 * 60)
-        engine = InterviewEngine(store=store)
+        engine = InterviewEngine(store=store,sessionmaker=AsyncSessionLocal)
 
         app.state.redis = r
         app.state.store = store

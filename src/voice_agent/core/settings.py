@@ -7,7 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from voice_agent.const import DEFAULT_SQLALCHEMY_DATABASE_URL, DEFAULT_TEST_SQLALCHEMY_DATABASE_URL, \
     DEFAULT_REPLY_PROVIDER, DEFAULT_REPLY_TEMPERATURE, DEFAULT_REPLY_MODEL, DEFAULT_REPLY_MAX_OUTPUT_TOKENS, \
-    DEFAULT_REPLY_MAX_CONTEXT_CHARS
+    DEFAULT_REPLY_MAX_CONTEXT_CHARS, DEFAULT_APPOINTMENT_DURATION_MIN, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME
+from datetime import time
 
 
 class Settings(BaseSettings):
@@ -79,6 +80,20 @@ class Settings(BaseSettings):
     RANDOM_SEED: int | None = Field(
         default=None,
         description="Random seed for deterministic behavior. None for non-deterministic.",
+    )
+    APPOINTMENT_DURATION_MIN: int = Field(
+        default=DEFAULT_APPOINTMENT_DURATION_MIN,
+        ge=10,
+        le=180,
+        description="Length of each appointment slot in minutes.",
+    )
+    OPENING_TIME: time = Field(
+        default_factory=lambda: time.fromisoformat(DEFAULT_OPENING_TIME),
+        description="Clinic opening time (local).",
+    )
+    CLOSING_TIME: time = Field(
+        default_factory=lambda: time.fromisoformat(DEFAULT_CLOSING_TIME),
+        description="Clinic closing time (local).",
     )
 
 
