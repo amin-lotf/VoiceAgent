@@ -67,7 +67,15 @@ class TimeSlot:
     start_at: datetime
     end_at: datetime
 
-
+class AppointmentDraft(TypedDict,total=False):
+    name: str
+    phone: str
+    reason_for_visit: str
+    start_at: str
+    end_at: str
+    last_offered_slot_start_at: str | None
+    datetime_confirmed: bool
+    notes: list[str]
 
 class AppointmentCreate(TypedDict):
     name: str
@@ -76,13 +84,22 @@ class AppointmentCreate(TypedDict):
     start_at: datetime
     end_at: datetime
     notes: list[str]
-
-class AppointmentView(AppointmentCreate, total=False):
-    id: int
     status: AppointmentStatus
     patient_type: PatientType  # CRM-derived
-    created_at: datetime
-    updated_at: datetime
+
+
+class AppointmentView(TypedDict):
+    id: int
+    name: str
+    phone: str
+    reason_for_visit: str
+    start_at: str
+    end_at: str
+    notes: list[str]
+    status: AppointmentStatus
+    patient_type: PatientType  # CRM-derived
+    created_at: str
+    updated_at: str
 
 
 @dataclass(frozen=True)
@@ -108,7 +125,7 @@ class CallState(TypedDict, total=False):
     pending_intent: NotRequired[ClinicIntent | None]
 
     # Slot container
-    appointment_create: NotRequired[AppointmentCreate]
+    appointment_draft: NotRequired[AppointmentDraft]
     appointment_view: NotRequired[AppointmentView]
     ready_to_confirm: NotRequired[bool]
     # If you later support more flows:

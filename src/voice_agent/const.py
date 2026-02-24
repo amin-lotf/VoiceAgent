@@ -1,4 +1,5 @@
 """Default (non-secret) configuration values used by BaseSettings."""
+from zoneinfo import ZoneInfo
 
 DEFAULT_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/talk_to_pdf"
 DEFAULT_TEST_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/talk_to_pdf_test"
@@ -11,3 +12,4 @@ DEFAULT_REPLY_MAX_CONTEXT_CHARS = 20000
 DEFAULT_APPOINTMENT_DURATION_MIN = 30
 DEFAULT_OPENING_TIME = "09:00"
 DEFAULT_CLOSING_TIME = "17:00"
+DEFAULT_TZ = ZoneInfo("Asia/Taipei")

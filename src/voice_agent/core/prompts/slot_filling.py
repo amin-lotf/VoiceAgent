@@ -8,20 +8,20 @@ from zoneinfo import ZoneInfo
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-TZ_NAME = "Asia/Taipei"
-TZ = ZoneInfo(TZ_NAME)
+from voice_agent.const import DEFAULT_TZ
+from voice_agent.core.types import AppointmentCreate, AppointmentView
 
 logger = logging.getLogger(__name__)
 
-def build_next_days_calendar(now: datetime, days: int = 30) -> list[dict]:
+def build_next_days_calendar(now: datetime, days: int = 30,tz_info:ZoneInfo=DEFAULT_TZ) -> list[dict]:
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
-    local_now = now.astimezone(TZ)
+    local_now = now.astimezone(tz_info)
 
     out: list[dict] = []
     for i in range(days):
         d = (local_now.date() + timedelta(days=i))
-        dt0 = datetime.combine(d, time(0, 0), tzinfo=TZ)
+        dt0 = datetime.combine(d, time(0, 0), tzinfo=tz_info)
         out.append({
             "date_iso": d.isoformat(),                 # "2026-02-21"
             "weekday": dt0.strftime("%A"),            # "Saturday"
@@ -29,22 +29,19 @@ def build_next_days_calendar(now: datetime, days: int = 30) -> list[dict]:
         })
     return out
 
-def _serialize(value: Any) -> Any:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return value
+
 
 
 def build_slot_fill_prompt(
     *,
     user_text: str,
-    appointment: dict,
+    appointment: AppointmentView,
     now: datetime,
     last_offered: datetime | None,
     opening_time: str,  # e.g. "09:00"
     closing_time: str,  # e.g. "18:00"
+    tz_info:ZoneInfo=DEFAULT_TZ
 ):
-    appt_serialized = {k: _serialize(v) for k, v in (appointment or {}).items()}
 
     system_content = (
         "You are a strict information extraction model for a medical clinic voice agent.\n"
@@ -60,7 +57,7 @@ def build_slot_fill_prompt(
         "}\n"
         "\n"
         "Field rules:\n"
-        f"- tz MUST always be exactly \"{TZ_NAME}\".\n"
+        f"- tz MUST always be exactly \"{tz_info.key}\".\n"
         "- Never invent name/phone/reason_for_visit. Set them only if explicitly stated.\n"
         "- phone: keep digits and an optional leading '+'. Do not add/remove digits.\n"
         "- desired_start_at/range_start_at/range_end_at must be ISO 8601 with timezone offset "
@@ -83,10 +80,8 @@ def build_slot_fill_prompt(
         "- The system will book the earliest available slot; your extraction should focus on DATE and SEARCH WINDOW.\n"
         "\n"
         "Scheduling intent mapping (MUST follow):\n"
-        "- \"specific\": caller requested a specific datetime with an explicit clock time "
-        "(e.g. '3pm', '15:30') OR a specific date only.\n"
-        "  - If user provides explicit clock time: set desired_start_at to that exact datetime.\n"
-        "  - If user provides only a date (e.g. 'next Monday', 'Feb 20'): set desired_start_at to that date at opening_time.\n"
+        "- \"specific\": caller requested a specific datetime with  a specific date.\n"
+        "  - If user provides  a date (e.g. 'next Monday', 'Feb 20'): set desired_start_at to that date at opening_time.\n"
         "  - Keep range_* null.\n"
         "- \"range\": caller requested a date window (e.g. 'between Monday and Wednesday', 'next week').\n"
         "  - Set range_start_at and range_end_at using opening_time/closing_time boundaries.\n"
@@ -134,11 +129,11 @@ def build_slot_fill_prompt(
 
     human_payload = {
         "user_text": user_text,
-        "appointment_draft": appt_serialized,
+        "appointment_draft": appointment,
         "now": now.isoformat(),
         "calendar_next_30_days": build_next_days_calendar(now, 30),
         "now_weekday": now.strftime("%A"),
-        "timezone": TZ_NAME,
+        "timezone": tz_info.key,
         "last_offered_slot_start_at": last_offered.isoformat() if last_offered else None,
         "opening_time": opening_time,
         "closing_time": closing_time,

@@ -8,30 +8,26 @@ from zoneinfo import ZoneInfo
 from langgraph.config import get_stream_writer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from voice_agent.const import DEFAULT_TZ
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.services.appointments import hold_slot, list_free_slots
 from voice_agent.core.services.exceptions import SlotNotAvailable
-from voice_agent.core.types import CallPhase, CallState, ClinicIntent, TimeSlot
+from voice_agent.core.types import CallPhase, CallState, ClinicIntent, TimeSlot, AppointmentDraft
 from voice_agent.core.prompts.slot_filling import build_slot_fill_prompt
-from .utils import normalize_phone, safe_json_parse
+from .utils import normalize_phone, safe_json_parse, parse_date, format_date, is_appointment_complete
 import logging
 
 from ...settings import settings
 
 logger = logging.getLogger(__name__)
 
-TZ = ZoneInfo("Asia/Taipei")
 DEFAULT_SEARCH_DAYS = 7
 EXPANDED_SEARCH_DAYS = 14
 
 
-
-
-
-
 def _merge_patch(state: CallState, patch: dict) -> None:
-    appt = state.setdefault("appointment_create", {})
+    appt = state.setdefault("appointment_draft", {})
     notes_append = patch.get("notes_append")
     if isinstance(notes_append, list):
         notes = appt.setdefault("notes", [])
@@ -50,43 +46,6 @@ def _merge_patch(state: CallState, patch: dict) -> None:
                 appt[key] = val.strip()
 
 
-def _is_complete(appointment: dict) -> bool:
-    if not appointment.get("name"):
-        return False
-    if not appointment.get("phone"):
-        return False
-    if not appointment.get("reason_for_visit"):
-        return False
-    return isinstance(appointment.get("start_at"), datetime) and isinstance(appointment.get("end_at"), datetime)
-
-
-def _format_dt(dt: datetime) -> str:
-    if not isinstance(dt, datetime):
-        return ""
-    local_dt = dt.astimezone(TZ)
-    try:
-        return local_dt.strftime("%A, %b %-d at %-I:%M %p")
-    except Exception:
-        # Windows-compatible (no %-d)
-        return local_dt.strftime("%A, %b %d at %I:%M %p").lstrip("0").replace(" 0", " ")
-
-
-def _parse_dt(value: Any) -> datetime | None:
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.replace(tzinfo=TZ)
-        return value.astimezone(TZ)
-    if isinstance(value, str) and value.strip():
-        try:
-            dt = datetime.fromisoformat(value.strip())
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=TZ)
-            return dt.astimezone(TZ)
-        except Exception:
-            return None
-    return None
-
-
 def _coerce_int(val: Any, default: int) -> int:
     try:
         return int(val)
@@ -94,11 +53,11 @@ def _coerce_int(val: Any, default: int) -> int:
         return default
 
 
-def _get_now(state: CallState) -> datetime:
+def _get_now(state: CallState, tz_info: ZoneInfo = DEFAULT_TZ) -> datetime:
     meta = state.get("meta") or {}
     meta_now = meta.get("now")
-    dt = _parse_dt(meta_now)
-    return dt or datetime.now(TZ)
+    dt = parse_date(meta_now)
+    return dt or datetime.now(tz_info)
 
 
 def _stream_response(state: CallState, text: str) -> None:
@@ -113,10 +72,10 @@ def _stream_response(state: CallState, text: str) -> None:
 def _serialize_datetimes(state: CallState) -> None:
     def _ser(val: Any) -> Any:
         if isinstance(val, datetime):
-            return val.astimezone(TZ).isoformat()
+            return val.astimezone(DEFAULT_TZ).isoformat()
         return val
 
-    appt = state.get("appointment_create")
+    appt = state.get("appointment_draft")
     if isinstance(appt, dict):
         for key in ("start_at", "end_at"):
             if key in appt:
@@ -128,11 +87,8 @@ def _serialize_datetimes(state: CallState) -> None:
             if key in view:
                 view[key] = _ser(view[key])
 
-    if "last_offered_slot_start_at" in state:
-        state["last_offered_slot_start_at"] = _ser(state.get("last_offered_slot_start_at"))
-
-
-
+    if "last_offered_slot_start_at" in appt:
+        appt["last_offered_slot_start_at"] = _ser(appt.get("last_offered_slot_start_at"))
 
 
 def _mask_phone(phone: str) -> str:
@@ -143,11 +99,11 @@ def _mask_phone(phone: str) -> str:
 
 
 def _compute_search_window(
-    *,
-    schedule_intent: str,
-    patch: dict,
-    now: datetime,
-    last_offered: datetime | None,
+        *,
+        schedule_intent: str,
+        patch: dict,
+        now: datetime,
+        last_offered: datetime | None,
 ) -> tuple[datetime | None, datetime | None]:
     days = _coerce_int(patch.get("search_days"), DEFAULT_SEARCH_DAYS)
     if schedule_intent == "earliest":
@@ -156,15 +112,15 @@ def _compute_search_window(
         return start, end
 
     if schedule_intent == "specific":
-        start = _parse_dt(patch.get("desired_start_at"))
+        start = parse_date(patch.get("desired_start_at"))
         if start:
             end = start + timedelta(days=days)
             return start, end
         return None, None
 
     if schedule_intent == "range":
-        start = _parse_dt(patch.get("range_start_at"))
-        end = _parse_dt(patch.get("range_end_at"))
+        start = parse_date(patch.get("range_start_at"))
+        end = parse_date(patch.get("range_end_at"))
         if not start:
             return None, None
         if not end or end <= start:
@@ -172,8 +128,8 @@ def _compute_search_window(
         return start, end
 
     if schedule_intent == "reject_and_search":
-        start = _parse_dt(patch.get("desired_start_at")) or _parse_dt(patch.get("range_start_at"))
-        end = _parse_dt(patch.get("range_end_at"))
+        start = parse_date(patch.get("desired_start_at")) or parse_date(patch.get("range_start_at"))
+        end = parse_date(patch.get("range_end_at"))
         if start is None and last_offered:
             start = last_offered + timedelta(days=1)
         if start is None:
@@ -186,15 +142,15 @@ def _compute_search_window(
 
 
 def _finalize_response(
-    state: CallState,
-    text: str,
-    *,
-    ready: bool | None = None,
-    speak: bool = True,
+        state: CallState,
+        text: str,
+        *,
+        ready: bool | None = None,
+        speak: bool = True,
 ) -> CallState:
-    appointment = state.get("appointment_create") or {}
+    appointment = state.get("appointment_draft") or {}
     state["pending_intent"] = ClinicIntent.BOOK_APPOINTMENT
-    state["ready_to_confirm"] = _is_complete(appointment) if ready is None else ready
+    state["ready_to_confirm"] = is_appointment_complete(appointment) if ready is None else ready
 
     if speak:
         _stream_response(state, text)
@@ -205,24 +161,22 @@ def _finalize_response(
         state["assistant_streamed"] = False
         state["pending_question"] = None
 
-
-    _serialize_datetimes(state)
     return state
 
 
 async def node_fill_appointment_slot(
-    state: CallState, *, sessionmaker: async_sessionmaker[AsyncSession]
+        state: CallState, *, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> CallState:
-    appointment = state.setdefault("appointment_create", {})
+    appointment: AppointmentDraft = state.setdefault('appointment_draft', {})
     now = _get_now(state)
-    last_offered = _parse_dt(state.get("last_offered_slot_start_at"))
+    last_offered = parse_date(appointment.get("last_offered_slot_start_at"))
 
-    # Normalize any stored datetimes back to tz-aware objects
-    for key in ("start_at", "end_at"):
-        if key in appointment:
-            parsed = _parse_dt(appointment.get(key))
-            if parsed:
-                appointment[key] = parsed
+    # # Normalize any stored datetimes back to tz-aware objects
+    # for key in ("start_at", "end_at"):
+    #     if key in appointment:
+    #         parsed = parse_date(appointment.get(key))
+    #         if parsed:
+    #             appointment[key] = parsed
 
     user_text = (state.get("user_text") or "").strip()
 
@@ -248,7 +202,7 @@ async def node_fill_appointment_slot(
             patch = {}
 
     _merge_patch(state, patch)
-    appointment = state["appointment_create"]
+    appointment = state["appointment_draft"]
 
     # Fallback: if phone still missing and user_text looks like a number, capture it.
     if not appointment.get("phone"):
@@ -261,13 +215,13 @@ async def node_fill_appointment_slot(
     phone_missing = not bool(appointment.get("phone"))
     if name_missing and phone_missing:
         return _finalize_response(state, "Can I get your full name and phone number?")
+    if name_missing:
+        return _finalize_response(state, "What’s your  name again?")
     if phone_missing:
         return _finalize_response(
             state,
             f"Thanks {appointment.get('name')}. What’s the best phone number to reach you?",
         )
-    if name_missing:
-        return _finalize_response(state, "Got it. What’s your full name?")
 
     if not appointment.get("reason_for_visit"):
         return _finalize_response(state, "What’s the reason for your visit?")
@@ -313,9 +267,15 @@ async def node_fill_appointment_slot(
             )
             if slots:
                 slot = min(slots, key=lambda s: s.start_at)
-                appointment["start_at"] = slot.start_at
-                appointment["end_at"] = slot.end_at
-                state["last_offered_slot_start_at"] = slot.start_at
+                d_start_at= parse_date(slot.start_at)
+                if d_start_at:
+                    appointment["start_at"] = d_start_at.isoformat()
+                d_end_at = parse_date(slot.end_at)
+                if d_end_at:
+                    appointment["end_at"] = d_end_at.isoformat()
+                d_last_offered_slot_start_at = parse_date(slot.start_at)
+                if d_last_offered_slot_start_at:
+                    appointment["last_offered_slot_start_at"] = d_last_offered_slot_start_at.isoformat()
                 # We have a concrete slot; move directly to confirmation to avoid double-speaking.
                 return _finalize_response(state, "", speak=False)
 
@@ -328,17 +288,23 @@ async def node_fill_appointment_slot(
             )
 
         slot = min(slots, key=lambda s: s.start_at)
-        appointment["start_at"] = slot.start_at
-        appointment["end_at"] = slot.end_at
-        state["last_offered_slot_start_at"] = slot.start_at
+        d_start_at = parse_date(slot.start_at)
+        if d_start_at:
+            appointment["start_at"] = d_start_at.isoformat()
+        d_end_at = parse_date(slot.end_at)
+        if d_end_at:
+            appointment["end_at"] = d_end_at.isoformat()
+        d_last_offered_slot_start_at = parse_date(slot.start_at)
+        if d_last_offered_slot_start_at:
+            appointment["last_offered_slot_start_at"] = d_last_offered_slot_start_at.isoformat()
         # We have a concrete slot; move directly to confirmation to avoid double-speaking.
         return _finalize_response(state, "", speak=False)
 
 
 async def _find_next_available_slot(
-    sessionmaker: async_sessionmaker[AsyncSession],
-    *,
-    start_from: datetime,
+        sessionmaker: async_sessionmaker[AsyncSession],
+        *,
+        start_from: datetime,
 ) -> TimeSlot | None:
     for days in (DEFAULT_SEARCH_DAYS, EXPANDED_SEARCH_DAYS):
         async with sessionmaker() as session:
@@ -354,11 +320,11 @@ async def _find_next_available_slot(
 
 
 async def node_confirm_appointment_slot(
-    state: CallState, *, sessionmaker: async_sessionmaker[AsyncSession]
+        state: CallState, *, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> CallState:
     appointment = state.setdefault("appointment_create", {})
-    start_at = _parse_dt(appointment.get("start_at"))
-    end_at = _parse_dt(appointment.get("end_at"))
+    start_at = parse_date(appointment.get("start_at"))
+    end_at = parse_date(appointment.get("end_at"))
     if start_at:
         appointment["start_at"] = start_at
     if end_at:
@@ -389,7 +355,7 @@ async def node_confirm_appointment_slot(
                 reason_for_visit=appointment["reason_for_visit"],
                 notes=notes,
             )
-            state["appointment_view"] = view if isinstance(view, dict)  else {}
+            state["appointment_view"] = view if isinstance(view, dict) else {}
             state["last_offered_slot_start_at"] = start_at
         except SlotNotAvailable:
             next_slot = await _find_next_available_slot(sessionmaker, start_from=start_at)
@@ -400,7 +366,7 @@ async def node_confirm_appointment_slot(
                 logger.info("slot_confirm fallback next_slot=%s", next_slot.start_at)
                 return _finalize_response(
                     state,
-                    f"That slot was just taken. The next available is {_format_dt(next_slot.start_at)}. Does that work?",
+                    f"That slot was just taken. The next available is {format_date(next_slot.start_at)}. Does that work?",
                 )
             appointment.pop("start_at", None)
             appointment.pop("end_at", None)
@@ -414,6 +380,6 @@ async def node_confirm_appointment_slot(
     masked_phone = _mask_phone(appointment["phone"])
     summary = (
         f"Got it. Booking {appointment['name']} (phone ending in {masked_phone}) for "
-        f"{_format_dt(appointment['start_at'])} to discuss {appointment['reason_for_visit']}. Is that correct?"
+        f"{format_date(appointment['start_at'])} to discuss {appointment['reason_for_visit']}. Is that correct?"
     )
     return _finalize_response(state, summary)

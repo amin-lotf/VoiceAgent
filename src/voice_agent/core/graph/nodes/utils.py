@@ -1,9 +1,50 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
+from logging import Logger
+from typing import Any
+from zoneinfo import ZoneInfo
 
 from langgraph.config import get_stream_writer
+
+from voice_agent.const import DEFAULT_TZ
 from voice_agent.core.types import CallEvent, CallState, AppointmentCreate
+
+
+def parse_date(value: Any,tz_info:ZoneInfo=DEFAULT_TZ,logger:Logger|None=None) -> datetime | None:
+
+    if not value:
+        return None
+
+    try:
+        if isinstance(value, datetime):
+            dt = value
+        elif isinstance(value, str):
+            dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        else:
+            return None
+
+        # Normalize timezone
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz_info)
+
+        return dt.astimezone(tz_info)
+
+    except Exception as e:
+        if logger is not None:
+            logger.warning("Failed to parse datetime: %s (%s)", value, e)
+        return None
+
+def format_date(dt: datetime,tz_info:ZoneInfo=DEFAULT_TZ) -> str:
+    if not isinstance(dt, datetime):
+        return ""
+    local_dt = dt.astimezone(tz_info)
+    try:
+        return local_dt.strftime("%A, %b %-d at %-I:%M %p")
+    except Exception:
+        # Windows-compatible (no %-d)
+        return local_dt.strftime("%A, %b %d at %I:%M %p").lstrip("0").replace(" 0", " ")
 
 
 def ensure_spoken_on_user_turn(state: CallState) -> CallState:
@@ -35,9 +76,19 @@ def normalize_phone(text: str | None) -> str | None:
     return digits
 
 
-def is_appointment_complete(data: AppointmentCreate) -> bool:
-    required_keys = AppointmentCreate.__annotations__.keys()
-    return required_keys <= data.keys()
+def is_appointment_complete(d: dict) -> bool:
+    required = ("name", "phone", "reason_for_visit", "start_at", "end_at", "notes", "datetime_confirmed")
+    if not all(k in d for k in required):
+        return False
+    if not d["name"] or not d["phone"] or not d["reason_for_visit"]:
+        return False
+    if d["start_at"] is None or d["end_at"] is None:
+        return False
+    if d.get("datetime_confirmed") is not True:
+        return False
+    if not isinstance(d.get("notes"), list):
+        return False
+    return True
 
 
 def safe_json_parse(text: str) -> str:
