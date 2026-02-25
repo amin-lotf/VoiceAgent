@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from logging import Logger
@@ -91,19 +92,31 @@ def is_appointment_complete(d: dict) -> bool:
     return True
 
 
-def safe_json_parse(text: str) -> str:
+def safe_json_parse(text: str,logger:Logger|None=None) -> dict:
     """
-    Strip code fences / surrounding prose and return the best-effort JSON substring.
+    Strip code fences / surrounding prose and return parsed JSON dict.
     """
     t = (text or "").strip()
     if not t:
-        return ""
+        return {}
+
+    # remove code fences
     if t.startswith("```"):
         t = t.strip("`").strip()
         if t.lower().startswith("json"):
             t = t[4:].strip()
+
+    # extract first {...} block
     l = t.find("{")
     r = t.rfind("}")
     if l != -1 and r != -1 and r > l:
         t = t[l: r + 1]
-    return t.strip()
+
+    try:
+        data = json.loads(t)
+        if isinstance(data, dict):
+            return data
+        return {}
+    except Exception:
+        logger.warning("safe_json_parse failed to decode JSON")
+        return {}

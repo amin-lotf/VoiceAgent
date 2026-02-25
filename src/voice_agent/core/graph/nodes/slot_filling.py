@@ -44,6 +44,7 @@ def _merge_patch(state: CallState, patch: dict) -> None:
                     appt[key] = norm
             else:
                 appt[key] = val.strip()
+    logger.warning("slot_fill patch=%s", appt)
 
 
 def _coerce_int(val: Any, default: int) -> int:
@@ -169,7 +170,7 @@ async def node_fill_appointment_slot(
 ) -> CallState:
     appointment: AppointmentDraft = state.setdefault('appointment_draft', {})
     now = _get_now(state)
-    last_offered = parse_date(appointment.get("last_offered_slot_start_at"))
+    last_offered = appointment.get("last_offered_slot_start_at")
 
     # # Normalize any stored datetimes back to tz-aware objects
     # for key in ("start_at", "end_at"):
@@ -200,10 +201,8 @@ async def node_fill_appointment_slot(
         except Exception:
             logger.exception("slot_fill LLM parse failed")
             patch = {}
-
     _merge_patch(state, patch)
-    appointment = state["appointment_draft"]
-
+    appointment: AppointmentDraft = state.get('appointment_draft',{})
     # Fallback: if phone still missing and user_text looks like a number, capture it.
     if not appointment.get("phone"):
         fallback_phone = normalize_phone(user_text)
@@ -298,7 +297,8 @@ async def node_fill_appointment_slot(
         if d_last_offered_slot_start_at:
             appointment["last_offered_slot_start_at"] = d_last_offered_slot_start_at.isoformat()
         # We have a concrete slot; move directly to confirmation to avoid double-speaking.
-        return _finalize_response(state, "", speak=False)
+
+        return _finalize_response(state, f"{format_date(d_start_at)}")
 
 
 async def _find_next_available_slot(

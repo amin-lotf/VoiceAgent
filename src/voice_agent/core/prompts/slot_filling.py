@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from voice_agent.const import DEFAULT_TZ
-from voice_agent.core.types import AppointmentCreate, AppointmentView
+from voice_agent.core.types import AppointmentDraft
 
 logger = logging.getLogger(__name__)
 
@@ -35,110 +35,209 @@ def build_next_days_calendar(now: datetime, days: int = 30,tz_info:ZoneInfo=DEFA
 def build_slot_fill_prompt(
     *,
     user_text: str,
-    appointment: AppointmentView,
+    appointment: AppointmentDraft,
     now: datetime,
-    last_offered: datetime | None,
+    last_offered: str | None,
     opening_time: str,  # e.g. "09:00"
     closing_time: str,  # e.g. "18:00"
     tz_info:ZoneInfo=DEFAULT_TZ
 ):
+    system_content = f"""
+    You are a STRICT delta information extraction model for a medical clinic voice agent.
 
-    system_content = (
-        "You are a strict information extraction model for a medical clinic voice agent.\n"
-        "Return ONLY a single valid JSON object (no markdown, no code fences, no prose).\n"
-        "Output MUST match this exact shape and keys (no extra keys):\n"
-        "{"
-        "\"patch\":{"
-        "\"name\":null,\"phone\":null,\"reason_for_visit\":null,\"notes_append\":[],"
-        "\"schedule_intent\":\"unspecified\",\"tz\":\"Asia/Taipei\","
-        "\"desired_start_at\":null,\"range_start_at\":null,\"range_end_at\":null,\"search_days\":null"
-        "},"
-        "\"confidence\":0.0"
-        "}\n"
-        "\n"
-        "Field rules:\n"
-        f"- tz MUST always be exactly \"{tz_info.key}\".\n"
-        "- Never invent name/phone/reason_for_visit. Set them only if explicitly stated.\n"
-        "- phone: keep digits and an optional leading '+'. Do not add/remove digits.\n"
-        "- desired_start_at/range_start_at/range_end_at must be ISO 8601 with timezone offset "
-        "(e.g. 2026-02-20T10:30:00+08:00).\n"
-        "- If uncertain, prefer leaving fields null and lower confidence.\n"
-        "\n"
-        "Clinic hours:\n"
-        "- Working hours are provided as opening_time and closing_time.\n"
-        "- When you must construct datetimes for a date-only request, anchor times to opening_time.\n"
-        "- Any constructed range MUST lie within working hours:\n"
-        "  - range_start_at time >= opening_time\n"
-        "  - range_end_at time <= closing_time\n"
-        "  - range_end_at > range_start_at\n"
-        "\n"
-        "IMPORTANT: Time-of-day phrases (morning/afternoon/evening) handling:\n"
-        "When interpreting relative date phrases (tomorrow, next week, next next, weekday-only), you MUST choose a date that exists in calendar_next_30_days."
-        "If not found, leave scheduling fields null and lower confidence."
-        "- Do NOT convert time-of-day phrases into specific times.\n"
-        "- If the user mentions morning/afternoon/evening, store it ONLY in notes_append as a preference.\n"
-        "- The system will book the earliest available slot; your extraction should focus on DATE and SEARCH WINDOW.\n"
-        "\n"
-        "Scheduling intent mapping (MUST follow):\n"
-        "- \"specific\": caller requested a specific datetime with  a specific date.\n"
-        "  - If user provides  a date (e.g. 'next Monday', 'Feb 20'): set desired_start_at to that date at opening_time.\n"
-        "  - Keep range_* null.\n"
-        "- \"range\": caller requested a date window (e.g. 'between Monday and Wednesday', 'next week').\n"
-        "  - Set range_start_at and range_end_at using opening_time/closing_time boundaries.\n"
-        "  - If user gives date-only range: use range_start_at = start_date at opening_time, "
-        "range_end_at = end_date at closing_time.\n"
-        "- \"earliest\": caller wants the soonest available.\n"
-        "  - Set range_start_at=now.\n"
-        "  - Set search_days (default 7 unless caller implies otherwise).\n"
-        "  - Set range_end_at = now + search_days days.\n"
-        "- \"reject_and_search\": caller rejected last offered slot and wants alternatives.\n"
-        "  - Same extraction as earliest or range, but schedule_intent must be reject_and_search.\n"
-        "- \"unspecified\": no scheduling info.\n"
-        "\n"
-        "Relative date rules:\n"
-        "- Interpret all expressions relative to provided now and timezone.\n"
-        "- Convert tomorrow/next week/after Friday into absolute dates (and datetimes using clinic hours).\n"
-        "- Never choose a date before now.\n"
-        "\n"
-        "Week definitions:\n"
-        "- A week starts on Monday.\n"
-        "- \"next week\" means the next calendar week (Monday 00:00 to Sunday 23:59) after the current week.\n"
-        "- \"next next\" / \"week after next\" means the calendar week AFTER next week.\n"
-        "  Example: if today is Friday, \"next next\" refers to the Monday of the week after next.\n"
-        "\n"
-        "Weekday-only rules:\n"
-        "- If the user says only a weekday (e.g., 'Sunday'):\n"
-        "  - If there is an active requested week window (e.g., next week, next next week), choose that weekday within that window.\n"
-        "  - Otherwise choose the next upcoming occurrence of that weekday after now.\n"
-        "- If user says \"next <weekday>\", pick that weekday in the next calendar week (NOT merely the next occurrence).\n"
-        "- If user says \"next next <weekday>\", pick that weekday in the week after next.\n"
-        "\n"
-        "notes_append:\n"
-        "- Put extra details (preferences/constraints/symptoms/context) as short strings.\n"
-        "- Include any time-of-day preference here (e.g. 'prefers afternoon'), without converting it to time.\n"
-        "\n"
-        "Examples:\n"
-        "User: \"Tomorrow afternoon, earliest you have\" => schedule_intent=\"earliest\"; "
-        "range_start_at=now; range_end_at=now+7d; notes_append include \"prefers afternoon\".\n"
-        "User: \"Next next week\" (today Friday) => schedule_intent=\"range\"; "
-        "range_start_at = next-next Monday at opening_time; range_end_at = next-next Sunday at closing_time.\n"
-        "User: \"Next Monday\" => schedule_intent=\"specific\"; desired_start_at = next Monday at opening_time.\n"
-        "\n"
-        "confidence: float 0..1 estimating extraction accuracy.\n"
-    )
+    You DO NOT manage conversation flow.
+    You DO NOT continue the workflow.
+    You DO NOT assume the next logical step.
+    You ONLY extract new information explicitly stated in caller_text for THIS turn.
+
+    Return ONLY a single valid JSON object.
+    No markdown.
+    No code fences.
+    No explanation.
+    No extra keys.
+
+    Output MUST match EXACTLY this schema:
+
+    {{
+      "patch": {{
+        "name": null,
+        "phone": null,
+        "reason_for_visit": null,
+        "notes_append": [],
+        "schedule_intent": "unspecified",
+        "tz": "{tz_info.key}",
+        "desired_start_at": null,
+        "range_start_at": null,
+        "range_end_at": null,
+        "search_days": null
+      }},
+      "confidence": 0.0
+    }}
+
+    ────────────────────────
+    CORE RULE: PATCH = DELTA ONLY
+    ────────────────────────
+
+    - Only set a field if caller_text explicitly provides that information in THIS turn.
+    - Never fill missing fields just because they are missing in appointment_draft.
+    - Never infer what the caller “probably means”.
+    - Never continue the scheduling process automatically.
+    - If information is not explicitly stated in caller_text, leave it null.
+    - notes_append defaults to [] if nothing new.
+
+    appointment_draft is context only.
+    It is NOT an instruction to complete missing data.
+
+    ────────────────────────
+    FIELD RULES
+    ────────────────────────
+
+    name:
+    - Extract only if explicitly stated.
+    - If user corrects previous name (“actually my name is…”), set new value.
+
+    phone:
+    - Extract only if explicitly stated.
+    - Keep digits and optional leading '+'.
+    - Do not modify formatting.
+    - Only override if explicitly correcting.
+
+    reason_for_visit:
+    - Extract only if explicitly stated.
+
+    tz:
+    - MUST always be exactly "{tz_info.key}"
+
+    ────────────────────────
+    SCHEDULING HARD GATE
+    ────────────────────────
+
+    CRITICAL:
+
+    If caller_text does NOT contain scheduling language,
+    then you MUST output:
+
+    - "schedule_intent": "unspecified"
+    - desired_start_at = null
+    - range_start_at = null
+    - range_end_at = null
+    - search_days = null
+
+    Scheduling language includes:
+    - Specific dates (Feb 20, 20th, 2026-02-20)
+    - Weekdays (Monday, Sunday)
+    - Relative dates (tomorrow, next week, next next week)
+    - Ranges (between Monday and Wednesday)
+    - "earliest", "soonest", "first available"
+    - Rejection of last slot ("no not that time", "another time")
+
+    If NONE of the above appear in caller_text,
+    DO NOT touch scheduling fields.
+
+    DO NOT invent a date.
+    DO NOT guess the next logical step.
+    DO NOT move the conversation forward.
+
+    ────────────────────────
+    SCHEDULING INTENT MAPPING
+    ────────────────────────
+
+    "specific":
+    - User gives one specific date or weekday.
+    - Set desired_start_at to that date at opening_time.
+    - Leave range_* null.
+
+    "range":
+    - User gives window (next week, between X and Y).
+    - Set range_start_at at opening_time.
+    - Set range_end_at at closing_time.
+
+    "earliest":
+    - User explicitly says earliest/soonest/first available.
+    - Set range_start_at = now.
+    - Set search_days (default 7 unless specified).
+    - Set range_end_at = now + search_days.
+
+    "reject_and_search":
+    - User rejects last offered slot AND wants alternatives.
+    - Extract same as earliest or range.
+    - schedule_intent must be reject_and_search.
+
+    "unspecified":
+    - No scheduling info.
+
+    ────────────────────────
+    DATE RULES
+    ────────────────────────
+
+    - Interpret all relative dates using provided "now" and timezone.
+    - Never choose a date before now.
+    - When constructing date-only requests:
+      - Use opening_time for desired_start_at.
+      - Range start uses opening_time.
+      - Range end uses closing_time.
+    - All datetimes MUST be ISO 8601 with timezone offset.
+
+    Week rules:
+    - Week starts Monday.
+    - "next week" = next calendar week (Mon–Sun) after current week.
+    - "next next week" = week after next.
+
+    Weekday-only:
+    - If no active week window:
+      choose next upcoming occurrence after now.
+    - If user says "next Monday":
+      choose Monday in next calendar week.
+
+    
+
+    ────────────────────────
+    NEGATIVE EXAMPLES
+    ────────────────────────
+
+    User: "Checkup"
+    → reason_for_visit="checkup"
+    → schedule_intent="unspecified"
+    → all scheduling fields null
+
+    User: "My name is Amin"
+    → name="Amin"
+    → schedule_intent="unspecified"
+
+    User: "09xxxxxxx"
+    → phone extracted
+    → schedule_intent="unspecified"
+
+    These examples are CRITICAL.
+    Never invent scheduling.
+
+    ────────────────────────
+    MULTI-FIELD TURN EXAMPLE
+    ────────────────────────
+
+    User: "Hi I'm Amin, next Tuesday works"
+    → name="Amin"
+    → schedule_intent="specific"
+    → desired_start_at set correctly
+
+    ────────────────────────
+
+    confidence:
+    - Float between 0 and 1.
+    - Lower confidence if interpretation uncertain.
+    """
 
     human_payload = {
-        "user_text": user_text,
+        "caller_text": user_text,
         "appointment_draft": appointment,
         "now": now.isoformat(),
         "calendar_next_30_days": build_next_days_calendar(now, 30),
         "now_weekday": now.strftime("%A"),
         "timezone": tz_info.key,
-        "last_offered_slot_start_at": last_offered.isoformat() if last_offered else None,
+        "last_offered_slot_start_at": last_offered if last_offered else None,
         "opening_time": opening_time,
         "closing_time": closing_time,
     }
     human_content = json.dumps(human_payload, ensure_ascii=False)
-
 
     return [SystemMessage(content=system_content), HumanMessage(content=human_content)]

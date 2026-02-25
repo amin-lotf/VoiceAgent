@@ -48,8 +48,7 @@ async def node_detect_intent(state: CallState) -> CallState:
     llm_failed = False
     try:
         resp = await asyncio.wait_for(LLM.ainvoke(prompt), timeout=INTENT_ROUTER_TIMEOUT_S)
-        cleaned = safe_json_parse(resp.content or "")
-        data = json.loads(cleaned) if cleaned else {}
+        data = safe_json_parse(resp.content or "",logger=logger)
     except Exception:
         logger.warning("Intent router failed; using fallback", exc_info=True)
         llm_failed = True
