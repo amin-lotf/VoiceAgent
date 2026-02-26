@@ -10,6 +10,7 @@ from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.intent_router import build_intent_router_prompt
 from voice_agent.core.types import CallEvent, CallPhase, ClinicIntent, CallState, APPOINTMENT_INTENTS, OfficeTopic
 from .utils import ensure_spoken_on_user_turn, safe_json_parse
+from ...llm.huggingface_llm import chat_model
 
 logger = logging.getLogger(__name__)
 INTENT_ROUTER_TIMEOUT_S = 4.5
@@ -47,7 +48,7 @@ async def node_detect_intent(state: CallState) -> CallState:
     data = {}
     llm_failed = False
     try:
-        resp = await asyncio.wait_for(LLM.ainvoke(prompt), timeout=INTENT_ROUTER_TIMEOUT_S)
+        resp =  await asyncio.to_thread(chat_model.invoke, prompt)
         data = safe_json_parse(resp.content or "",logger=logger)
     except Exception:
         logger.warning("Intent router failed; using fallback", exc_info=True)
@@ -55,9 +56,11 @@ async def node_detect_intent(state: CallState) -> CallState:
 
     intent_raw = data.get("intent")
     confidence = data.get("confidence")
+    logger.warning(f'intent_raw: intent={intent_raw} confidence={confidence}')
     try:
         intent = ClinicIntent(intent_raw)
     except Exception:
+        logger.warning(f'intent_router: invalid intent={intent_raw}')
         intent = None
 
     if intent is None or llm_failed:
@@ -65,6 +68,7 @@ async def node_detect_intent(state: CallState) -> CallState:
 
     office_topics_raw = data.get("office_topics", [])
     office_topics: list[OfficeTopic] = []
+    logger.warning(f'office_topics_raw: {office_topics_raw}')
     if isinstance(office_topics_raw, list):
         for t in office_topics_raw:
             try:
@@ -76,8 +80,11 @@ async def node_detect_intent(state: CallState) -> CallState:
     if office_topics and intent in APPOINTMENT_INTENTS:
         state['pending_intent'] = intent
         intent = ClinicIntent.OFFICE_INFO
+    elif office_topics and intent == ClinicIntent.CHECK_PENDING:
+        intent = ClinicIntent.OFFICE_INFO
     state["intent"] = intent
     state["intent_confidence"] = confidence
+    logger.warning(f'intent_router: intent={intent} confidence={confidence}')
     return state
 
 

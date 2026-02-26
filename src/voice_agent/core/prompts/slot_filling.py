@@ -60,9 +60,6 @@ def build_slot_fill_prompt(
 
     {{
       "patch": {{
-        "name": null,
-        "phone": null,
-        "reason_for_visit": null,
         "notes_append": [],
         "schedule_intent": "unspecified",
         "tz": "{tz_info.key}",
@@ -91,19 +88,6 @@ def build_slot_fill_prompt(
     ────────────────────────
     FIELD RULES
     ────────────────────────
-
-    name:
-    - Extract only if explicitly stated.
-    - If user corrects previous name (“actually my name is…”), set new value.
-
-    phone:
-    - Extract only if explicitly stated.
-    - Keep digits and optional leading '+'.
-    - Do not modify formatting.
-    - Only override if explicitly correcting.
-
-    reason_for_visit:
-    - Extract only if explicitly stated.
 
     tz:
     - MUST always be exactly "{tz_info.key}"

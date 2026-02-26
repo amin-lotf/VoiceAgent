@@ -28,7 +28,7 @@ INTENT_ROUTER_SYSTEM_PROMPT = (
     "{\"intent\":\"<ClinicIntent>\",\"office_topics\":[],\"end_call\":false,\"confidence\":0.0}\n\n"
 
     "Hard rules:\n"
-    "- confidence must be 0..1.\n"
+    "- confidence must be a float point between 0 and 1.\n"
     "- ALWAYS include office_topics as an array.\n"
     "- If intent is NOT office_info, office_topics MUST be [].\n"
     "- If intent is office_info, choose one or more OfficeTopic values.\n\n"

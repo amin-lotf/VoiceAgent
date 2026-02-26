@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import re
 from datetime import datetime
@@ -11,6 +13,27 @@ from langgraph.config import get_stream_writer
 
 from voice_agent.const import DEFAULT_TZ
 from voice_agent.core.types import CallEvent, CallState, AppointmentCreate
+
+
+async def _delayed_filler(writer, filler_text:str, delay_s: float = 0.45) -> None:
+    await asyncio.sleep(delay_s)
+    if writer:
+        writer(("assistant_token", filler_text))
+
+async def call_llm_with_slow_filler(*, writer, coro, filler_text:str, delay_s: float = 0.45):
+    """
+    Run `coro` (awaitable). If it doesn't finish within delay_s, emit one filler line.
+    """
+    filler_task = None
+    try:
+        filler_task = asyncio.create_task(_delayed_filler(writer,filler_text, delay_s))
+        result = await coro
+        return result
+    finally:
+        if filler_task and not filler_task.done():
+            filler_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await filler_task
 
 
 def parse_date(value: Any,tz_info:ZoneInfo=DEFAULT_TZ,logger:Logger|None=None) -> datetime | None:

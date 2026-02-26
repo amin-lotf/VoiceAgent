@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
-from datetime import datetime, timedelta, time
+import time
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -15,15 +18,21 @@ from voice_agent.core.services.appointments import hold_slot, list_free_slots
 from voice_agent.core.services.exceptions import SlotNotAvailable
 from voice_agent.core.types import CallPhase, CallState, ClinicIntent, TimeSlot, AppointmentDraft
 from voice_agent.core.prompts.slot_filling import build_slot_fill_prompt
-from .utils import normalize_phone, safe_json_parse, parse_date, format_date, is_appointment_complete
+from .utils import normalize_phone, safe_json_parse, parse_date, format_date, is_appointment_complete, \
+    call_llm_with_slow_filler
 import logging
 
+from ...llm.huggingface_llm import chat_model
+from ...prompts.slot_filling_basic import build_local_fast_extract_prompt
 from ...settings import settings
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SEARCH_DAYS = 7
 EXPANDED_SEARCH_DAYS = 14
+
+
+
 
 
 def _merge_patch(state: CallState, patch: dict) -> None:
@@ -166,139 +175,157 @@ def _finalize_response(
 
 
 async def node_fill_appointment_slot(
-        state: CallState, *, sessionmaker: async_sessionmaker[AsyncSession]
+    state: CallState, *, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> CallState:
-    appointment: AppointmentDraft = state.setdefault('appointment_draft', {})
+    appointment: AppointmentDraft = state.setdefault("appointment_draft", {})
     now = _get_now(state)
     last_offered = appointment.get("last_offered_slot_start_at")
-
-    # # Normalize any stored datetimes back to tz-aware objects
-    # for key in ("start_at", "end_at"):
-    #     if key in appointment:
-    #         parsed = parse_date(appointment.get(key))
-    #         if parsed:
-    #             appointment[key] = parsed
-
     user_text = (state.get("user_text") or "").strip()
 
-    patch = {}
+    # -------------------------
+    # 1) Fast local extraction
+    # -------------------------
+    local_patch: dict = {}
+    date_mentioned = False
+
     if user_text:
-        prompt = build_slot_fill_prompt(
+        local_prompt = build_local_fast_extract_prompt(
             user_text=user_text,
             appointment=appointment,
             now=now,
-            last_offered=last_offered,
-            opening_time=settings.OPENING_TIME.isoformat(),
-            closing_time=settings.CLOSING_TIME.isoformat(),
         )
         try:
-            resp = await LLM.ainvoke(prompt)
-            raw_content = resp.content or ""
-            parsed = safe_json_parse(raw_content)
-            logger.warning("slot_fill LLM raw=%s parsed=%s", raw_content, parsed)
+            t0 = time.perf_counter()
+            resp = await asyncio.to_thread(chat_model.invoke, local_prompt)
+            t1 = time.perf_counter()
+            raw = resp.content or ""
+            parsed = safe_json_parse(raw)
+            logger.warning("local_extract time=%0.2fs raw=%s parsed=%s", t1 - t0, raw, parsed)
+
             if isinstance(parsed, dict):
-                patch = parsed.get("patch") or {}
+                local_patch = parsed.get("patch") or {}
+                date_mentioned = bool(parsed.get("date_mentioned") or False)
         except Exception:
-            logger.exception("slot_fill LLM parse failed")
-            patch = {}
-    _merge_patch(state, patch)
-    appointment: AppointmentDraft = state.get('appointment_draft',{})
-    # Fallback: if phone still missing and user_text looks like a number, capture it.
+            logger.exception("local_extract failed")
+            local_patch = {}
+            date_mentioned = False
+
+    _merge_patch(state, local_patch)
+    appointment = state.get("appointment_draft", {})
+
+    # Fallback phone normalization (digits/letters) if still missing
     if not appointment.get("phone"):
         fallback_phone = normalize_phone(user_text)
         if fallback_phone:
             appointment["phone"] = fallback_phone
-            logger.warning("slot_fill fallback phone captured=%s", fallback_phone)
 
-    name_missing = not bool(appointment.get("name"))
-    phone_missing = not bool(appointment.get("phone"))
-    if name_missing and phone_missing:
+    # -------------------------
+    # Ask for missing basics
+    # -------------------------
+    if not appointment.get("name") and not appointment.get("phone"):
         return _finalize_response(state, "Can I get your full name and phone number?")
-    if name_missing:
-        return _finalize_response(state, "What’s your  name again?")
-    if phone_missing:
-        return _finalize_response(
-            state,
-            f"Thanks {appointment.get('name')}. What’s the best phone number to reach you?",
-        )
-
+    if not appointment.get("name"):
+        return _finalize_response(state, "What's your name?")
+    if not appointment.get("phone"):
+        return _finalize_response(state, f"Thanks {appointment.get('name')}. What's the best phone number to reach you?")
     if not appointment.get("reason_for_visit"):
-        return _finalize_response(state, "What’s the reason for your visit?")
+        return _finalize_response(state, "What's the reason for your visit?")
 
-    schedule_intent = str(patch.get("schedule_intent") or "unspecified")
+    # ----------------------------------------------------
+    # 2) Scheduling resolver (OpenAI) ONLY if date mentioned
+    # ----------------------------------------------------
+    schedule_patch: dict = {}
+    schedule_intent = "unspecified"
+
+    if date_mentioned:
+        # Optional: speak a filler line immediately (or only if OpenAI > 0.4s)
+        # writer(("assistant_token", "One moment—I'm checking availability. "))
+
+        resolver_prompt = build_slot_fill_prompt(  # your OpenAI-focused prompt
+            user_text=user_text,
+            appointment=appointment,
+            now=now,
+            last_offered=last_offered,
+            opening_time=settings.OPENING_TIME.strftime("%H:%M"),
+            closing_time=settings.CLOSING_TIME.strftime("%H:%M"),
+        )
+        try:
+            t0 = time.perf_counter()
+            # IMPORTANT: use your OpenAI model here (not the local one)
+            writer = get_stream_writer()
+            resp = await call_llm_with_slow_filler(
+                writer=writer,  # however you pass it
+                coro=LLM.ainvoke(resolver_prompt),
+                filler_text="One moment—I'm checking availability. ",
+                delay_s=0.45,
+            )
+            t1 = time.perf_counter()
+            raw = resp.content or ""
+            parsed = safe_json_parse(raw)
+            logger.warning("schedule_resolve time=%0.2fs raw=%s parsed=%s", t1 - t0, raw, parsed)
+
+            if isinstance(parsed, dict):
+                schedule_patch = parsed.get("patch") or {}
+                schedule_intent = str(schedule_patch.get("schedule_intent") or "unspecified")
+        except Exception:
+            logger.exception("schedule_resolve failed")
+            schedule_patch = {}
+            schedule_intent = "unspecified"
+
+        _merge_patch(state, schedule_patch)
+        appointment = state.get("appointment_draft", {})
+
+    # If we never escalated or resolver didn't yield scheduling intent, ask preference
     start_range, end_range = _compute_search_window(
         schedule_intent=schedule_intent,
-        patch=patch,
+        patch=schedule_patch,
         now=now,
         last_offered=last_offered,
     )
+
     logger.warning(
         "slot_fill intent=%s start_range=%s end_range=%s name=%s phone=%s reason=%s",
-        schedule_intent,
-        start_range,
-        end_range,
-        appointment.get("name"),
-        appointment.get("phone"),
-        appointment.get("reason_for_visit"),
+        schedule_intent, start_range, end_range,
+        appointment.get("name"), appointment.get("phone"), appointment.get("reason_for_visit"),
     )
 
     if schedule_intent == "unspecified" or start_range is None or end_range is None:
-        return _finalize_response(
-            state, "Do you have a preferred date, or should I book the earliest available?"
-        )
+        return _finalize_response(state, "Do you have a preferred date, or should I book the earliest available?")
 
+    # -------------------------
+    # Slot search
+    # -------------------------
     async with sessionmaker() as session:
         uow = SqlAlchemyUnitOfWork(session)
-        slots = await list_free_slots(
-            uow,
-            start_range=start_range,
-            end_range=end_range,
-        )
+        slots = await list_free_slots(uow, start_range=start_range, end_range=end_range)
         logger.warning("slot_fill slots_found=%d", len(slots))
 
         if not slots:
-            fallback_start = max(end_range, now)
+            fallback_start = max(now, end_range)  # extend AFTER requested window
             fallback_end = fallback_start + timedelta(days=EXPANDED_SEARCH_DAYS)
-            slots = await list_free_slots(
-                uow,
-                start_range=fallback_start,
-                end_range=fallback_end,
-            )
-            if slots:
-                slot = min(slots, key=lambda s: s.start_at)
-                d_start_at= parse_date(slot.start_at)
-                if d_start_at:
-                    appointment["start_at"] = d_start_at.isoformat()
-                d_end_at = parse_date(slot.end_at)
-                if d_end_at:
-                    appointment["end_at"] = d_end_at.isoformat()
-                d_last_offered_slot_start_at = parse_date(slot.start_at)
-                if d_last_offered_slot_start_at:
-                    appointment["last_offered_slot_start_at"] = d_last_offered_slot_start_at.isoformat()
-                # We have a concrete slot; move directly to confirmation to avoid double-speaking.
-                return _finalize_response(state, "", speak=False)
+            slots = await list_free_slots(uow, start_range=fallback_start, end_range=fallback_end)
 
-            appointment.pop("start_at", None)
-            appointment.pop("end_at", None)
-            return _finalize_response(
-                state,
-                "I’m not seeing any openings in the next couple of weeks. Could you share another date range?",
-                ready=False,
-            )
+            if not slots:
+                appointment.pop("start_at", None)
+                appointment.pop("end_at", None)
+                return _finalize_response(
+                    state,
+                    "I'm not seeing any openings in the next couple of weeks. Could you share another date range?",
+                    ready=False,
+                )
 
         slot = min(slots, key=lambda s: s.start_at)
         d_start_at = parse_date(slot.start_at)
+        d_end_at = parse_date(slot.end_at)
+
         if d_start_at:
             appointment["start_at"] = d_start_at.isoformat()
-        d_end_at = parse_date(slot.end_at)
+            appointment["last_offered_slot_start_at"] = d_start_at.isoformat()
         if d_end_at:
             appointment["end_at"] = d_end_at.isoformat()
-        d_last_offered_slot_start_at = parse_date(slot.start_at)
-        if d_last_offered_slot_start_at:
-            appointment["last_offered_slot_start_at"] = d_last_offered_slot_start_at.isoformat()
-        # We have a concrete slot; move directly to confirmation to avoid double-speaking.
 
-        return _finalize_response(state, f"{format_date(d_start_at)}")
+        # Move to confirmation node; don't babble here
+        return _finalize_response(state, "", speak=False)
 
 
 async def _find_next_available_slot(

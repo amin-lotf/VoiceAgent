@@ -6,7 +6,8 @@ from voice_agent.core.api.v1.runner import run as api_run
 from voice_agent.frontend.runner import run as ui_run
 from voice_agent.proc import terminate_tree
 
-HOST= '127.0.0.1'
+# HOST= '127.0.0.1'
+HOST= '0.0.0.0'
 def main() -> None:
     api_proc = api_run(host=HOST, port=8000, reload=True)
     ui_proc = ui_run(port=8501, address=HOST)
