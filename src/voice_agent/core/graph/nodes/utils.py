@@ -101,14 +101,12 @@ def normalize_phone(text: str | None) -> str | None:
 
 
 def is_appointment_complete(d: dict) -> bool:
-    required = ("name", "phone", "reason_for_visit", "start_at", "end_at", "notes", "datetime_confirmed")
+    required = ("name", "phone", "reason_for_visit", "start_at", "end_at", "notes")
     if not all(k in d for k in required):
         return False
     if not d["name"] or not d["phone"] or not d["reason_for_visit"]:
         return False
     if d["start_at"] is None or d["end_at"] is None:
-        return False
-    if d.get("datetime_confirmed") is not True:
         return False
     if not isinstance(d.get("notes"), list):
         return False

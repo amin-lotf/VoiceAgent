@@ -150,6 +150,7 @@ date_mentioned:
 Set date_mentioned=true if caller_text includes any scheduling signal:
 - dates, weekdays, months
 - relative dates like today, tomorrow, next week
+- relative times like morning, afternoon, evening
 - time-of-day or clock time
 - availability words like earliest, soonest, first available
 - rejecting/changing a proposed slot like "another time", "different day", "not that time"
@@ -179,8 +180,8 @@ caller_text: "another time"
 -> patch.suggested_date_confirmed = null
 date_mentioned = true
 
-appointment_draft.last_offered_slot_start_at exists
-caller_text: "not that time"
+appointment_draft.last_offered_slot_start_at not exists
+caller_text: "morning"
 -> patch.suggested_date_confirmed = null
 date_mentioned = true
 

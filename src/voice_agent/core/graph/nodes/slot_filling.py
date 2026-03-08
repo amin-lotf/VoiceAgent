@@ -72,9 +72,15 @@ def _finalize_response(
     speak: bool = True,
 ) -> CallState:
     appointment = state.get("appointment_draft") or {}
-    state["pending_intent"] = ClinicIntent.BOOK_APPOINTMENT
-    state["ready_to_confirm"] = is_appointment_complete(appointment) if ready is None else ready
 
+    if ready:
+        read_to_confirm = is_appointment_complete(appointment)
+        if read_to_confirm:
+            state["ready_to_confirm"] = read_to_confirm
+            state['pending_intent'] = ClinicIntent.CONFIRM_APPOINTMENT
+
+    else:
+        state["pending_intent"] = ClinicIntent.BOOK_APPOINTMENT
     if speak:
         _stream_response(state, text)
         state["assistant_text"] = text
@@ -111,15 +117,13 @@ def _merge_patch(state: CallState, patch: dict) -> None:
                 notes.append(note.strip())
 
     # basics
-    for key in ("name", "phone", "reason_for_visit","request_confirmed"):
+    for key in ("name", "phone", "reason_for_visit"):
         val = patch.get(key)
         if isinstance(val, str) and val.strip():
             if key == "phone":
                 norm = normalize_phone(val)
                 if norm:
                     appt[key] = norm
-            elif key == "request_confirmed":
-                appt[key] = val.strip().lower() == "true"
             else:
                 appt[key] = val.strip()
 
@@ -224,17 +228,10 @@ async def node_fill_appointment_slot(
             appointment=_extract_appointment_basic(appointment),
             now=now,
         )
-        logger.warning("----------\nlocal_extract prompt=%s\n-----------", local_prompt)
         try:
             # writer = get_stream_writer()
             t0 = time.perf_counter()
             resp = await asyncio.to_thread(agent_model.invoke, local_prompt)
-            # resp = await call_llm_with_slow_filler(
-            #     writer=writer,
-            #     coro=LLM.ainvoke(local_prompt),
-            #     filler_text="One moment. ",
-            #     delay_s=0.45,
-            # )
             t1 = time.perf_counter()
             raw = getattr(resp, "content", "") or ""
             parsed = safe_json_parse(raw)
@@ -288,6 +285,7 @@ async def node_fill_appointment_slot(
     if date_mentioned or last_offered_dt:
         resolver_prompt = build_slot_fill_prompt(
             user_text=user_text,
+            state=state,
             appointment=appointment,
             now=now,
             last_offered=last_offered_raw,  # prompt expects str | None

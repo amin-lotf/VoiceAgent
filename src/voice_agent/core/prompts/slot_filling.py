@@ -8,9 +8,12 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from voice_agent.const import DEFAULT_TZ, DEFAULT_DAYS
-from voice_agent.core.types import AppointmentDraft
+from voice_agent.core.types import AppointmentDraft, CallState
 
 logger = logging.getLogger(__name__)
+
+def _state_value(state: CallState, key: str) -> str | None:
+    return str(state.get(key) or "none")
 
 
 def build_next_days_calendar(now: datetime, days: int = DEFAULT_DAYS, tz_info: ZoneInfo = DEFAULT_TZ) -> list[dict]:
@@ -35,6 +38,7 @@ def build_next_days_calendar(now: datetime, days: int = DEFAULT_DAYS, tz_info: Z
 def build_slot_fill_prompt(
     *,
     user_text: str,
+    state: CallState,
     appointment: AppointmentDraft,
     now: datetime,
     last_offered: str | None,
@@ -42,6 +46,10 @@ def build_slot_fill_prompt(
     closing_time: str,  # e.g. "18:00"
     tz_info: ZoneInfo = DEFAULT_TZ,
 ):
+    prev_user_text = _state_value(state, "prev_user_text")
+    prev_assistant_text = _state_value(state, "prev_assistant_text")
+
+
     system_content = f"""
 You are a STRICT delta information extraction model for a medical clinic voice agent.
 
@@ -298,6 +306,8 @@ confidence:
 """.strip()
 
     human_payload = {
+        "Previous caller": prev_user_text,
+        "Previous assistant": prev_assistant_text,
         "caller_text": (user_text or "").strip(),
         "appointment_draft": appointment,
         "now": now.isoformat(),
@@ -309,5 +319,4 @@ confidence:
         "closing_time": closing_time,
     }
     human_content = json.dumps(human_payload, ensure_ascii=False)
-
     return [SystemMessage(content=system_content), HumanMessage(content=human_content)]
