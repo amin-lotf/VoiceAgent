@@ -31,7 +31,7 @@ from .utils import (
     is_appointment_complete,
     call_llm_with_slow_filler,
 )
-from ...llm.huggingface_llm import chat_model
+from ...llm.huggingface_llm import agent_model
 from ...prompts.slot_filling_basic import build_local_fast_extract_prompt
 from ...services.exceptions import SlotNotAvailable
 
@@ -86,6 +86,14 @@ def _finalize_response(
 
     return state
 
+def _extract_appointment_basic(appointment: AppointmentDraft) -> AppointmentDraft:
+    return dict(
+        name=appointment.get("name"),
+        phone=appointment.get("phone"),
+        reason_for_visit=appointment.get("reason_for_visit"),
+        last_offered_slot_start_at=appointment.get("last_offered_slot_start_at"),
+    )
+
 
 def _merge_patch(state: CallState, patch: dict) -> None:
     """
@@ -103,13 +111,15 @@ def _merge_patch(state: CallState, patch: dict) -> None:
                 notes.append(note.strip())
 
     # basics
-    for key in ("name", "phone", "reason_for_visit"):
+    for key in ("name", "phone", "reason_for_visit","request_confirmed"):
         val = patch.get(key)
         if isinstance(val, str) and val.strip():
             if key == "phone":
                 norm = normalize_phone(val)
                 if norm:
                     appt[key] = norm
+            elif key == "request_confirmed":
+                appt[key] = val.strip().lower() == "true"
             else:
                 appt[key] = val.strip()
 
@@ -211,12 +221,20 @@ async def node_fill_appointment_slot(
     if user_text:
         local_prompt = build_local_fast_extract_prompt(
             user_text=user_text,
-            appointment=appointment,
+            appointment=_extract_appointment_basic(appointment),
             now=now,
         )
+        logger.warning("----------\nlocal_extract prompt=%s\n-----------", local_prompt)
         try:
+            # writer = get_stream_writer()
             t0 = time.perf_counter()
-            resp = await asyncio.to_thread(chat_model.invoke, local_prompt)
+            resp = await asyncio.to_thread(agent_model.invoke, local_prompt)
+            # resp = await call_llm_with_slow_filler(
+            #     writer=writer,
+            #     coro=LLM.ainvoke(local_prompt),
+            #     filler_text="One moment. ",
+            #     delay_s=0.45,
+            # )
             t1 = time.perf_counter()
             raw = getattr(resp, "content", "") or ""
             parsed = safe_json_parse(raw)
@@ -267,7 +285,7 @@ async def node_fill_appointment_slot(
     last_offered_raw = appointment.get("last_offered_slot_start_at")
     last_offered_dt = parse_date(last_offered_raw) if last_offered_raw else None
 
-    if date_mentioned:
+    if date_mentioned or last_offered_dt:
         resolver_prompt = build_slot_fill_prompt(
             user_text=user_text,
             appointment=appointment,
@@ -276,7 +294,6 @@ async def node_fill_appointment_slot(
             opening_time=settings.OPENING_TIME.strftime("%H:%M"),
             closing_time=settings.CLOSING_TIME.strftime("%H:%M"),
         )
-        logger.warning("----------\nresolver prompt=%s\n-----------", resolver_prompt)
 
         try:
             t0 = time.perf_counter()
@@ -284,7 +301,7 @@ async def node_fill_appointment_slot(
             resp = await call_llm_with_slow_filler(
                 writer=writer,
                 coro=LLM.ainvoke(resolver_prompt),
-                filler_text="One moment?I'm checking availability. ",
+                filler_text="One moment. ",
                 delay_s=0.45,
             )
             t1 = time.perf_counter()

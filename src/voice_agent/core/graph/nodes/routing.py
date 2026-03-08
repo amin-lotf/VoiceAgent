@@ -10,7 +10,7 @@ from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.intent_router import build_intent_router_prompt
 from voice_agent.core.types import CallEvent, CallPhase, ClinicIntent, CallState, APPOINTMENT_INTENTS, OfficeTopic
 from .utils import ensure_spoken_on_user_turn, safe_json_parse
-from ...llm.huggingface_llm import chat_model
+from ...llm.huggingface_llm import agent_model
 
 logger = logging.getLogger(__name__)
 INTENT_ROUTER_TIMEOUT_S = 4.5
@@ -48,7 +48,7 @@ async def node_detect_intent(state: CallState) -> CallState:
     data = {}
     llm_failed = False
     try:
-        resp =  await asyncio.to_thread(chat_model.invoke, prompt)
+        resp =  await asyncio.to_thread(agent_model.invoke, prompt)
         data = safe_json_parse(resp.content or "",logger=logger)
     except Exception:
         logger.warning("Intent router failed; using fallback", exc_info=True)

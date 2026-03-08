@@ -5,7 +5,7 @@ import time
 
 from langgraph.config import get_stream_writer
 
-from voice_agent.core.llm.huggingface_llm import chat_model
+from voice_agent.core.llm.huggingface_llm import agent_model
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.greeting_huggingface import build_greeting_prompt
 from voice_agent.core.types import CallPhase, CallState
@@ -27,7 +27,7 @@ async def node_on_call_started(state: CallState) -> CallState:
         if writer:
             # Run blocking HF generation off the event loop
             start_time = time.perf_counter()
-            resp = await asyncio.to_thread(chat_model.invoke, prompt)
+            resp = await asyncio.to_thread(agent_model.invoke, prompt)
             end_time = time.perf_counter()
             greeting_text = (resp.content or "").strip()
             logger.warning(f"time = {end_time - start_time:0.2f}: greeting LLM raw=%s", greeting_text)
@@ -37,7 +37,7 @@ async def node_on_call_started(state: CallState) -> CallState:
                 writer(("assistant_token", t))
             state["assistant_streamed"] = True
         else:
-            resp = await asyncio.to_thread(chat_model.invoke, prompt)
+            resp = await asyncio.to_thread(agent_model.invoke, prompt)
             greeting_text = (resp.content or "").strip()
     except Exception:
         logger.warning("Greeting LLM request failed", exc_info=True)

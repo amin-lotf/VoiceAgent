@@ -133,7 +133,7 @@ Scheduling language includes:
 - Time-of-day buckets (morning, afternoon, evening, tonight, "this afternoon")
 - Specific times (3pm, 15:00)
 - "earliest", "soonest", "first available"
-- Rejection of last slot ("no not that time", "another time", "something else", "how about afternoon")
+- Rejection of last slot ("no not that time", "another time", "something else")
 
 If NONE appear, DO NOT touch scheduling fields.
 

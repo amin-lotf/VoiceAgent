@@ -40,6 +40,11 @@ class Settings(BaseSettings):
         description="OpenAI API key for embedding, rerank, and chat calls.",
     )
 
+    HUGGINGFACEHUB_API_TOKEN: str | None = Field(
+        default=None,
+        description="HuggingFace Hub API token for model access.",
+    )
+
     HUBSPOT_ACCESS_TOKEN: str | None = Field(
         default=None,
         description="HubSpot private app token (PAT).",

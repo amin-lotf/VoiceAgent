@@ -68,14 +68,11 @@ class TimeSlot:
     end_at: datetime
 
 class AppointmentDraft(TypedDict,total=False):
-    name: str
-    phone: str
-    reason_for_visit: str
-    start_at: str
-    end_at: str
+    name: str | None
+    phone: str | None
+    reason_for_visit: str | None
     last_offered_slot_start_at: str | None
-    datetime_confirmed: bool
-    notes: list[str]
+
 
 class AppointmentCreate(TypedDict):
     name: str
