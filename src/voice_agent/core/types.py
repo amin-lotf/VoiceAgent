@@ -29,6 +29,7 @@ class ClinicIntent(StrEnum):
     BOOK_APPOINTMENT = "book_appointment"
     RESCHEDULE = "reschedule"
     CANCEL = "cancel"
+    POST_APPOINTMENT = "post_appointment"
     OFFICE_INFO = "office_info"
     HUMAN_HANDOFF = "human_handoff"
     CLARIFY = "clarify"

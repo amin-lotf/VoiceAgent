@@ -16,7 +16,11 @@ from voice_agent.core.graph.nodes.routing import (
     node_route_event,
 )
 from voice_agent.core.graph.nodes.hangup import node_handle_hangup, node_on_call_ended
-from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot, node_book_appointment_node
+from voice_agent.core.graph.nodes.slot_filling import (
+    node_fill_appointment_slot,
+    node_book_appointment_node,
+    node_post_booking_notes_node,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +46,13 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         "book_appointment_node",
         partial(
             node_book_appointment_node,
+            sessionmaker=sessionmaker,
+        ),
+    )
+    graph.add_node(
+        "post_booking_notes_node",
+        partial(
+            node_post_booking_notes_node,
             sessionmaker=sessionmaker,
         ),
     )
@@ -83,6 +94,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         match intent:
             case ClinicIntent.BOOK_APPOINTMENT | ClinicIntent.RESCHEDULE | ClinicIntent.CANCEL:
                 return "slot_fill"
+            case ClinicIntent.POST_APPOINTMENT:
+                return "post_booking_notes"
             case ClinicIntent.HUMAN_HANDOFF | ClinicIntent.TRIAGE:
                 return "handoff"
             case ClinicIntent.HANGUP:
@@ -99,6 +112,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         match intent:
             case ClinicIntent.BOOK_APPOINTMENT | ClinicIntent.RESCHEDULE | ClinicIntent.CANCEL:
                 return "slot_fill"
+            case ClinicIntent.POST_APPOINTMENT:
+                return "post_booking_notes"
             case _:
                 return "clarify"
 
@@ -108,6 +123,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         _after_intent,
         {
             "slot_fill": "fill_appointment_slot",
+            "post_booking_notes": "post_booking_notes_node",
             "handoff": "handoff_fallback",
             "hangup": "handle_hangup",
             "office_info": "get_office_info",
@@ -119,6 +135,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_conditional_edges('check_pending',
                                 _after_pending,
                                 {"slot_fill": "fill_appointment_slot",
+                                 "post_booking_notes": "post_booking_notes_node",
                                  'clarify': 'ask_clarify_intent'},
                                 )
 
@@ -127,6 +144,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                                 lambda state: 'true' if bool(state.get("ready_to_confirm")) else 'false',
                                 {'true': 'book_appointment_node', 'false': 'finalize_response'})
     graph.add_edge("book_appointment_node", "finalize_response")
+    graph.add_edge("post_booking_notes_node", "finalize_response")
     graph.add_edge("get_office_info",'finalize_response')
     graph.add_conditional_edges("finalize_response",
                                 lambda state:  'end_call' if bool(state.get("end_call")) else 'keep_call',

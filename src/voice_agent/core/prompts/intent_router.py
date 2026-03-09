@@ -15,6 +15,7 @@ INTENT_ROUTER_SYSTEM_PROMPT = (
     "- book_appointment\n"
     "- reschedule\n"
     "- cancel\n"
+    "- post_appointment\n"
     "- office_info\n"
     "- human_handoff\n"
     "- clarify\n"
@@ -104,4 +105,3 @@ def build_intent_router_prompt( state: CallState):
         SystemMessage(content=INTENT_ROUTER_SYSTEM_PROMPT),
         HumanMessage(content=human_content),
     ]
-

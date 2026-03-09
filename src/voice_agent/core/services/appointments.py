@@ -201,3 +201,23 @@ async def update_held_appointment_details(
         )
         assert appt is not None
         return to_view(appt)
+
+
+async def update_appointment_notes(
+    uow: SqlAlchemyUnitOfWork,
+    *,
+    appointment_id: int,
+    notes: list[str],
+) -> AppointmentView:
+    async with uow:
+        appt = await uow.appointments.get(appointment_id)
+        if appt is None:
+            raise NotFound("Appointment not found")
+        if appt.status not in (AppointmentStatus.HELD, AppointmentStatus.SCHEDULED):
+            raise NotFound("Only active appointments can be updated")
+        appt = await uow.appointments.update_fields(
+            appointment_id,
+            notes=notes,
+        )
+        assert appt is not None
+        return to_view(appt)
