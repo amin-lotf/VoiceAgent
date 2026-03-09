@@ -16,7 +16,7 @@ from voice_agent.core.graph.nodes.routing import (
     node_route_event,
 )
 from voice_agent.core.graph.nodes.hangup import node_handle_hangup, node_on_call_ended
-from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot, node_confirm_appointment_slot
+from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot, node_book_appointment_node
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,9 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         ),
     )
     graph.add_node(
-        "confirm_appointment_slot",
+        "book_appointment_node",
         partial(
-            node_confirm_appointment_slot,
+            node_book_appointment_node,
             sessionmaker=sessionmaker,
         ),
     )
@@ -125,7 +125,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     # graph.add_edge("fill_appointment_slot",'finalize_response')
     graph.add_conditional_edges("fill_appointment_slot",
                                 lambda state: 'true' if bool(state.get("ready_to_confirm")) else 'false',
-                                {'true': 'confirm_appointment_slot', 'false': 'finalize_response'})
+                                {'true': 'book_appointment_node', 'false': 'finalize_response'})
+    graph.add_edge("book_appointment_node", "finalize_response")
     graph.add_edge("get_office_info",'finalize_response')
     graph.add_conditional_edges("finalize_response",
                                 lambda state:  'end_call' if bool(state.get("end_call")) else 'keep_call',

@@ -20,7 +20,6 @@ def build_local_fast_extract_prompt(
     has_name = bool(appointment.get("name"))
     has_phone = bool(appointment.get("phone"))
     has_reason = bool(appointment.get("reason_for_visit"))
-    has_suggested_date = appointment.get("last_offered_slot_start_at") is not None
 
     name_rule = (
         '- name is already filled in appointment_draft. '
@@ -60,46 +59,6 @@ def build_local_fast_extract_prompt(
         '- Set patch.reason_for_visit only if caller_text explicitly states a medical visit reason.'
     )
 
-    suggested_date_rule = (
-        '- suggested_date_confirmed is a CONTEXT-BASED confirmation flag, not a date extraction field. '
-        '- If appointment_draft.last_offered_slot_start_at exists, and name, phone, and reason_for_visit are already filled, '
-        'then short confirmation replies can confirm that offered slot. '
-        '- In this case, if caller_text is a clear acceptance reply such as "yes", "okay", "ok", "correct", '
-        '"sounds good", "that works", "book it", "that is fine", set patch.suggested_date_confirmed=true '
-        'EVEN IF caller_text does not repeat the date. '
-        '- This is allowed because appointment_draft provides the currently offered slot context. '
-        '- If caller_text rejects, changes, questions, or asks for another time/day, leave patch.suggested_date_confirmed null. '
-        '- Never set it to false.'
-        '''
-         Examples for suggested_date_confirmed:    
-            appointment_draft.last_offered_slot_start_at exists
-            caller_text: "okay"
-            -> patch.suggested_date_confirmed = true
-            
-            appointment_draft.last_offered_slot_start_at exists
-            caller_text: "yes that works"
-            -> patch.suggested_date_confirmed = true
-            
-            appointment_draft.last_offered_slot_start_at exists
-            caller_text: "book it"
-            -> patch.suggested_date_confirmed = true
-            
-            appointment_draft.last_offered_slot_start_at exists
-            caller_text: "another time"
-            -> patch.suggested_date_confirmed = null
-            date_mentioned = true
-            
-            appointment_draft.last_offered_slot_start_at not exists
-            caller_text: "morning"
-            -> patch.suggested_date_confirmed = null
-            date_mentioned = true
-        '''
-        if has_suggested_date and has_name and has_phone and has_reason
-        else
-        '- Do not set patch.suggested_date_confirmed unless appointment_draft.last_offered_slot_start_at exists '
-        'and name, phone, and reason_for_visit are already filled.'
-    )
-
     system_content = f"""
 You are a STRICT, FAST, delta extractor for a clinic voice agent.
 Return ONLY one valid JSON object. No extra text. No markdown. No code fences.
@@ -114,8 +73,7 @@ Schema (exact keys, no extras):
   "patch": {{
     "name": null,
     "phone": null,
-    "reason_for_visit": null,
-    "suggested_date_confirmed": null
+    "reason_for_visit": null
   }},
   "date_mentioned": false,
   "name_corrected": false,
@@ -135,7 +93,6 @@ Field rules:
 {name_rule}
 {phone_rule}
 {reason_rule}
-{suggested_date_rule}
 
 Strong correction signals include:
 "actually", "no", "that is wrong", "use this instead", "not X, Y".
@@ -197,6 +154,52 @@ Timezone context only: "{tz_info.key}".
     human_payload = {
         "caller_text": user_text,
         "appointment_draft": appointment,
+    }
+
+    return [
+        SystemMessage(content=system_content),
+        HumanMessage(content=json.dumps(human_payload, ensure_ascii=False)),
+    ]
+
+
+def build_local_confirmation_prompt(
+    *,
+    user_text: str,
+    appointment: AppointmentDraft,
+    pending_question: str,
+    prior_assistant_text: str | None,
+) -> list:
+    system_content = """
+You classify a caller reply to a confirmation step in appointment booking.
+Return ONLY JSON with this exact schema:
+{"intent":"confirm","confidence":0.0}
+
+Valid intent values:
+- confirm
+- revise
+- unclear
+
+Rules:
+- confirm: caller clearly approves the current step.
+- revise: caller rejects the step or asks to change any detail.
+- unclear: meaning is uncertain or unrelated.
+- Use caller_text with context from prior_assistant_text and appointment_draft.
+- Do not output extra keys.
+- confidence must be a float from 0.0 to 1.0.
+""".strip()
+
+    human_payload = {
+        "pending_question": pending_question,
+        "prior_assistant_text": prior_assistant_text,
+        "caller_text": user_text,
+        "appointment_draft": {
+            "name": appointment.get("name"),
+            "phone": appointment.get("phone"),
+            "reason_for_visit": appointment.get("reason_for_visit"),
+            "start_at": appointment.get("start_at"),
+            "end_at": appointment.get("end_at"),
+            "last_offered_slot_start_at": appointment.get("last_offered_slot_start_at"),
+        },
     }
 
     return [
