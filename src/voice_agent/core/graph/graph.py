@@ -164,9 +164,19 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                                 )
 
     # graph.add_edge("fill_appointment_slot",'finalize_response')
-    graph.add_conditional_edges("fill_appointment_slot",
-                                lambda state: 'true' if bool(state.get("ready_to_confirm")) else 'false',
-                                {'true': 'book_appointment_node', 'false': 'finalize_response'})
+    graph.add_conditional_edges(
+        "fill_appointment_slot",
+        lambda state: (
+            "book"
+            if bool(state.get("ready_to_confirm"))
+            else ("reschedule" if bool(state.get("ready_to_reschedule")) else "finalize")
+        ),
+        {
+            "book": "book_appointment_node",
+            "reschedule": "reschedule_cancel_node",
+            "finalize": "finalize_response",
+        },
+    )
     graph.add_conditional_edges("reschedule_cancel_node",
                                 lambda state: 'true' if bool(state.get("ready_to_update")) else 'false',
                                 {'true': 'update_appointment_node', 'false': 'finalize_response'})

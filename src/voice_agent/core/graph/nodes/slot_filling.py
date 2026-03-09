@@ -16,6 +16,7 @@ from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.services.appointments import (
     list_free_slots,
+    list_future_appointments_by_phone,
     hold_slot,
     confirm_appointment,
     delete_held_appointment,
@@ -27,6 +28,8 @@ from voice_agent.core.types import (
     ClinicIntent,
     TimeSlot,
     AppointmentDraft,
+    AppointmentStatus,
+    AppointmentView,
 )
 from voice_agent.core.prompts.slot_filling import build_slot_fill_prompt
 from voice_agent.core.settings import settings
@@ -56,6 +59,7 @@ PENDING_Q_ASK_DATETIME = "ask_datetime"
 PENDING_Q_SLOT_CONFIRM = "confirm_suggested_slot"
 PENDING_Q_FINAL_CONFIRM = "confirm_final_booking"
 PENDING_Q_CONFIRM_PROFILE_CHANGE = "confirm_profile_change"
+PENDING_Q_EXISTING_SCHEDULED_APPOINTMENT = "confirm_existing_scheduled_appointment"
 PENDING_Q_POST_BOOKING_NOTES = "post_booking_notes"
 
 
@@ -87,15 +91,17 @@ def _finalize_response(
     text: str,
     *,
     route_to_booking: bool = False,
+    route_to_reschedule: bool = False,
     speak: bool = True,
     pending_question: str | None | object = _KEEP,
     pending_intent: ClinicIntent | None | object = _KEEP,
 ) -> CallState:
     state["ready_to_confirm"] = route_to_booking
+    state["ready_to_reschedule"] = route_to_reschedule
 
     if pending_intent is not _KEEP:
         state["pending_intent"] = pending_intent
-    elif route_to_booking:
+    elif route_to_booking or route_to_reschedule:
         state["pending_intent"] = None
 
     if pending_question is not _KEEP:
@@ -151,6 +157,68 @@ def _looks_like_final_review(text: str | None) -> bool:
     return t.startswith("before i book it") and "should i confirm" in t
 
 
+def _is_scheduled_status(status: Any) -> bool:
+    if isinstance(status, AppointmentStatus):
+        return status == AppointmentStatus.SCHEDULED
+    try:
+        raw = getattr(status, "value", status)
+        return AppointmentStatus(str(raw)) == AppointmentStatus.SCHEDULED
+    except Exception:
+        return False
+
+
+def _is_future_scheduled_view(view: Any, *, now: datetime) -> bool:
+    if not isinstance(view, dict):
+        return False
+    if not _is_scheduled_status(view.get("status")):
+        return False
+    start_at = parse_date(view.get("start_at"))
+    return bool(start_at and start_at >= now)
+
+
+def _existing_scheduled_text(view: AppointmentView) -> str:
+    start_at = parse_date(view.get("start_at"))
+    when = format_date(start_at) if start_at else "your upcoming visit"
+    return (
+        f"It looks like you already have an appointment scheduled for {when}, so I can't book a new one. "
+        "If you want, I can help you change that appointment. Do you want to reschedule it?"
+    )
+
+
+def _existing_scheduled_decline_text(view: AppointmentView) -> str:
+    start_at = parse_date(view.get("start_at"))
+    when = format_date(start_at) if start_at else "that upcoming time"
+    return (
+        f"Okay, we'll keep your current appointment on {when}. "
+        "I can't create another appointment while that one is active."
+    )
+
+
+def _apply_existing_view_to_state(state: CallState, view: AppointmentView) -> None:
+    state["appointment_view"] = view
+    state["appointment_id"] = int(view.get("id")) if view.get("id") is not None else None
+    state["held_appointment_id"] = None
+
+
+async def _lookup_future_scheduled_appointment_by_phone(
+    *,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    phone: str,
+    now: datetime,
+) -> AppointmentView | None:
+    async with sessionmaker() as session:
+        uow = SqlAlchemyUnitOfWork(session)
+        matches = await list_future_appointments_by_phone(
+            uow,
+            phone=phone,
+            now=now,
+            include_statuses=(AppointmentStatus.SCHEDULED,),
+        )
+        if matches:
+            return matches[0]
+    return None
+
+
 def _normalize_basic_value(key: str, value: str) -> str | None:
     if not isinstance(value, str):
         return None
@@ -186,6 +254,39 @@ def _has_explicit_change_cue(user_text: str) -> bool:
         " no ",
     )
     return any(cue in text for cue in cues)
+
+
+def _reschedule_offer_declined(user_text: str) -> bool:
+    text = f" {(user_text or '').strip().lower()} "
+    decline_cues = (
+        " no ",
+        " nope ",
+        " nah ",
+        " do not ",
+        " don't ",
+        " dont ",
+        " keep ",
+        " leave it ",
+        " leave as is ",
+        " not now ",
+    )
+    return any(c in text for c in decline_cues)
+
+
+def _reschedule_offer_explicit_change(user_text: str) -> bool:
+    text = f" {(user_text or '').strip().lower()} "
+    reschedule_cues = (
+        " reschedule ",
+        " change ",
+        " move ",
+        " another time ",
+        " different time ",
+        " different day ",
+        " new time ",
+        " new date ",
+        " cancel ",
+    )
+    return any(c in text for c in reschedule_cues)
 
 
 def _extract_basic_patch_and_changes(
@@ -569,6 +670,7 @@ async def node_fill_appointment_slot(
     now = _get_now(state)
     user_text = (state.get("user_text") or "").strip()
     state["ready_to_confirm"] = False
+    state["ready_to_reschedule"] = False
 
     # Confirm explicit profile changes before continuing scheduling.
     pending_question = str(state.get("pending_question") or "")
@@ -626,6 +728,78 @@ async def node_fill_appointment_slot(
             state,
             "Please confirm if you want that profile change.",
             pending_question=PENDING_Q_CONFIRM_PROFILE_CHANGE,
+            pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+        )
+
+    if pending_question == PENDING_Q_EXISTING_SCHEDULED_APPOINTMENT:
+        existing_view = state.get("appointment_view") if _is_future_scheduled_view(state.get("appointment_view"), now=now) else None
+        if existing_view is None:
+            phone = normalize_phone(appointment.get("phone"))
+            if phone:
+                existing_view = await _lookup_future_scheduled_appointment_by_phone(
+                    sessionmaker=sessionmaker,
+                    phone=phone,
+                    now=now,
+                )
+                if existing_view is not None:
+                    _apply_existing_view_to_state(state, existing_view)
+
+        if existing_view is None:
+            state["appointment_view"] = {}
+            state["appointment_id"] = None
+            return _finalize_response(
+                state,
+                "I no longer see an upcoming appointment with that number. What date and time would you like?",
+                pending_question=PENDING_Q_ASK_DATETIME,
+                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+            )
+
+        confirm_intent = await _classify_confirmation_intent(
+            user_text=user_text,
+            appointment=appointment,
+            pending_question=PENDING_Q_EXISTING_SCHEDULED_APPOINTMENT,
+            prior_assistant_text=state.get("prev_assistant_text"),
+        )
+        if confirm_intent == "confirm" or _reschedule_offer_explicit_change(user_text):
+            if state.get("held_appointment_id"):
+                await _release_held_slot(state, sessionmaker=sessionmaker)
+            state["intent"] = ClinicIntent.RESCHEDULE
+            if _reschedule_offer_explicit_change(user_text):
+                state["update_action"] = None
+            else:
+                state["update_action"] = "reschedule"
+            return _finalize_response(
+                state,
+                "",
+                route_to_reschedule=True,
+                speak=False,
+                pending_question=None,
+                pending_intent=None,
+            )
+        if confirm_intent == "revise":
+            if not _reschedule_offer_declined(user_text):
+                if state.get("held_appointment_id"):
+                    await _release_held_slot(state, sessionmaker=sessionmaker)
+                state["intent"] = ClinicIntent.RESCHEDULE
+                state["update_action"] = None
+                return _finalize_response(
+                    state,
+                    "",
+                    route_to_reschedule=True,
+                    speak=False,
+                    pending_question=None,
+                    pending_intent=None,
+                )
+            return _finalize_response(
+                state,
+                _existing_scheduled_decline_text(existing_view),
+                pending_question=None,
+                pending_intent=None,
+            )
+        return _finalize_response(
+            state,
+            _existing_scheduled_text(existing_view),
+            pending_question=PENDING_Q_EXISTING_SCHEDULED_APPOINTMENT,
             pending_intent=ClinicIntent.BOOK_APPOINTMENT,
         )
 
@@ -689,6 +863,10 @@ async def node_fill_appointment_slot(
         fallback_phone = normalize_phone(user_text)
         if fallback_phone:
             appointment["phone"] = fallback_phone
+    elif isinstance(appointment.get("phone"), str):
+        normalized_phone = normalize_phone(appointment.get("phone"))
+        if normalized_phone:
+            appointment["phone"] = normalized_phone
 
     # -------------------------
     # Ask for missing basics
@@ -714,6 +892,33 @@ async def node_fill_appointment_slot(
             pending_question=PENDING_Q_ASK_PHONE,
             pending_intent=ClinicIntent.BOOK_APPOINTMENT,
         )
+
+    phone = normalize_phone(appointment.get("phone"))
+    if phone:
+        appointment["phone"] = phone
+        existing_view: AppointmentView | None = None
+        cached_view = state.get("appointment_view")
+        if _is_future_scheduled_view(cached_view, now=now):
+            cached_phone = normalize_phone(cached_view.get("phone")) if isinstance(cached_view, dict) else None
+            if cached_phone == phone:
+                existing_view = cached_view
+        if existing_view is None:
+            existing_view = await _lookup_future_scheduled_appointment_by_phone(
+                sessionmaker=sessionmaker,
+                phone=phone,
+                now=now,
+            )
+        if existing_view is not None:
+            if state.get("held_appointment_id"):
+                await _release_held_slot(state, sessionmaker=sessionmaker)
+            _apply_existing_view_to_state(state, existing_view)
+            return _finalize_response(
+                state,
+                _existing_scheduled_text(existing_view),
+                pending_question=PENDING_Q_EXISTING_SCHEDULED_APPOINTMENT,
+                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+            )
+
     if not appointment.get("reason_for_visit"):
         return _finalize_response(
             state,

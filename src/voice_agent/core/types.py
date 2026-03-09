@@ -128,6 +128,7 @@ class CallState(TypedDict, total=False):
     appointment_id: NotRequired[int | None]
     held_appointment_id: NotRequired[int | None]
     ready_to_confirm: NotRequired[bool]
+    ready_to_reschedule: NotRequired[bool]
     ready_to_update: NotRequired[bool]
     update_action: NotRequired[Literal["reschedule", "cancel"] | None]
     # If you later support more flows:

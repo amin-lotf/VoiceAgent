@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Sequence
 from sqlalchemy.exc import IntegrityError
 
 from .exceptions import InvalidSlot, NotFound, SlotNotAvailable
@@ -44,12 +44,14 @@ async def list_future_appointments_by_phone(
     *,
     phone: str,
     now: Optional[datetime] = None,
+    include_statuses: Sequence[AppointmentStatus] | None = None,
 ) -> list[AppointmentView]:
+    statuses = include_statuses or (AppointmentStatus.HELD, AppointmentStatus.SCHEDULED)
     async with uow:
         rows = await uow.appointments.list_future_by_phone(
             phone=phone,
             now=now,
-            include_statuses=(AppointmentStatus.HELD, AppointmentStatus.SCHEDULED),
+            include_statuses=statuses,
             ascending=True,
         )
         return [to_view(r) for r in rows]
