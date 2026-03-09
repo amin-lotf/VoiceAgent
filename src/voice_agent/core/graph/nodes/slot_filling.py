@@ -13,7 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from voice_agent.const import DEFAULT_TZ
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.llm.openai_llm import LLM
-from voice_agent.core.services.appointments import list_free_slots, hold_slot
+from voice_agent.core.services.appointments import (
+    list_free_slots,
+    hold_slot,
+    confirm_appointment,
+    delete_held_appointment,
+    update_held_appointment_details,
+)
 from voice_agent.core.types import (
     CallState,
     ClinicIntent,
@@ -32,7 +38,7 @@ from .utils import (
 )
 from ...llm.huggingface_llm import agent_model
 from ...prompts.slot_filling_basic import build_local_fast_extract_prompt, build_local_confirmation_prompt
-from ...services.exceptions import SlotNotAvailable
+from ...services.exceptions import SlotNotAvailable, NotFound
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +53,7 @@ PENDING_Q_ASK_REASON = "ask_reason"
 PENDING_Q_ASK_DATETIME = "ask_datetime"
 PENDING_Q_SLOT_CONFIRM = "confirm_suggested_slot"
 PENDING_Q_FINAL_CONFIRM = "confirm_final_booking"
+PENDING_Q_CONFIRM_PROFILE_CHANGE = "confirm_profile_change"
 
 
 def _coerce_int(val: Any, default: int) -> int:
@@ -134,6 +141,172 @@ def _build_final_review_text(appointment: AppointmentDraft) -> str:
     )
 
 
+def _looks_like_final_review(text: str | None) -> bool:
+    if not isinstance(text, str):
+        return False
+    t = text.strip().lower()
+    return t.startswith("before i book it") and "should i confirm" in t
+
+
+def _normalize_basic_value(key: str, value: str) -> str | None:
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    if key == "phone":
+        return normalize_phone(raw)
+    return raw
+
+
+def _basic_value_equal(key: str, left: str | None, right: str | None) -> bool:
+    if key == "phone":
+        l = normalize_phone(left) if left else None
+        r = normalize_phone(right) if right else None
+        return bool(l and r and l == r)
+    if left is None or right is None:
+        return False
+    return left.strip().casefold() == right.strip().casefold()
+
+
+def _has_explicit_change_cue(user_text: str) -> bool:
+    text = f" {user_text.lower()} "
+    cues = (
+        " actually ",
+        " change ",
+        " update ",
+        " instead ",
+        " wrong ",
+        " correct ",
+        " not ",
+        " no,",
+        " no ",
+    )
+    return any(cue in text for cue in cues)
+
+
+def _extract_basic_patch_and_changes(
+    *,
+    appointment: AppointmentDraft,
+    patch: dict,
+    user_text: str,
+) -> tuple[dict, dict[str, dict[str, str]]]:
+    out_patch = dict(patch or {})
+    changes: dict[str, dict[str, str]] = {}
+    explicit_change = _has_explicit_change_cue(user_text)
+
+    for key in ("name", "phone", "reason_for_visit"):
+        new_norm = _normalize_basic_value(key, out_patch.get(key))
+        if new_norm is None:
+            out_patch.pop(key, None)
+            continue
+
+        current = appointment.get(key)
+        if not current:
+            out_patch[key] = new_norm
+            continue
+
+        # Existing value: never auto-overwrite. Only propose when correction is explicit.
+        if _basic_value_equal(key, str(current), new_norm):
+            out_patch.pop(key, None)
+            continue
+
+        if explicit_change:
+            changes[key] = {"old": str(current), "new": new_norm}
+
+        out_patch.pop(key, None)
+
+    return out_patch, changes
+
+
+def _field_label(key: str) -> str:
+    if key == "reason_for_visit":
+        return "reason for visit"
+    return key
+
+
+def _build_profile_change_text(changes: dict[str, dict[str, str]]) -> str:
+    segments: list[str] = []
+    for key in ("name", "phone", "reason_for_visit"):
+        change = changes.get(key)
+        if not change:
+            continue
+        segments.append(
+            f"{_field_label(key)} from {change['old']} to {change['new']}"
+        )
+    if not segments:
+        return "Do you want to update your details?"
+    return "Just to confirm, you want to change " + ", and ".join(segments) + ". Is that right?"
+
+
+def _apply_profile_changes(appointment: AppointmentDraft, changes: dict[str, dict[str, str]]) -> None:
+    for key in ("name", "phone", "reason_for_visit"):
+        change = changes.get(key)
+        if not change:
+            continue
+        new_value = change.get("new")
+        if not isinstance(new_value, str) or not new_value.strip():
+            continue
+        appointment[key] = new_value.strip()
+
+
+async def _release_held_slot(
+    state: CallState,
+    *,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    held_id = state.get("held_appointment_id")
+    if not held_id:
+        return
+    try:
+        async with sessionmaker() as session:
+            uow = SqlAlchemyUnitOfWork(session)
+            await delete_held_appointment(uow, appointment_id=int(held_id))
+    except NotFound:
+        logger.info("release_held_slot skipped: appointment %s is not HELD", held_id)
+    except Exception:
+        logger.exception("release_held_slot failed for %s", held_id)
+    state["held_appointment_id"] = None
+    state["appointment_view"] = {}
+
+
+async def _sync_held_slot_details(
+    state: CallState,
+    *,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    held_id = state.get("held_appointment_id")
+    if not held_id:
+        return
+
+    appointment = state.setdefault("appointment_draft", {})
+    if not (appointment.get("name") and appointment.get("phone") and appointment.get("reason_for_visit")):
+        return
+
+    notes = appointment.get("notes") or []
+    if not isinstance(notes, list):
+        notes = [str(notes)]
+
+    try:
+        async with sessionmaker() as session:
+            uow = SqlAlchemyUnitOfWork(session)
+            view = await update_held_appointment_details(
+                uow,
+                appointment_id=int(held_id),
+                name=str(appointment["name"]),
+                phone=str(appointment["phone"]),
+                reason_for_visit=str(appointment["reason_for_visit"]),
+                notes=notes,
+            )
+            state["appointment_view"] = view if isinstance(view, dict) else state.get("appointment_view", {})
+    except NotFound:
+        logger.info("sync_held_slot_details skipped: hold not found %s", held_id)
+        state["held_appointment_id"] = None
+        state["appointment_view"] = {}
+    except Exception:
+        logger.exception("sync_held_slot_details failed for %s", held_id)
+
+
 async def _classify_confirmation_intent(
     *,
     user_text: str,
@@ -152,7 +325,8 @@ async def _classify_confirmation_intent(
     )
     try:
         t0 = time.perf_counter()
-        resp = await asyncio.to_thread(agent_model.invoke, prompt)
+        # resp = await asyncio.to_thread(agent_model.invoke, prompt)
+        resp = await LLM.ainvoke(prompt)
         t1 = time.perf_counter()
         raw = getattr(resp, "content", "") or ""
         parsed = safe_json_parse(raw)
@@ -287,6 +461,65 @@ async def node_fill_appointment_slot(
     user_text = (state.get("user_text") or "").strip()
     state["ready_to_confirm"] = False
 
+    # Confirm explicit profile changes before continuing scheduling.
+    pending_question = str(state.get("pending_question") or "")
+    pending_profile_change = state.get("pending_profile_change") or {}
+    if pending_question == PENDING_Q_CONFIRM_PROFILE_CHANGE and pending_profile_change:
+        confirm_intent = await _classify_confirmation_intent(
+            user_text=user_text,
+            appointment=appointment,
+            pending_question=PENDING_Q_CONFIRM_PROFILE_CHANGE,
+            prior_assistant_text=state.get("prev_assistant_text"),
+        )
+        if confirm_intent == "confirm":
+            _apply_profile_changes(appointment, pending_profile_change)
+            return_to = state.get("profile_change_return_to")
+            had_date_mention = bool(state.get("profile_change_had_date_mention"))
+            state["pending_profile_change"] = {}
+            state["profile_change_return_to"] = None
+            state["profile_change_had_date_mention"] = False
+
+            if had_date_mention:
+                if state.get("held_appointment_id"):
+                    await _release_held_slot(state, sessionmaker=sessionmaker)
+                return _finalize_response(
+                    state,
+                    "Updated. What date and time would you like?",
+                    pending_question=PENDING_Q_ASK_DATETIME,
+                    pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+                )
+            if state.get("held_appointment_id"):
+                await _sync_held_slot_details(state, sessionmaker=sessionmaker)
+            if return_to == PENDING_Q_FINAL_CONFIRM and appointment.get("start_at"):
+                return _finalize_response(
+                    state,
+                    _build_final_review_text(appointment),
+                    pending_question=PENDING_Q_FINAL_CONFIRM,
+                    pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+                )
+            return _finalize_response(
+                state,
+                "Updated.",
+                pending_question=PENDING_Q_ASK_DATETIME,
+                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+            )
+        if confirm_intent == "revise":
+            state["pending_profile_change"] = {}
+            state["profile_change_return_to"] = None
+            state["profile_change_had_date_mention"] = False
+            return _finalize_response(
+                state,
+                "Okay, please say the exact detail you want to change.",
+                pending_question=PENDING_Q_CONFIRM_PROFILE_CHANGE,
+                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+            )
+        return _finalize_response(
+            state,
+            "Please confirm if you want that profile change.",
+            pending_question=PENDING_Q_CONFIRM_PROFILE_CHANGE,
+            pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+        )
+
     # -------------------------
     # 1) Fast local extraction
     # -------------------------
@@ -302,7 +535,8 @@ async def node_fill_appointment_slot(
         try:
             # writer = get_stream_writer()
             t0 = time.perf_counter()
-            resp = await asyncio.to_thread(agent_model.invoke, local_prompt)
+            # resp = await asyncio.to_thread(agent_model.invoke, local_prompt)
+            resp = await LLM.ainvoke(local_prompt)
             t1 = time.perf_counter()
             raw = getattr(resp, "content", "") or ""
             parsed = safe_json_parse(raw)
@@ -319,6 +553,23 @@ async def node_fill_appointment_slot(
             logger.exception("local_extract failed")
             local_patch = {}
             date_mentioned = False
+
+    local_patch, profile_changes = _extract_basic_patch_and_changes(
+        appointment=appointment,
+        patch=local_patch,
+        user_text=user_text,
+    )
+
+    if profile_changes:
+        state["pending_profile_change"] = profile_changes
+        state["profile_change_return_to"] = pending_question if pending_question else None
+        state["profile_change_had_date_mention"] = bool(date_mentioned)
+        return _finalize_response(
+            state,
+            _build_profile_change_text(profile_changes),
+            pending_question=PENDING_Q_CONFIRM_PROFILE_CHANGE,
+            pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+        )
 
     _merge_patch(state, local_patch)
     appointment = state.get("appointment_draft", {})
@@ -372,9 +623,43 @@ async def node_fill_appointment_slot(
             prior_assistant_text=state.get("prev_assistant_text"),
         )
 
+    # Defensive fallback: if final-review text was just asked, honor that stage
+    # even if pending_question drifted due transport/race timing.
+    if _looks_like_final_review(state.get("prev_assistant_text")) and not date_mentioned and state.get("held_appointment_id"):
+        if confirm_intent == "confirm":
+            return _finalize_response(
+                state,
+                "",
+                route_to_booking=True,
+                speak=False,
+                pending_question=None,
+                pending_intent=None,
+            )
+        if confirm_intent == "revise":
+            await _release_held_slot(state, sessionmaker=sessionmaker)
+            return _finalize_response(
+                state,
+                "No problem, I released that time. What would you like to change?",
+                pending_question=PENDING_Q_FINAL_CONFIRM,
+                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+            )
+        if confirm_intent == "unclear":
+            return _finalize_response(
+                state,
+                "Please confirm if you want me to book this, or tell me what to change.",
+                pending_question=PENDING_Q_FINAL_CONFIRM,
+                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+            )
+
     # Step 1 confirmation: caller confirms/rejects the offered date.
     if pending_question == PENDING_Q_SLOT_CONFIRM:
         if confirm_intent == "confirm":
+            hold_result = await _prepare_hold_for_final_confirmation(
+                state,
+                sessionmaker=sessionmaker,
+            )
+            if hold_result is not None:
+                return hold_result
             return _finalize_response(
                 state,
                 _build_final_review_text(appointment),
@@ -415,9 +700,11 @@ async def node_fill_appointment_slot(
                 pending_intent=None,
             )
         if not date_mentioned and confirm_intent == "revise":
+            if state.get("held_appointment_id"):
+                await _release_held_slot(state, sessionmaker=sessionmaker)
             return _finalize_response(
                 state,
-                "What would you like to change?",
+                "No problem, I released that time. What would you like to change?",
                 pending_question=PENDING_Q_FINAL_CONFIRM,
                 pending_intent=ClinicIntent.BOOK_APPOINTMENT,
             )
@@ -428,6 +715,10 @@ async def node_fill_appointment_slot(
                 pending_question=PENDING_Q_FINAL_CONFIRM,
                 pending_intent=ClinicIntent.BOOK_APPOINTMENT,
             )
+
+    # User changed date/time after we already held a slot for final confirmation.
+    if pending_question == PENDING_Q_FINAL_CONFIRM and date_mentioned and state.get("held_appointment_id"):
+        await _release_held_slot(state, sessionmaker=sessionmaker)
 
     # ----------------------------------------------------
     # 2) Scheduling resolver (OpenAI) ONLY if date mentioned
@@ -595,12 +886,80 @@ async def _find_next_available_slot(
     return None
 
 
+async def _prepare_hold_for_final_confirmation(
+    state: CallState,
+    *,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> CallState | None:
+    appointment = state.setdefault("appointment_draft", {})
+    start_at = parse_date(appointment.get("start_at"))
+    if not start_at:
+        return _finalize_response(
+            state,
+            "What date and time would you like?",
+            pending_question=PENDING_Q_ASK_DATETIME,
+            pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+        )
+
+    # Reuse existing hold when it matches current slot.
+    held_id = state.get("held_appointment_id")
+    view = state.get("appointment_view") or {}
+    view_start = parse_date(view.get("start_at")) if isinstance(view, dict) else None
+    if held_id and view_start and view_start == start_at:
+        return None
+
+    # Different slot requested: release previous hold first.
+    if held_id:
+        await _release_held_slot(state, sessionmaker=sessionmaker)
+
+    notes = appointment.get("notes") or []
+    if not isinstance(notes, list):
+        notes = [str(notes)]
+
+    async with sessionmaker() as session:
+        uow = SqlAlchemyUnitOfWork(session)
+        try:
+            held_view = await hold_slot(
+                uow,
+                slot_start=start_at,
+                name=appointment["name"],
+                phone=appointment["phone"],
+                reason_for_visit=appointment["reason_for_visit"],
+                notes=notes,
+            )
+            state["appointment_view"] = held_view if isinstance(held_view, dict) else {}
+            state["held_appointment_id"] = int((held_view or {}).get("id")) if isinstance(held_view, dict) and held_view.get("id") else None
+            return None
+        except SlotNotAvailable:
+            next_slot = await _find_next_available_slot(sessionmaker, start_from=start_at)
+            if next_slot:
+                appointment["start_at"] = next_slot.start_at.isoformat()
+                appointment["end_at"] = next_slot.end_at.isoformat()
+                appointment["last_offered_slot_start_at"] = next_slot.start_at.isoformat()
+                return _finalize_response(
+                    state,
+                    f"That slot was just taken. The next available is {format_date(next_slot.start_at)}. Does that work?",
+                    pending_question=PENDING_Q_SLOT_CONFIRM,
+                    pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+                )
+            appointment.pop("start_at", None)
+            appointment.pop("end_at", None)
+            return _finalize_response(
+                state,
+                "That time is no longer available. Could you share another date range?",
+                pending_question=PENDING_Q_ASK_DATETIME,
+                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+            )
+
+
 async def node_book_appointment_node(
         state: CallState, *, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> CallState:
     appointment = state.setdefault("appointment_draft", {})
     start_at = parse_date(appointment.get("start_at"))
     end_at = parse_date(appointment.get("end_at"))
+
+
 
     missing = [k for k in ("name", "phone", "reason_for_visit") if not appointment.get(k)]
     if not start_at:
@@ -616,51 +975,62 @@ async def node_book_appointment_node(
             pending_question=PENDING_Q_ASK_DATETIME,
             pending_intent=ClinicIntent.BOOK_APPOINTMENT,
         )
-
-    notes = appointment.get("notes") or []
-    if not isinstance(notes, list):
-        notes = [str(notes)]
+    held_id = state.get("held_appointment_id")
+    if not held_id:
+        # Safety fallback: hold now if missing.
+        hold_result = await _prepare_hold_for_final_confirmation(
+            state,
+            sessionmaker=sessionmaker,
+        )
+        if hold_result is not None:
+            return hold_result
+        held_id = state.get("held_appointment_id")
+    if not held_id:
+        return _finalize_response(
+            state,
+            "I could not lock that time yet. Please confirm the date again.",
+            pending_question=PENDING_Q_SLOT_CONFIRM,
+            pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+        )
 
     async with sessionmaker() as session:
         uow = SqlAlchemyUnitOfWork(session)
         try:
-            view = await hold_slot(
+            view = await confirm_appointment(
                 uow,
-                slot_start=start_at,
-                name=appointment["name"],
-                phone=appointment["phone"],
-                reason_for_visit=appointment["reason_for_visit"],
-                notes=notes,
+                appointment_id=int(held_id),
             )
+            logger.warning("----------\nconfirm_appointment view=%s\n-----------", view)
             state["appointment_view"] = view if isinstance(view, dict) else {}
+            state["held_appointment_id"] = None
             state["pending_intent"] = None
             state["pending_question"] = None
-        except SlotNotAvailable:
-            next_slot = await _find_next_available_slot(sessionmaker, start_from=start_at)
-            if next_slot:
-                appointment["start_at"] = next_slot.start_at.isoformat()
-                appointment["end_at"] = next_slot.end_at.isoformat()
-                appointment["last_offered_slot_start_at"] = next_slot.start_at.isoformat()
-                logger.info("slot_confirm fallback next_slot=%s", next_slot.start_at)
-                return _finalize_response(
-                    state,
-                    f"That slot was just taken. The next available is {format_date(next_slot.start_at)}. Does that work?",
-                    pending_question=PENDING_Q_SLOT_CONFIRM,
-                    pending_intent=ClinicIntent.BOOK_APPOINTMENT,
-                )
+        except NotFound:
+            # HELD row may no longer exist, retry from scheduling.
+            logger.warning("confirm_appointment failed, retrying from scheduling")
+            state["held_appointment_id"] = None
             appointment.pop("start_at", None)
             appointment.pop("end_at", None)
-            logger.info("slot_confirm no slots available after conflict")
             return _finalize_response(
                 state,
-                "That time is not available and I could not find another in the next couple of weeks. Could you share another date range?",
+                "I could not lock that slot anymore. Please share another date and time.",
                 pending_question=PENDING_Q_ASK_DATETIME,
                 pending_intent=ClinicIntent.BOOK_APPOINTMENT,
             )
+        except Exception as e:
+            logger.warning(f"confirm_appointment failed, {e}")
+            return _finalize_response(
+                state,
+                "I hit a technical issue while finalizing that booking. Please confirm the time once more.",
+                pending_question=PENDING_Q_FINAL_CONFIRM,
+                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+            )
+
 
     confirmation_text = (
         f"I booked it for {format_date(start_at)}. Please be here on time."
     )
+    logger.warning("----------\nbooked confirmation: %s\n-----------", confirmation_text)
     return _finalize_response(
         state,
         confirmation_text,

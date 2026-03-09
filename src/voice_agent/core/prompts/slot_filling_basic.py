@@ -88,6 +88,9 @@ Main rules:
 3) Corrections must be STRICT. Weak, casual, or ambiguous mentions are NOT corrections.
 4) reason_for_visit must be medical only. Scheduling language is never a medical reason.
 5) date_mentioned must be decided from caller_text only.
+6) For existing fields, replacement needs explicit correction wording like:
+   "actually", "change", "use ... instead", "that is wrong", "not X, Y".
+   If explicit correction wording is missing, patch for that field MUST be null.
 
 Field rules:
 {name_rule}
@@ -107,6 +110,9 @@ Correction flags:
 
 IMPORTANT:
 If a field already exists, a bare replacement value is NOT a correction.
+Examples:
+- existing name=Jack, caller_text="Peter, how about Monday" -> patch.name=null
+- existing phone set, caller_text="0434..." without correction wording -> patch.phone=null
 
 
 

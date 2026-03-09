@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
@@ -140,6 +141,14 @@ class InterviewEngine:
                     yield item
             except asyncio.CancelledError:
                 task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+                if final_state is None:
+                    final_state = state
+                with contextlib.suppress(Exception):
+                    await asyncio.shield(
+                        self._persist_or_delete(call_id=call_id, final_state=final_state, event=event)
+                    )
                 raise
             finally:
                 pass
@@ -147,6 +156,12 @@ class InterviewEngine:
             try:
                 await task
             except asyncio.CancelledError:
+                if final_state is None:
+                    final_state = state
+                with contextlib.suppress(Exception):
+                    await asyncio.shield(
+                        self._persist_or_delete(call_id=call_id, final_state=final_state, event=event)
+                    )
                 return
 
             if final_state is None:

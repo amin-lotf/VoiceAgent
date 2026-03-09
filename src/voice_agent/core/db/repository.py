@@ -31,6 +31,14 @@ class SqlAlchemyAppointmentRepository:
         await self._session.flush()
         return appt
 
+    async def delete(self, appointment_id: int) -> bool:
+        appt = await self.get(appointment_id)
+        if appt is None:
+            return False
+        await self._session.delete(appt)
+        await self._session.flush()
+        return True
+
     async def create(
         self,
         *,
@@ -72,6 +80,9 @@ class SqlAlchemyAppointmentRepository:
             setattr(appt, k, v)
 
         await self._session.flush()
+        # Ensure server-updated/default columns are loaded (e.g. updated_at)
+        # so later attribute access does not trigger implicit async lazy IO.
+        await self._session.refresh(appt)
         return appt
 
     async def set_status(self, appointment_id: int, status: AppointmentStatus) -> Optional[Appointment]:

@@ -124,12 +124,16 @@ class CallState(TypedDict, total=False):
     # Slot container
     appointment_draft: NotRequired[AppointmentDraft]
     appointment_view: NotRequired[AppointmentView]
+    held_appointment_id: NotRequired[int | None]
     ready_to_confirm: NotRequired[bool]
     # If you later support more flows:
     # reschedule: NotRequired[RescheduleSlots]
     # cancellation: NotRequired[CancelSlots]
 
     pending_question: NotRequired[str | None]
+    pending_profile_change: NotRequired[dict[str, dict[str, str]]]
+    profile_change_return_to: NotRequired[str | None]
+    profile_change_had_date_mention: NotRequired[bool]
 
     # Transcript memory
     messages: NotRequired[list[dict]]

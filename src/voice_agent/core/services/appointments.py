@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.exc import IntegrityError
@@ -11,7 +13,7 @@ from voice_agent.core.settings import settings
 from voice_agent.core.types import AppointmentStatus, AppointmentView, TimeSlot
 
 
-
+logger = logging.getLogger(__name__)
 
 
 def _ensure_tz(dt: datetime) -> None:
@@ -152,5 +154,50 @@ async def cancel_appointment(
         if appt is None:
             raise NotFound("Appointment not found")
         appt = await uow.appointments.set_status(appointment_id, AppointmentStatus.CANCELLED)
+        assert appt is not None
+        return to_view(appt)
+
+
+async def delete_held_appointment(
+    uow: SqlAlchemyUnitOfWork,
+    *,
+    appointment_id: int,
+) -> bool:
+    """
+    Hard-delete a HELD appointment to immediately free the slot.
+    Returns True if deleted, False if not found.
+    Raises NotFound when appointment exists but is not HELD.
+    """
+    async with uow:
+        appt = await uow.appointments.get(appointment_id)
+        if appt is None:
+            return False
+        if appt.status != AppointmentStatus.HELD:
+            raise NotFound("Only HELD appointments can be deleted")
+        return await uow.appointments.delete(appointment_id)
+
+
+async def update_held_appointment_details(
+    uow: SqlAlchemyUnitOfWork,
+    *,
+    appointment_id: int,
+    name: str,
+    phone: str,
+    reason_for_visit: str,
+    notes: list[str],
+) -> AppointmentView:
+    async with uow:
+        appt = await uow.appointments.get(appointment_id)
+        if appt is None:
+            raise NotFound("Appointment not found")
+        if appt.status != AppointmentStatus.HELD:
+            raise NotFound("Only HELD appointments can be updated here")
+        appt = await uow.appointments.update_fields(
+            appointment_id,
+            name=name,
+            phone=phone,
+            reason_for_visit=reason_for_visit,
+            notes=notes,
+        )
         assert appt is not None
         return to_view(appt)
