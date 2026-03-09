@@ -1111,6 +1111,7 @@ async def node_book_appointment_node(
             )
             logger.warning("----------\nconfirm_appointment view=%s\n-----------", view)
             state["appointment_view"] = view if isinstance(view, dict) else {}
+            state["appointment_id"] = int((view or {}).get("id")) if isinstance(view, dict) and view.get("id") else None
             state["held_appointment_id"] = None
             state["pending_intent"] = None
             state["pending_question"] = None
