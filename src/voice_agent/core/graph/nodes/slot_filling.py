@@ -117,7 +117,7 @@ def _merge_patch(state: CallState, patch: dict) -> None:
                 notes.append(note.strip())
 
     # basics
-    for key in ("name", "phone", "reason_for_visit"):
+    for key in ("name", "phone", "reason_for_visit","suggested_date_confirmed"):
         val = patch.get(key)
         if isinstance(val, str) and val.strip():
             if key == "phone":

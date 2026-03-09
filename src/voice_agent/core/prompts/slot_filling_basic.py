@@ -70,6 +70,30 @@ def build_local_fast_extract_prompt(
         '- This is allowed because appointment_draft provides the currently offered slot context. '
         '- If caller_text rejects, changes, questions, or asks for another time/day, leave patch.suggested_date_confirmed null. '
         '- Never set it to false.'
+        '''
+         Examples for suggested_date_confirmed:    
+            appointment_draft.last_offered_slot_start_at exists
+            caller_text: "okay"
+            -> patch.suggested_date_confirmed = true
+            
+            appointment_draft.last_offered_slot_start_at exists
+            caller_text: "yes that works"
+            -> patch.suggested_date_confirmed = true
+            
+            appointment_draft.last_offered_slot_start_at exists
+            caller_text: "book it"
+            -> patch.suggested_date_confirmed = true
+            
+            appointment_draft.last_offered_slot_start_at exists
+            caller_text: "another time"
+            -> patch.suggested_date_confirmed = null
+            date_mentioned = true
+            
+            appointment_draft.last_offered_slot_start_at not exists
+            caller_text: "morning"
+            -> patch.suggested_date_confirmed = null
+            date_mentioned = true
+        '''
         if has_suggested_date and has_name and has_phone and has_reason
         else
         '- Do not set patch.suggested_date_confirmed unless appointment_draft.last_offered_slot_start_at exists '
@@ -161,29 +185,7 @@ Examples for correction flags:
 - caller_text: "0912345678" -> phone_corrected=false, phone=null
 - caller_text: "checkup" -> reason_corrected=false, reason_for_visit=null
 
-Examples for suggested_date_confirmed:
 
-appointment_draft.last_offered_slot_start_at exists
-caller_text: "okay"
--> patch.suggested_date_confirmed = true
-
-appointment_draft.last_offered_slot_start_at exists
-caller_text: "yes that works"
--> patch.suggested_date_confirmed = true
-
-appointment_draft.last_offered_slot_start_at exists
-caller_text: "book it"
--> patch.suggested_date_confirmed = true
-
-appointment_draft.last_offered_slot_start_at exists
-caller_text: "another time"
--> patch.suggested_date_confirmed = null
-date_mentioned = true
-
-appointment_draft.last_offered_slot_start_at not exists
-caller_text: "morning"
--> patch.suggested_date_confirmed = null
-date_mentioned = true
 
 confidence:
 - 0.0 to 1.0
