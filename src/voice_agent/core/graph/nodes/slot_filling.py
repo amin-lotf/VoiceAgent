@@ -29,7 +29,7 @@ from voice_agent.core.types import (
     TimeSlot,
     AppointmentDraft,
     AppointmentStatus,
-    AppointmentView,
+    AppointmentView, TurnInputMode,
 )
 from voice_agent.core.prompts.slot_filling import build_slot_fill_prompt
 from voice_agent.core.settings import settings
@@ -88,17 +88,19 @@ def _stream_response(state: CallState, text: str) -> None:
 
 
 def _finalize_response(
-    state: CallState,
-    text: str,
-    *,
-    route_to_booking: bool = False,
-    route_to_reschedule: bool = False,
-    speak: bool = True,
-    pending_question: str | None | object = _KEEP,
-    pending_intent: ClinicIntent | None | object = _KEEP,
+        state: CallState,
+        text: str,
+        *,
+        route_to_booking: bool = False,
+        route_to_reschedule: bool = False,
+        speak: bool = True,
+        pending_question: str | None | object = _KEEP,
+        pending_intent: ClinicIntent | None | object = _KEEP,
+        input_mode:TurnInputMode = TurnInputMode.DEFAULT
 ) -> CallState:
     state["ready_to_confirm"] = route_to_booking
     state["ready_to_reschedule"] = route_to_reschedule
+    state["input_mode"] = input_mode
 
     if pending_intent is not _KEEP:
         state["pending_intent"] = pending_intent
@@ -202,10 +204,10 @@ def _apply_existing_view_to_state(state: CallState, view: AppointmentView) -> No
 
 
 async def _lookup_future_scheduled_appointment_by_phone(
-    *,
-    sessionmaker: async_sessionmaker[AsyncSession],
-    phone: str,
-    now: datetime,
+        *,
+        sessionmaker: async_sessionmaker[AsyncSession],
+        phone: str,
+        now: datetime,
 ) -> AppointmentView | None:
     async with sessionmaker() as session:
         uow = SqlAlchemyUnitOfWork(session)
@@ -291,10 +293,10 @@ def _reschedule_offer_explicit_change(user_text: str) -> bool:
 
 
 def _extract_basic_patch_and_changes(
-    *,
-    appointment: AppointmentDraft,
-    patch: dict,
-    user_text: str,
+        *,
+        appointment: AppointmentDraft,
+        patch: dict,
+        user_text: str,
 ) -> tuple[dict, dict[str, dict[str, str]]]:
     out_patch = dict(patch or {})
     changes: dict[str, dict[str, str]] = {}
@@ -462,21 +464,21 @@ def _extract_post_booking_notes(user_text: str) -> list[str]:
 
 
 async def _release_held_slot(
-    state: CallState,
-    *,
-    sessionmaker: async_sessionmaker[AsyncSession],
+        state: CallState,
+        *,
+        sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     held_id = state.get("held_appointment_id")
     if not held_id:
         return
 
-    async def _commit()->None:
+    async def _commit() -> None:
         async with sessionmaker() as session:
             uow = SqlAlchemyUnitOfWork(session)
             await delete_held_appointment(uow, appointment_id=int(held_id))
 
     try:
-        run_non_interruptible(state,_commit)
+        run_non_interruptible(state, _commit)
     except NotFound:
         logger.info("release_held_slot skipped: appointment %s is not HELD", held_id)
     except Exception:
@@ -486,9 +488,9 @@ async def _release_held_slot(
 
 
 async def _sync_held_slot_details(
-    state: CallState,
-    *,
-    sessionmaker: async_sessionmaker[AsyncSession],
+        state: CallState,
+        *,
+        sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     held_id = state.get("held_appointment_id")
     if not held_id:
@@ -502,7 +504,7 @@ async def _sync_held_slot_details(
     if not isinstance(notes, list):
         notes = [str(notes)]
 
-    async def _commit()->AppointmentView:
+    async def _commit() -> AppointmentView:
         async with sessionmaker() as session:
             uow = SqlAlchemyUnitOfWork(session)
             return await update_held_appointment_details(
@@ -515,7 +517,7 @@ async def _sync_held_slot_details(
             )
 
     try:
-        view = await run_non_interruptible(state,_commit)
+        view = await run_non_interruptible(state, _commit)
         state["appointment_view"] = view if isinstance(view, dict) else state.get("appointment_view", {})
     except NotFound:
         logger.info("sync_held_slot_details skipped: hold not found %s", held_id)
@@ -526,11 +528,11 @@ async def _sync_held_slot_details(
 
 
 async def _classify_confirmation_intent(
-    *,
-    user_text: str,
-    appointment: AppointmentDraft,
-    pending_question: str,
-    prior_assistant_text: str | None,
+        *,
+        user_text: str,
+        appointment: AppointmentDraft,
+        pending_question: str,
+        prior_assistant_text: str | None,
 ) -> str:
     if not user_text:
         return "unclear"
@@ -591,17 +593,18 @@ def _merge_patch(state: CallState, patch: dict) -> None:
 
     # scheduling fields (keep as-is; python will parse/validate later)
     # NOTE: these are optional; they won't exist in local_patch.
-    for key in ("schedule_intent", "desired_start_at", "search_days", "time_bucket", "assistant_text", "clarify_reason"):
+    for key in ("schedule_intent", "desired_start_at", "search_days", "time_bucket", "assistant_text",
+                "clarify_reason"):
         if key in patch:
             appt[key] = patch.get(key)
 
 
 def _compute_search_window(
-    *,
-    schedule_intent: str,
-    patch: dict,
-    now: datetime,
-    last_offered: datetime | None,
+        *,
+        schedule_intent: str,
+        patch: dict,
+        now: datetime,
+        last_offered: datetime | None,
 ) -> tuple[datetime | None, datetime | None, str | None]:
     """
     Returns (start_range, end_range, time_bucket).
@@ -670,9 +673,9 @@ def _pick_best_slot(slots: list[TimeSlot], bucket: str | None) -> TimeSlot:
 
 
 async def node_fill_appointment_slot(
-    state: CallState,
-    *,
-    sessionmaker: async_sessionmaker[AsyncSession],
+        state: CallState,
+        *,
+        sessionmaker: async_sessionmaker[AsyncSession],
 ) -> CallState:
     appointment: AppointmentDraft = state.setdefault("appointment_draft", {})
     now = _get_now(state)
@@ -740,7 +743,8 @@ async def node_fill_appointment_slot(
         )
 
     if pending_question == PENDING_Q_EXISTING_SCHEDULED_APPOINTMENT:
-        existing_view = state.get("appointment_view") if _is_future_scheduled_view(state.get("appointment_view"), now=now) else None
+        existing_view = state.get("appointment_view") if _is_future_scheduled_view(state.get("appointment_view"),
+                                                                                   now=now) else None
         if existing_view is None:
             phone = normalize_phone(appointment.get("phone"))
             if phone:
@@ -947,7 +951,8 @@ async def node_fill_appointment_slot(
 
     # Defensive fallback: if final-review text was just asked, honor that stage
     # even if pending_question drifted due transport/race timing.
-    if _looks_like_final_review(state.get("prev_assistant_text")) and not date_mentioned and state.get("held_appointment_id"):
+    if _looks_like_final_review(state.get("prev_assistant_text")) and not date_mentioned and state.get(
+            "held_appointment_id"):
         if confirm_intent == "confirm":
             return _finalize_response(
                 state,
@@ -1209,9 +1214,9 @@ async def _find_next_available_slot(
 
 
 async def _prepare_hold_for_final_confirmation(
-    state: CallState,
-    *,
-    sessionmaker: async_sessionmaker[AsyncSession],
+        state: CallState,
+        *,
+        sessionmaker: async_sessionmaker[AsyncSession],
 ) -> CallState | None:
     appointment = state.setdefault("appointment_draft", {})
     start_at = parse_date(appointment.get("start_at"))
@@ -1250,7 +1255,9 @@ async def _prepare_hold_for_final_confirmation(
                 notes=notes,
             )
             state["appointment_view"] = held_view if isinstance(held_view, dict) else {}
-            state["held_appointment_id"] = int((held_view or {}).get("id")) if isinstance(held_view, dict) and held_view.get("id") else None
+            state["held_appointment_id"] = int((held_view or {}).get("id")) if isinstance(held_view,
+                                                                                          dict) and held_view.get(
+                "id") else None
             return None
         except SlotNotAvailable:
             next_slot = await _find_next_available_slot(sessionmaker, start_from=start_at)
@@ -1280,8 +1287,6 @@ async def node_book_appointment_node(
     appointment = state.setdefault("appointment_draft", {})
     start_at = parse_date(appointment.get("start_at"))
     end_at = parse_date(appointment.get("end_at"))
-
-
 
     missing = [k for k in ("name", "phone", "reason_for_visit") if not appointment.get(k)]
     if not start_at:
@@ -1314,17 +1319,17 @@ async def node_book_appointment_node(
             pending_question=PENDING_Q_SLOT_CONFIRM,
             pending_intent=ClinicIntent.BOOK_APPOINTMENT,
         )
+
     async def _commit() -> AppointmentView:
         async with sessionmaker() as session:
             uow = SqlAlchemyUnitOfWork(session)
-            return  await confirm_appointment(
+            return await confirm_appointment(
                 uow,
                 appointment_id=int(held_id),
             )
 
-
     try:
-        view= await run_non_interruptible(state, _commit)
+        view = await run_non_interruptible(state, _commit)
         state["appointment_view"] = view if isinstance(view, dict) else {}
         state["appointment_id"] = int(view["id"]) if isinstance(view, dict) and view.get("id") else None
         state["held_appointment_id"] = None
@@ -1351,7 +1356,6 @@ async def node_book_appointment_node(
             pending_intent=ClinicIntent.BOOK_APPOINTMENT,
         )
 
-
     confirmation_text = (
         f"I booked it for {format_date(start_at)}. Is there any condition or anything you want us to know?"
     )
@@ -1365,7 +1369,7 @@ async def node_book_appointment_node(
 
 
 async def node_post_booking_notes_node(
-    state: CallState, *, sessionmaker: async_sessionmaker[AsyncSession]
+        state: CallState, *, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> CallState:
     appointment = state.setdefault("appointment_draft", {})
     user_text = (state.get("user_text") or "").strip()

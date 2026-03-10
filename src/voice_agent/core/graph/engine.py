@@ -17,7 +17,7 @@ from voice_agent.core.types import (
     CallState,
     ChunkKind,
     EngineChunk,
-    RunResult,
+    RunResult, TurnInputMode, INPUT_MODE_POLICY, InputPolicy,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,6 +106,8 @@ class InterviewEngine:
         with contextlib.suppress(asyncio.CancelledError):
             await task
 
+    #
+
     def _cleanup_active_if_current(self, *, call_id: str, task: asyncio.Task[Any]) -> None:
         """
         Remove active entry only if it still points to this exact task.
@@ -114,6 +116,33 @@ class InterviewEngine:
         active = self._active.get(call_id)
         if active and active.task is task:
             self._active.pop(call_id, None)
+
+    # ----------------------------
+    # Input Policy
+    # ----------------------------
+    def _resolve_input_policy(self, state: CallState) -> InputPolicy:
+        raw = state.get("input_mode") or TurnInputMode.DEFAULT
+        try:
+            mode = TurnInputMode(raw)
+        except Exception:
+            mode = TurnInputMode.DEFAULT
+        return INPUT_MODE_POLICY[mode]
+
+    async def get_input_policy(self, *, call_id: str) -> InputPolicy:
+        lock = self._lock_for(call_id)
+        async with lock:
+            state = await self._load_state(call_id=call_id)
+            return self._resolve_input_policy(state)
+
+    async def get_input_mode(self, *, call_id: str) -> TurnInputMode:
+        lock = self._lock_for(call_id)
+        async with lock:
+            state = await self._load_state(call_id=call_id)
+            raw = state.get("input_mode") or TurnInputMode.DEFAULT
+            try:
+                return TurnInputMode(raw)
+            except Exception:
+                return TurnInputMode.DEFAULT
 
     # ----------------------------
     # State helpers
@@ -133,7 +162,10 @@ class InterviewEngine:
                 "user_text": None,
                 "meta": {},
                 "end_call": False,
+                "input_mode": TurnInputMode.DEFAULT,
             }
+        else:
+            state.setdefault("input_mode", TurnInputMode.DEFAULT)
         return state
 
     def _sanitize_state_for_persist(self, state: CallState) -> CallState:
