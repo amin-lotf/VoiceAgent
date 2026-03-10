@@ -41,6 +41,7 @@ from .utils import (
     format_date,
     call_llm_with_slow_filler,
 )
+from ..utils import run_non_interruptible
 from ...llm.huggingface_llm import agent_model
 from ...prompts.slot_filling_basic import build_local_fast_extract_prompt, build_local_confirmation_prompt
 from ...services.exceptions import SlotNotAvailable, NotFound
@@ -468,10 +469,14 @@ async def _release_held_slot(
     held_id = state.get("held_appointment_id")
     if not held_id:
         return
-    try:
+
+    async def _commit()->None:
         async with sessionmaker() as session:
             uow = SqlAlchemyUnitOfWork(session)
             await delete_held_appointment(uow, appointment_id=int(held_id))
+
+    try:
+        run_non_interruptible(state,_commit)
     except NotFound:
         logger.info("release_held_slot skipped: appointment %s is not HELD", held_id)
     except Exception:
@@ -497,10 +502,10 @@ async def _sync_held_slot_details(
     if not isinstance(notes, list):
         notes = [str(notes)]
 
-    try:
+    async def _commit()->AppointmentView:
         async with sessionmaker() as session:
             uow = SqlAlchemyUnitOfWork(session)
-            view = await update_held_appointment_details(
+            return await update_held_appointment_details(
                 uow,
                 appointment_id=int(held_id),
                 name=str(appointment["name"]),
@@ -508,7 +513,10 @@ async def _sync_held_slot_details(
                 reason_for_visit=str(appointment["reason_for_visit"]),
                 notes=notes,
             )
-            state["appointment_view"] = view if isinstance(view, dict) else state.get("appointment_view", {})
+
+    try:
+        view = await run_non_interruptible(state,_commit)
+        state["appointment_view"] = view if isinstance(view, dict) else state.get("appointment_view", {})
     except NotFound:
         logger.info("sync_held_slot_details skipped: hold not found %s", held_id)
         state["held_appointment_id"] = None
@@ -1306,40 +1314,42 @@ async def node_book_appointment_node(
             pending_question=PENDING_Q_SLOT_CONFIRM,
             pending_intent=ClinicIntent.BOOK_APPOINTMENT,
         )
-
-    async with sessionmaker() as session:
-        uow = SqlAlchemyUnitOfWork(session)
-        try:
-            view = await confirm_appointment(
+    async def _commit() -> AppointmentView:
+        async with sessionmaker() as session:
+            uow = SqlAlchemyUnitOfWork(session)
+            return  await confirm_appointment(
                 uow,
                 appointment_id=int(held_id),
             )
-            logger.warning("----------\nconfirm_appointment view=%s\n-----------", view)
-            state["appointment_view"] = view if isinstance(view, dict) else {}
-            state["appointment_id"] = int((view or {}).get("id")) if isinstance(view, dict) and view.get("id") else None
-            state["held_appointment_id"] = None
-            state["pending_intent"] = None
-            state["pending_question"] = None
-        except NotFound:
-            # HELD row may no longer exist, retry from scheduling.
-            logger.warning("confirm_appointment failed, retrying from scheduling")
-            state["held_appointment_id"] = None
-            appointment.pop("start_at", None)
-            appointment.pop("end_at", None)
-            return _finalize_response(
-                state,
-                "I could not lock that slot anymore. Please share another date and time.",
-                pending_question=PENDING_Q_ASK_DATETIME,
-                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
-            )
-        except Exception as e:
-            logger.warning(f"confirm_appointment failed, {e}")
-            return _finalize_response(
-                state,
-                "I hit a technical issue while finalizing that booking. Please confirm the time once more.",
-                pending_question=PENDING_Q_FINAL_CONFIRM,
-                pending_intent=ClinicIntent.BOOK_APPOINTMENT,
-            )
+
+
+    try:
+        view= await run_non_interruptible(state, _commit)
+        state["appointment_view"] = view if isinstance(view, dict) else {}
+        state["appointment_id"] = int(view["id"]) if isinstance(view, dict) and view.get("id") else None
+        state["held_appointment_id"] = None
+        state["pending_intent"] = None
+        state["pending_question"] = None
+    except NotFound:
+        # HELD row may no longer exist, retry from scheduling.
+        logger.warning("confirm_appointment failed, retrying from scheduling")
+        state["held_appointment_id"] = None
+        appointment.pop("start_at", None)
+        appointment.pop("end_at", None)
+        return _finalize_response(
+            state,
+            "I could not lock that slot anymore. Please share another date and time.",
+            pending_question=PENDING_Q_ASK_DATETIME,
+            pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+        )
+    except Exception as e:
+        logger.warning(f"confirm_appointment failed, {e}")
+        return _finalize_response(
+            state,
+            "I hit a technical issue while finalizing that booking. Please confirm the time once more.",
+            pending_question=PENDING_Q_FINAL_CONFIRM,
+            pending_intent=ClinicIntent.BOOK_APPOINTMENT,
+        )
 
 
     confirmation_text = (
@@ -1385,16 +1395,20 @@ async def node_post_booking_notes_node(
 
     view = state.get("appointment_view") or {}
     appt_id = view.get("id") if isinstance(view, dict) else None
+
+    async def _commit() -> AppointmentView:
+        async with sessionmaker() as session:
+            uow = SqlAlchemyUnitOfWork(session)
+            return await update_appointment_notes(
+                uow,
+                appointment_id=int(appt_id),
+                notes=merged_notes,
+            )
+
     if appt_id:
         try:
-            async with sessionmaker() as session:
-                uow = SqlAlchemyUnitOfWork(session)
-                updated_view = await update_appointment_notes(
-                    uow,
-                    appointment_id=int(appt_id),
-                    notes=merged_notes,
-                )
-                state["appointment_view"] = updated_view if isinstance(updated_view, dict) else view
+            updated_view = await run_non_interruptible(state, _commit)
+            state["appointment_view"] = updated_view if isinstance(updated_view, dict) else view
         except NotFound:
             logger.info("post_booking_notes update skipped: appointment not found %s", appt_id)
         except Exception:
