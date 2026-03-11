@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, TypeVar, cast
+from typing import Any, AsyncIterator, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -17,7 +17,7 @@ from voice_agent.core.types import (
     CallState,
     ChunkKind,
     EngineChunk,
-    RunResult, TurnInputMode, INPUT_MODE_POLICY, InputPolicy,
+    RunResult, TurnInputMode
 )
 
 logger = logging.getLogger(__name__)
@@ -116,33 +116,6 @@ class InterviewEngine:
         active = self._active.get(call_id)
         if active and active.task is task:
             self._active.pop(call_id, None)
-
-    # ----------------------------
-    # Input Policy
-    # ----------------------------
-    def _resolve_input_policy(self, state: CallState) -> InputPolicy:
-        raw = state.get("input_mode") or TurnInputMode.DEFAULT
-        try:
-            mode = TurnInputMode(raw)
-        except Exception:
-            mode = TurnInputMode.DEFAULT
-        return INPUT_MODE_POLICY[mode]
-
-    async def get_input_policy(self, *, call_id: str) -> InputPolicy:
-        lock = self._lock_for(call_id)
-        async with lock:
-            state = await self._load_state(call_id=call_id)
-            return self._resolve_input_policy(state)
-
-    async def get_input_mode(self, *, call_id: str) -> TurnInputMode:
-        lock = self._lock_for(call_id)
-        async with lock:
-            state = await self._load_state(call_id=call_id)
-            raw = state.get("input_mode") or TurnInputMode.DEFAULT
-            try:
-                return TurnInputMode(raw)
-            except Exception:
-                return TurnInputMode.DEFAULT
 
     # ----------------------------
     # State helpers

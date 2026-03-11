@@ -121,14 +121,7 @@ class InputPolicy:
     max_wait_ms: int
 
 
-INPUT_MODE_POLICY: dict[TurnInputMode, InputPolicy] = {
-    TurnInputMode.DEFAULT: InputPolicy(debounce_ms=600, max_wait_ms=2500),
-    TurnInputMode.YES_NO: InputPolicy(debounce_ms=250, max_wait_ms=800),
-    TurnInputMode.PHONE: InputPolicy(debounce_ms=900, max_wait_ms=3500),
-    TurnInputMode.NAME: InputPolicy(debounce_ms=700, max_wait_ms=2000),
-    TurnInputMode.DATETIME: InputPolicy(debounce_ms=650, max_wait_ms=2500),
-    TurnInputMode.REASON: InputPolicy(debounce_ms=500, max_wait_ms=2000),
-}
+
 
 
 class CallState(TypedDict, total=False):
@@ -177,7 +170,7 @@ class CallState(TypedDict, total=False):
     # Metadata
     started_at: NotRequired[str]
     office_topics: NotRequired[list[OfficeTopic]]
-    input_mode: NotRequired[TurnInputMode]
+
 
 
 @dataclass(frozen=True, slots=True)
