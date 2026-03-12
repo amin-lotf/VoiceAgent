@@ -27,7 +27,7 @@ from voice_agent.core.types import (
 )
 from voice_agent.core.prompts.slot_filling import build_slot_fill_prompt
 from voice_agent.core.settings import settings
-from .confirm import _release_held_slot, _prepare_hold_for_final_confirmation
+from .book_appointment import _release_held_slot, _prepare_hold_for_final_confirmation
 
 from .utils import (
     normalize_phone,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
+from langgraph.config import get_stream_writer
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
@@ -222,7 +223,7 @@ async def node_book_appointment_node(
         state["appointment_view"] = view if isinstance(view, dict) else {}
         state["appointment_id"] = int(view["id"]) if isinstance(view, dict) and view.get("id") else None
         state["held_appointment_id"] = None
-        state["pending_intent"] = None
+        state["pending_intent"] = ClinicIntent.POST_APPOINTMENT
         state["pending_question"] = None
     except NotFound:
         # HELD row may no longer exist, retry from scheduling.

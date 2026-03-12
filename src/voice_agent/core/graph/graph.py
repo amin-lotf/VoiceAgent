@@ -19,7 +19,7 @@ from voice_agent.core.graph.nodes.hangup import node_handle_hangup, node_on_call
 from voice_agent.core.graph.nodes.slot_filling import (
     node_fill_appointment_slot,
 )
-from voice_agent.core.graph.nodes.confirm import node_book_appointment_node
+from voice_agent.core.graph.nodes.book_appointment import node_book_appointment_node
 from voice_agent.core.graph.nodes.post_booking_notes import node_post_booking_notes_node
 from voice_agent.core.graph.nodes.reschedule_cancel import (
     node_reschedule_cancel_node,

@@ -48,7 +48,8 @@ async def node_detect_intent(state: CallState) -> CallState:
     data = {}
     llm_failed = False
     try:
-        resp =  await asyncio.to_thread(agent_model.invoke, prompt)
+        # resp =  await asyncio.to_thread(agent_model.invoke, prompt)
+        resp = await LLM.ainvoke(prompt)
         data = safe_json_parse(resp.content or "",logger=logger)
     except Exception:
         logger.warning("Intent router failed; using fallback", exc_info=True)
