@@ -8,6 +8,7 @@ from voice_agent.core.graph.nodes.basic_info import node_basic_info
 from voice_agent.core.graph.nodes.check_pending import node_check_pending
 from voice_agent.core.graph.nodes.merger import node_merger
 from voice_agent.core.graph.nodes.office_info import node_office_info
+from voice_agent.core.graph.nodes.time_extractor import node_time_extractor
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent
 from voice_agent.core.graph.nodes.greeting import node_on_call_started
 from voice_agent.core.graph.nodes.handoff import node_handoff_fallback
@@ -37,6 +38,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("on_call_started", node_on_call_started)
     graph.add_node("detect_intent", node_detect_intent)
     graph.add_node("basic_info", node_basic_info)
+    graph.add_node("time_extractor", node_time_extractor)
     graph.add_node("get_office_info", node_office_info)
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
@@ -65,9 +67,11 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
 
     graph.add_edge('router_node', 'detect_intent')
     graph.add_edge('router_node', 'basic_info')
+    graph.add_edge('router_node', 'time_extractor')
     graph.add_edge('detect_intent', 'get_office_info')
     graph.add_edge('get_office_info', 'merger')
     graph.add_edge('basic_info', 'merger')
+    graph.add_edge('time_extractor', 'merger')
     def _after_merger(state: CallState):
         intent = state.get("intent")
         match intent:
