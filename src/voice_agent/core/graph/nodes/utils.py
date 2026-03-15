@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import re
+from copy import deepcopy
 from datetime import datetime
 from logging import Logger
 from typing import Any
@@ -13,6 +14,38 @@ from langgraph.config import get_stream_writer
 
 from voice_agent.const import DEFAULT_TZ
 from voice_agent.core.types import CallEvent, CallState, AppointmentCreate
+
+
+
+
+
+
+def stream_text_response( text: str) -> dict:
+    local_state:dict= {"assistant_text": text}
+    writer = get_stream_writer()
+    if writer:
+        for word in text.split():
+            writer(("assistant_token", word + " "))
+        local_state["assistant_streamed"] = True
+    return local_state
+
+
+def get_node_data(state: CallState, node: str) -> dict:
+    return state.get("node_data").get(node, {})
+
+def set_node_data(state: CallState, node: str,n_data:dict[str,Any]) -> None:
+    state['node_data'].setdefault(node, {})
+    state['node_data'][node].update(n_data)
+
+def delete_node_value(state: CallState, node: str, key: str) -> None:
+    node_data = state.get("node_data")
+    bucket = node_data.get(node)
+    if not isinstance(bucket, dict):
+        return
+    bucket.pop(key, None)
+    # optional cleanup if the node bucket becomes empty
+    if not bucket:
+        node_data.pop(node, None)
 
 
 async def _delayed_filler(writer, filler_text:str, delay_s: float = 0.45) -> None:
@@ -71,21 +104,17 @@ def format_date(dt: datetime,tz_info:ZoneInfo=DEFAULT_TZ) -> str:
         return local_dt.strftime("%A, %b %d at %I:%M %p").lstrip("0").replace(" 0", " ")
 
 
-def ensure_spoken_on_user_turn(state: CallState) -> CallState:
+def ensure_spoken_on_user_turn(state: CallState) -> dict:
     """
     Guarantee that a USER_TURN ends with a spoken response unless the call is ending.
     """
+    local_state:dict={}
     if state.get("event") == CallEvent.USER_TURN:
         if not state.get('assistant_streamed', False):
             text = "Sorry, I didn't catch that. Could you say that again?"
-            state["assistant_text"] = text
-            writer = get_stream_writer()
-            if writer:
-                for word in text.split():
-                    writer(("assistant_token", word + " "))
-                state["assistant_streamed"] = True
-            state['end_call'] = False
-    return state
+            local_state=stream_text_response(text)
+            local_state['end_call'] = False
+    return local_state
 
 
 def normalize_phone(text: str | None) -> str | None:

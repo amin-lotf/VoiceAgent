@@ -1,9 +1,21 @@
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any, Literal, Annotated
 from typing import TypedDict, NotRequired, Required
 from uuid import UUID
+
+
+def merge_node_data(
+    left: dict[str, dict[str, Any]] | None,
+    right: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = deepcopy(left or {})
+    for node_name, payload in (right or {}).items():
+        out.setdefault(node_name, {})
+        out[node_name].update(payload or {})
+    return out
 
 
 class ChunkKind(StrEnum):
@@ -21,7 +33,6 @@ class CallEvent(StrEnum):
 class CallPhase(StrEnum):
     GREETING = "greeting"
     INTENT_ROUTING = "intent_routing"
-    TRIAGE = "triage"
     DONE = "done"
 
 
@@ -32,15 +43,15 @@ class ClinicIntent(StrEnum):
     POST_APPOINTMENT = "post_appointment"
     OFFICE_INFO = "office_info"
     HUMAN_HANDOFF = "human_handoff"
-    CLARIFY = "clarify"
     HANGUP = "hangup"
-    CHECK_PENDING= "check_pending"
-    TRIAGE= "triage"
+    TRIAGE = "triage"
+    COMPLEX = "complex"
 
 APPOINTMENT_INTENTS = {
     ClinicIntent.BOOK_APPOINTMENT,
     ClinicIntent.RESCHEDULE,
     ClinicIntent.CANCEL,
+    ClinicIntent.COMPLEX
 }
 
 
@@ -74,6 +85,12 @@ class AppointmentDraft(TypedDict,total=False):
     reason_for_visit: str | None
     last_offered_slot_start_at: str | None
 
+class AppointmentPatch(TypedDict, total=False):
+    name: str | None
+    phone: str | None
+    reason_for_visit: str | None
+    last_offered_slot_start_at: str | None
+
 
 class AppointmentCreate(TypedDict):
     name: str
@@ -84,6 +101,8 @@ class AppointmentCreate(TypedDict):
     notes: list[str]
     status: AppointmentStatus
     patient_type: PatientType  # CRM-derived
+
+
 
 
 class AppointmentView(TypedDict):
@@ -106,70 +125,31 @@ class EngineChunk:
     data: Any
 
 
-class TurnInputMode(StrEnum):
-    DEFAULT = "default"
-    YES_NO = "yes_no"
-    PHONE = "phone"
-    NAME = "name"
-    DATETIME = "datetime"
-    REASON = "reason"
-
-
-@dataclass(frozen=True)
-class InputPolicy:
-    debounce_ms: int
-    max_wait_ms: int
-
-
-
 
 
 class CallState(TypedDict, total=False):
-    # Identity
     call_id: Required[str]
-
-    # Event envelope (per webhook)
-    event: Required[CallEvent]
-    user_text: NotRequired[str | None]
-    prev_user_text: NotRequired[str | None]
-    meta: NotRequired[dict]
-
-    # Flow control
     phase: Required[CallPhase]
-    intent: NotRequired[ClinicIntent | None]
-    intent_confidence: NotRequired[float | None]
-    pending_intent: NotRequired[ClinicIntent | None]
 
-    # Slot container
-    appointment_draft: NotRequired[AppointmentDraft]
-    appointment_view: NotRequired[AppointmentView]
-    appointment_id: NotRequired[int | None]
-    held_appointment_id: NotRequired[int | None]
-    ready_to_confirm: NotRequired[bool]
-    ready_to_reschedule: NotRequired[bool]
-    ready_to_update: NotRequired[bool]
-    update_action: NotRequired[Literal["reschedule", "cancel"] | None]
-    # If you later support more flows:
-    # reschedule: NotRequired[RescheduleSlots]
-    # cancellation: NotRequired[CancelSlots]
-
-    pending_question: NotRequired[str | None]
-    pending_profile_change: NotRequired[dict[str, dict[str, str]]]
-    profile_change_return_to: NotRequired[str | None]
-    profile_change_had_date_mention: NotRequired[bool]
-
-    # Transcript memory
     messages: NotRequired[list[dict]]
     assistant_text: NotRequired[str]
-    prev_assistant_text: NotRequired[str]
     assistant_streamed: NotRequired[bool]
-    # Control flags
-    end_call: NotRequired[bool]
-    triage_triggered: NotRequired[bool]
 
-    # Metadata
-    started_at: NotRequired[str]
-    office_topics: NotRequired[list[OfficeTopic]]
+    appointment_draft: NotRequired[AppointmentDraft]
+    appointment_patch: NotRequired[AppointmentPatch]
+    node_data: NotRequired[Annotated[dict[str, dict[str, Any]], merge_node_data]]
+    meta: NotRequired[dict[str, Any]]
+
+    end_call: NotRequired[bool]
+
+    # per-turn / ephemeral
+    event: NotRequired[CallEvent]
+    user_text: NotRequired[str | None]
+    prev_user_text: NotRequired[str | None]
+    intent: NotRequired[ClinicIntent | None]
+    pending_intent: NotRequired[ClinicIntent | None]
+    appointment_view: NotRequired[AppointmentView]
+    prev_assistant_text: NotRequired[str]
 
 
 

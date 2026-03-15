@@ -12,7 +12,6 @@ from voice_agent.core.api.v1.session_store import init_session_store, get_public
 from voice_agent.core.api.v1.exception_handlers import register_exception_handlers
 from voice_agent.core.db.session import AsyncSessionLocal
 from voice_agent.core.graph.engine import InterviewEngine
-from voice_agent.core.graph.input_buffer import CallInputBuffer
 from voice_agent.core.store.redis_store import RedisStateStore
 
 logger = logging.getLogger('voice_agent')

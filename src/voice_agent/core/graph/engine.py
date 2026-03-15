@@ -17,7 +17,7 @@ from voice_agent.core.types import (
     CallState,
     ChunkKind,
     EngineChunk,
-    RunResult, TurnInputMode
+    RunResult
 )
 
 logger = logging.getLogger(__name__)
@@ -126,19 +126,23 @@ class InterviewEngine:
         if state is None:
             state = {
                 "call_id": call_id,
+                "phase": CallPhase.GREETING,
                 "messages": [],
                 "assistant_text": "",
                 "assistant_streamed": False,
-                "phase": CallPhase.GREETING,
-                "pending_question": None,
-                "event": None,
-                "user_text": None,
-                "meta": {},
+                "node_data": {},
+                "appointment_draft": {},
+                "appointment_patch": {},
                 "end_call": False,
-                "input_mode": TurnInputMode.DEFAULT,
             }
         else:
-            state.setdefault("input_mode", TurnInputMode.DEFAULT)
+            # defensive normalization for old states
+            state.setdefault("messages", [])
+            state.setdefault("node_data", {})
+            state.setdefault("appointment_draft", {})
+            state.setdefault("appointment_patch", {})
+            state.setdefault("end_call", False)
+
         return state
 
     def _sanitize_state_for_persist(self, state: CallState) -> CallState:
@@ -147,6 +151,7 @@ class InterviewEngine:
         """
         clean = dict(state)
         clean.pop("_run_control", None)
+        clean.pop("assistant_streamed", None)
         return cast(CallState, clean)
 
     async def _persist_or_delete(
@@ -191,6 +196,8 @@ class InterviewEngine:
         # 2) prepare state + register new active task inside short critical section
         async with lock:
             state = await self._load_state(call_id=call_id)
+            state["assistant_text"] = ""
+            state["assistant_streamed"] = False
             state["event"] = event
             state["user_text"] = user_text
             state["meta"] = meta or {}
@@ -353,6 +360,8 @@ class InterviewEngine:
 
         async with lock:
             state = await self._load_state(call_id=call_id)
+            state["assistant_text"] = ""
+            state["assistant_streamed"] = False
             state["event"] = event
             state["user_text"] = user_text
             state["meta"] = meta or {}

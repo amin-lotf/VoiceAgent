@@ -1,4 +1,6 @@
 from langgraph.config import get_stream_writer
+
+from voice_agent.core.graph.nodes.utils import get_node_data, set_node_data, delete_node_value, stream_text_response
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, OfficeTopic
 
 OFFICE_TEMPLATES = {
@@ -30,26 +32,19 @@ def _compose_office_response(topics: list[OfficeTopic]) -> str:
     parts = [OFFICE_TEMPLATES[t] for t in ordered]
 
     msg = " ".join(parts)
-    msg += " Would you like to book, reschedule, or cancel an appointment?"
+    # msg += " Would you like to book, reschedule, or cancel an appointment?"
     return msg
 
 
-def node_office_info(state: CallState) -> CallState:
+def node_office_info(state: CallState) -> dict:
     if state.get("intent") != ClinicIntent.OFFICE_INFO:
-        return state
-
-    topics = state.get("office_topics") or []
+        return {}
+    node_data = get_node_data(state, "office_info")
+    topics = node_data.get('office_topics') or []
     text = _compose_office_response(topics)
-
-    state["assistant_text"] = text
-    state["phase"] = CallPhase.INTENT_ROUTING
-    state["pending_question"] = None
-
-
-    writer = get_stream_writer()
-    if writer:
-        for word in text.split():
-            writer(("assistant_token", word + " "))
-        state["assistant_streamed"] = True
-
-    return state
+    local_state=stream_text_response(text)
+    local_state['node_data'] = {"office_info": {}}
+    pending_intent = state.get("pending_intent")
+    if pending_intent:
+        local_state['intent'] = pending_intent
+    return local_state
