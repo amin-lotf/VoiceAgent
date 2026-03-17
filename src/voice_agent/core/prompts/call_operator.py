@@ -143,8 +143,6 @@ def build_call_operator_prompt(
     tz_info: ZoneInfo = DEFAULT_TZ,
 ) -> list:
     user_text = (state.get("user_text") or "").strip()
-    prev_user_text = (state.get("prev_user_text") or "").strip()
-    prev_assistant_text = (state.get("prev_assistant_text") or "").strip()
     assistant_text = (state.get("assistant_text") or "").strip()
 
     appointment: AppointmentDraft = state.get("appointment_draft") or {}
@@ -403,9 +401,11 @@ Goodbye.
     human_content = "\n".join(
         [
             f"Current clinic local time: {now.astimezone(tz_info).isoformat()}",
-            f"Caller now: {user_text or '[silence]'}",
-            f"Previous caller text: {prev_user_text or 'none'}",
-            f"Previous assistant text: {prev_assistant_text or 'none'}",
+            "",
+            "Recent conversation history before the current caller message:",
+            _format_messages(recent_messages),
+            "",
+            f"Current caller message: {user_text or '[silence]'}",
             f"Assistant text already produced this turn: {assistant_text or 'none'}",
             "",
             f"Current state user_intent: {current_user_intent}",
@@ -419,9 +419,6 @@ Goodbye.
                     "requested_time_text": appointment.get("requested_time_text") or "none",
                 }
             ),
-            "",
-            "Recent message history:",
-            _format_messages(recent_messages),
             "",
             f"Now produce the spoken assistant reply first, then {JSON_SENTINEL}, then the JSON object.",
         ]
