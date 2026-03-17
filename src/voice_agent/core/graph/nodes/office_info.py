@@ -1,6 +1,6 @@
 from langgraph.config import get_stream_writer
 
-from voice_agent.core.graph.nodes.utils import get_node_data, set_node_data, delete_node_value, stream_text_response
+from voice_agent.core.graph.nodes.utils import get_state_data, stream_text_response, reset_node_data
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, OfficeTopic
 
 OFFICE_TEMPLATES = {
@@ -37,14 +37,12 @@ def _compose_office_response(topics: list[OfficeTopic]) -> str:
 
 
 def node_office_info(state: CallState) -> dict:
-    if state.get("intent") != ClinicIntent.OFFICE_INFO:
-        return {}
-    node_data = get_node_data(state, "office_info")
+
+    node_data = get_state_data(state, "detect_intent")
     topics = node_data.get('office_topics') or []
+    if not topics:
+        return {}
     text = _compose_office_response(topics)
     local_state=stream_text_response(text)
-    local_state['node_data'] = {"office_info": {}}
-    pending_intent = state.get("pending_intent")
-    if pending_intent:
-        local_state['intent'] = pending_intent
+    reset_node_data(local_state, "detect_intent")
     return local_state

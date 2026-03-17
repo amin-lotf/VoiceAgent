@@ -17,12 +17,10 @@ from voice_agent.core.types import (
     CallState,
     ChunkKind,
     EngineChunk,
-    RunResult
+    RunResult,
 )
 
 logger = logging.getLogger(__name__)
-
-
 
 
 @dataclass
@@ -34,20 +32,17 @@ class ActiveRun:
     interruptible: bool = True
 
 
-
-
-
 class InterviewEngine:
     """
-    Streaming LangGraph engine with proper barge-in handling.
+    Streaming LangGraph engine with barge-in buffering for non-interruptible sections.
 
-    Key behavior:
-    - tokens are yielded as soon as they are produced
-    - per-call lock protects only short critical sections
-      (load/register/persist), not the whole stream
-    - active generation can be canceled on barge-in
-    - non-interruptible critical sections are supported for DB commits, etc.
-    - runtime-only fields are stripped before persistence
+    Behavior:
+    - interruptible active run:
+        cancel current run, then start new one immediately
+    - non-interruptible active run:
+        keep appending user text into a per-call pending buffer
+        and process it after the protected run finishes
+    - only one graph run is active per call at a time
     """
 
     def __init__(
@@ -60,6 +55,12 @@ class InterviewEngine:
         self._store = store
         self._locks: dict[str, asyncio.Lock] = {}
         self._active: dict[str, ActiveRun] = {}
+
+        # Runtime-only pending user text accumulated during non-interruptible sections.
+        self._pending_texts: dict[str, list[str]] = {}
+
+        # Runtime-only latest deferred event/meta to use when draining buffered text.
+        self._pending_event_meta: dict[str, tuple[CallEvent, dict[str, Any]]] = {}
 
     # ----------------------------
     # Per-call lock helpers
@@ -81,41 +82,81 @@ class InterviewEngine:
         if active and not active.task.done():
             active.interruptible = interruptible
 
-    async def cancel_active(self, *, call_id: str, force: bool = False) -> None:
+    async def cancel_active(self, *, call_id: str, force: bool = False) -> bool:
         """
-        Cancel current active run for this call, unless it is in a non-interruptible section.
+        Cancel current active run for this call unless it is in a non-interruptible section.
 
-        force=True should be rare; useful only for hard shutdown behavior.
+        Returns:
+            True  -> caller may start a new run now
+            False -> caller must not start a new run now
         """
         active = self._active.get(call_id)
         if not active:
-            return
+            return True
 
         task = active.task
         if task.done():
-            return
+            return True
 
         if not force and not active.interruptible:
             logger.info(
                 "Skipping cancel for call_id=%s because active run is non-interruptible",
                 call_id,
             )
-            return
+            return False
 
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
-
-    #
+        return True
 
     def _cleanup_active_if_current(self, *, call_id: str, task: asyncio.Task[Any]) -> None:
         """
         Remove active entry only if it still points to this exact task.
-        Prevents an older run from deleting a newer run's entry.
         """
         active = self._active.get(call_id)
         if active and active.task is task:
             self._active.pop(call_id, None)
+
+    # ----------------------------
+    # Pending-input helpers
+    # ----------------------------
+
+    def _append_pending_text(self, *, call_id: str, text: str | None) -> None:
+        if not text:
+            return
+        stripped = text.strip()
+        if not stripped:
+            return
+        self._pending_texts.setdefault(call_id, []).append(stripped)
+
+    def _set_pending_event_meta(
+        self,
+        *,
+        call_id: str,
+        event: CallEvent,
+        meta: dict[str, Any] | None,
+    ) -> None:
+        self._pending_event_meta[call_id] = (event, meta or {})
+
+    def _pop_pending_followup(
+        self,
+        *,
+        call_id: str,
+    ) -> tuple[CallEvent, str | None, dict[str, Any]]:
+        parts = self._pending_texts.pop(call_id, [])
+        text = " ".join(p for p in parts if p).strip() or None
+
+        event, meta = self._pending_event_meta.pop(call_id, (CallEvent.USER_TURN, {}))
+        return event, text, meta
+
+    def _has_pending_followup(self, *, call_id: str) -> bool:
+        parts = self._pending_texts.get(call_id, [])
+        return any(bool(p and p.strip()) for p in parts)
+
+    def _clear_runtime_buffers(self, *, call_id: str) -> None:
+        self._pending_texts.pop(call_id, None)
+        self._pending_event_meta.pop(call_id, None)
 
     # ----------------------------
     # State helpers
@@ -136,7 +177,6 @@ class InterviewEngine:
                 "end_call": False,
             }
         else:
-            # defensive normalization for old states
             state.setdefault("messages", [])
             state.setdefault("node_data", {})
             state.setdefault("appointment_draft", {})
@@ -146,13 +186,10 @@ class InterviewEngine:
         return state
 
     def _sanitize_state_for_persist(self, state: CallState) -> CallState:
-        """
-        Remove runtime-only objects before storing to Redis.
-        """
         clean = dict(state)
         clean.pop("_run_control", None)
         clean.pop("assistant_streamed", None)
-        return cast(CallState, clean)
+        return clean
 
     async def _persist_or_delete(
         self,
@@ -166,34 +203,29 @@ class InterviewEngine:
 
         if end_call or event == CallEvent.CALL_ENDED:
             await self._store.delete(call_id)
+            self._clear_runtime_buffers(call_id=call_id)
         else:
             await self._store.set(call_id, safe_state)
 
     # ----------------------------
-    # Public streaming API
+    # Single-run executor
     # ----------------------------
 
-    async def stream_event(
+    async def _stream_single_run(
         self,
         *,
         call_id: str,
         event: CallEvent,
-        user_text: str | None = None,
-        meta: dict[str, Any] | None = None,
+        user_text: str | None,
+        meta: dict[str, Any] | None,
     ) -> AsyncIterator[EngineChunk]:
         """
-        Stream tokens/debug chunks and finally emit FINAL with the final state.
-
-        Important:
-        - We cancel any active run BEFORE starting the new run.
-        - We do not hold the per-call lock while yielding the stream.
+        Execute exactly one graph run and stream its chunks.
+        Does not auto-drain buffered follow-ups.
+        Does not emit FINAL.
         """
         lock = self._lock_for(call_id)
 
-        # 1) try barge-in cancellation before starting the next run
-        await self.cancel_active(call_id=call_id)
-
-        # 2) prepare state + register new active task inside short critical section
         async with lock:
             state = await self._load_state(call_id=call_id)
             state["assistant_text"] = ""
@@ -224,15 +256,10 @@ class InterviewEngine:
                                 if isinstance(data, tuple) and len(data) == 2:
                                     event_type, payload = data
                                     if event_type == "assistant_token":
-                                        await aio_queue.put(
-                                            EngineChunk(ChunkKind.TOKEN, payload)
-                                        )
+                                        await aio_queue.put(EngineChunk(ChunkKind.TOKEN, payload))
                                     else:
                                         await aio_queue.put(
-                                            EngineChunk(
-                                                ChunkKind.DEBUG,
-                                                (event_type, payload),
-                                            )
+                                            EngineChunk(ChunkKind.DEBUG, (event_type, payload))
                                         )
 
                             elif mode == "values":
@@ -249,14 +276,11 @@ class InterviewEngine:
                     logger.exception("Graph run failed for call_id=%s", call_id)
                     raise
                 finally:
-                    # Always close the queue so the outer streamer can finish.
-                    with contextlib.suppress(asyncio.QueueFull):
-                        await aio_queue.put(None)
+                    await aio_queue.put(None)
 
             task = asyncio.create_task(_drive_graph())
             self._active[call_id] = ActiveRun(task=task, interruptible=True)
 
-        # 3) stream outside the lock
         try:
             while True:
                 item = await aio_queue.get()
@@ -265,8 +289,6 @@ class InterviewEngine:
                 yield item
 
         except asyncio.CancelledError:
-            # If the caller consuming this async generator gets cancelled,
-            # cancel the graph task too.
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
@@ -274,7 +296,6 @@ class InterviewEngine:
             if final_state is None:
                 final_state = state
 
-            # Persist best-effort state after cancellation.
             with contextlib.suppress(Exception):
                 async with lock:
                     await asyncio.shield(
@@ -287,11 +308,9 @@ class InterviewEngine:
                     self._cleanup_active_if_current(call_id=call_id, task=task)
             raise
 
-        # 4) wait for task completion after queue closes
         try:
             await task
         except asyncio.CancelledError:
-            # Canceled by barge-in or external cancellation.
             if final_state is None:
                 final_state = state
 
@@ -308,7 +327,6 @@ class InterviewEngine:
             return
 
         except Exception:
-            # Graph failed with an exception. Persist best-effort state.
             if final_state is None:
                 final_state = state
 
@@ -322,7 +340,6 @@ class InterviewEngine:
                 self._cleanup_active_if_current(call_id=call_id, task=task)
             raise
 
-        # 5) normal completion
         if final_state is None:
             final_state = state
 
@@ -334,10 +351,67 @@ class InterviewEngine:
             )
             self._cleanup_active_if_current(call_id=call_id, task=task)
 
-        yield EngineChunk(
-            ChunkKind.FINAL,
-            self._sanitize_state_for_persist(final_state),
-        )
+        # Stash latest completed final state on the instance for the outer loop.
+        # This avoids duplicating the whole single-run implementation shape.
+        self._last_final_state = self._sanitize_state_for_persist(final_state)
+
+    # ----------------------------
+    # Public streaming API
+    # ----------------------------
+
+    async def stream_event(
+        self,
+        *,
+        call_id: str,
+        event: CallEvent,
+        user_text: str | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> AsyncIterator[EngineChunk]:
+        """
+        Stream tokens/debug chunks and emit FINAL only after all deferred buffered
+        text has been drained.
+        """
+        self._last_final_state: CallState | None = None
+
+        can_start = await self.cancel_active(call_id=call_id)
+
+        if not can_start:
+            self._append_pending_text(call_id=call_id, text=user_text)
+            self._set_pending_event_meta(call_id=call_id, event=event, meta=meta)
+            return
+
+        next_event = event
+        next_user_text = user_text
+        next_meta = meta or {}
+        last_safe_state: CallState | None = None
+
+        while True:
+            async for chunk in self._stream_single_run(
+                call_id=call_id,
+                event=next_event,
+                user_text=next_user_text,
+                meta=next_meta,
+            ):
+                yield chunk
+
+            if self._last_final_state is not None:
+                last_safe_state = self._last_final_state
+
+            if not self._has_pending_followup(call_id=call_id):
+                break
+
+            next_event, next_user_text, next_meta = self._pop_pending_followup(call_id=call_id)
+
+            if not next_user_text:
+                break
+
+        if last_safe_state is None:
+            lock = self._lock_for(call_id)
+            async with lock:
+                state = await self._load_state(call_id=call_id)
+                last_safe_state = self._sanitize_state_for_persist(state)
+
+        yield EngineChunk(ChunkKind.FINAL, last_safe_state)
 
     # ----------------------------
     # Public non-streaming API
@@ -352,51 +426,81 @@ class InterviewEngine:
         meta: dict[str, Any] | None = None,
     ) -> RunResult:
         """
-        Non-streaming version.
+        Non-streaming version with the same buffering rule:
+        - interruptible active run -> cancel and start now
+        - non-interruptible active run -> append text and return current state
         """
         lock = self._lock_for(call_id)
 
-        await self.cancel_active(call_id=call_id)
+        can_start = await self.cancel_active(call_id=call_id)
 
-        async with lock:
-            state = await self._load_state(call_id=call_id)
-            state["assistant_text"] = ""
-            state["assistant_streamed"] = False
-            state["event"] = event
-            state["user_text"] = user_text
-            state["meta"] = meta or {}
+        if not can_start:
+            self._append_pending_text(call_id=call_id, text=user_text)
+            self._set_pending_event_meta(call_id=call_id, event=event, meta=meta)
 
-            control = RunControl(
-                set_interruptible=lambda value: self._set_active_interruptible(call_id, value)
-            )
-            state["_run_control"] = control
-
-            task = asyncio.create_task(self._graph.ainvoke(state))
-            self._active[call_id] = ActiveRun(task=task, interruptible=True)
-
-        try:
-            raw_final_state = await task
-        except asyncio.CancelledError:
             async with lock:
-                self._cleanup_active_if_current(call_id=call_id, task=task)
-            raise
-        except Exception:
+                state = await self._load_state(call_id=call_id)
+                safe_state = self._sanitize_state_for_persist(state)
+
+            assistant_text = (safe_state.get("assistant_text") or "").strip()
+            return RunResult(assistant_text=assistant_text, state=safe_state)
+
+        next_event = event
+        next_user_text = user_text
+        next_meta = meta or {}
+        final_state: CallState | None = None
+
+        while True:
             async with lock:
+                state = await self._load_state(call_id=call_id)
+                state["assistant_text"] = ""
+                state["assistant_streamed"] = False
+                state["event"] = next_event
+                state["user_text"] = next_user_text
+                state["meta"] = next_meta
+
+                control = RunControl(
+                    set_interruptible=lambda value: self._set_active_interruptible(call_id, value)
+                )
+                state["_run_control"] = control
+
+                task = asyncio.create_task(self._graph.ainvoke(state))
+                self._active[call_id] = ActiveRun(task=task, interruptible=True)
+
+            try:
+                raw_final_state = await task
+            except asyncio.CancelledError:
+                async with lock:
+                    self._cleanup_active_if_current(call_id=call_id, task=task)
+                raise
+            except Exception:
+                async with lock:
+                    self._cleanup_active_if_current(call_id=call_id, task=task)
+                raise
+
+            if not isinstance(raw_final_state, dict):
+                final_state = state
+            else:
+                final_state = cast(CallState, raw_final_state)
+
+            async with lock:
+                await self._persist_or_delete(
+                    call_id=call_id,
+                    final_state=final_state,
+                    event=next_event,
+                )
                 self._cleanup_active_if_current(call_id=call_id, task=task)
-            raise
 
-        if not isinstance(raw_final_state, dict):
-            final_state = state
-        else:
-            final_state = cast(CallState, raw_final_state)
+            if not self._has_pending_followup(call_id=call_id):
+                break
 
-        async with lock:
-            await self._persist_or_delete(
-                call_id=call_id,
-                final_state=final_state,
-                event=event,
-            )
-            self._cleanup_active_if_current(call_id=call_id, task=task)
+            next_event, next_user_text, next_meta = self._pop_pending_followup(call_id=call_id)
+            if not next_user_text:
+                break
+
+        if final_state is None:
+            async with lock:
+                final_state = await self._load_state(call_id=call_id)
 
         safe_state = self._sanitize_state_for_persist(final_state)
         assistant_text = (safe_state.get("assistant_text") or "").strip()

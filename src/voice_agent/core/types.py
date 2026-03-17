@@ -35,24 +35,16 @@ class CallPhase(StrEnum):
     INTENT_ROUTING = "intent_routing"
     DONE = "done"
 
-
-class ClinicIntent(StrEnum):
+class UserIntent(StrEnum):
     BOOK_APPOINTMENT = "book_appointment"
     RESCHEDULE = "reschedule"
     CANCEL = "cancel"
-    POST_APPOINTMENT = "post_appointment"
-    OFFICE_INFO = "office_info"
+    UNDECIDED = "undecided"
+
+class ClinicIntent(StrEnum):
     HUMAN_HANDOFF = "human_handoff"
     HANGUP = "hangup"
-    TRIAGE = "triage"
-    COMPLEX = "complex"
-
-APPOINTMENT_INTENTS = {
-    ClinicIntent.BOOK_APPOINTMENT,
-    ClinicIntent.RESCHEDULE,
-    ClinicIntent.CANCEL,
-    ClinicIntent.COMPLEX
-}
+    CONTINUE = "continue"
 
 
 
@@ -83,12 +75,14 @@ class AppointmentDraft(TypedDict,total=False):
     name: str | None
     phone: str | None
     reason_for_visit: str | None
+    requested_time_text: str | None
     last_offered_slot_start_at: str | None
 
 class AppointmentPatch(TypedDict, total=False):
     name: str | None
     phone: str | None
     reason_for_visit: str | None
+    requested_time_text: str | None
     last_offered_slot_start_at: str | None
 
 
@@ -146,7 +140,8 @@ class CallState(TypedDict, total=False):
     event: NotRequired[CallEvent]
     user_text: NotRequired[str | None]
     prev_user_text: NotRequired[str | None]
-    intent: NotRequired[ClinicIntent | None]
+    clinic_intent: NotRequired[ClinicIntent | None]
+    user_intent: NotRequired[UserIntent | None]
     pending_intent: NotRequired[ClinicIntent | None]
     appointment_view: NotRequired[AppointmentView]
     prev_assistant_text: NotRequired[str]

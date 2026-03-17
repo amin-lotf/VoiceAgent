@@ -3,6 +3,7 @@ import time
 
 from voice_agent.core.graph.nodes.utils import safe_json_parse, set_node_data
 from voice_agent.core.llm.huggingface_llm import agent_model
+from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.basic_info import build_local_basic_info_extract_prompt
 from voice_agent.core.prompts.extract_date_time import build_time_extract_prompt
 from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch
@@ -25,8 +26,8 @@ async def node_time_extractor(state: CallState) -> dict:
         )
         try:
             t0 = time.perf_counter()
-            resp = await asyncio.to_thread(agent_model.invoke, local_prompt)
-            # resp = await LLM.ainvoke(local_prompt)
+            # resp = await asyncio.to_thread(agent_model.invoke, local_prompt)
+            resp = await LLM.ainvoke(local_prompt)
             t1 = time.perf_counter()
             raw = getattr(resp, "content", "") or ""
             local_patch = safe_json_parse(raw)

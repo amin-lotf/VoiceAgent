@@ -30,14 +30,21 @@ def stream_text_response( text: str) -> dict:
     return local_state
 
 
-def get_node_data(state: CallState, node: str) -> dict:
+
+
+def get_state_data(state: CallState, node: str) -> dict:
     return state.get("node_data").get(node, {})
 
-def set_node_data(state: CallState, node: str,n_data:dict[str,Any]) -> None:
+def set_node_data(state: dict, node: str,n_data:dict[str,Any]) -> None:
+    state.setdefault('node_data', {})
     state['node_data'].setdefault(node, {})
     state['node_data'][node].update(n_data)
 
-def delete_node_value(state: CallState, node: str, key: str) -> None:
+def reset_node_data(state: dict, node: str) -> None:
+    state.setdefault('node_data', {})
+    state['node_data'][node]={}
+
+def delete_node_value(state: dict, node: str, key: str) -> None:
     node_data = state.get("node_data")
     bucket = node_data.get(node)
     if not isinstance(bucket, dict):
