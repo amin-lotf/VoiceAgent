@@ -6,11 +6,8 @@ from zoneinfo import ZoneInfo
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from voice_agent.const import DEFAULT_TZ
+from voice_agent.const import DEFAULT_TZ, JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.types import AppointmentDraft, CallState
-
-JSON_SENTINEL = "###JSON###"
-NOT_SPECIFIED = "NOT_SPECIFIED"
 
 
 def _pretty_json(data: object) -> str:
@@ -243,9 +240,9 @@ def build_call_operator_prompt(
         },
         "datetime_detected": False,
         "schedule_patch": {
-            "date_mode": "not_specified",
+            "date_mode": NOT_SPECIFIED,
             "date_key": NOT_SPECIFIED,
-            "time_pref": "not_specified",
+            "time_pref": NOT_SPECIFIED,
             "exact_time_text": NOT_SPECIFIED,
         },
     }
@@ -264,7 +261,7 @@ Date/time rules:
   - use "earliest" for requests like "earliest", "first available", "soonest available"
   - use "this_week" for broad requests like "this week"
   - use "next_week" for broad requests like "next week"
-  - otherwise use "not_specified"
+  - otherwise use "{NOT_SPECIFIED}"
 
 - schedule_patch.date_key:
   - output one exact date_key from the provided 14-day list only when the caller clearly selected or mentioned that specific day
@@ -274,14 +271,29 @@ Date/time rules:
   - allowed values: not_specified, morning, afternoon, exact_time
   - use "morning" for requests like "morning"
   - use "afternoon" for requests like "afternoon"
-  - use "exact_time" only when caller gives a specific time such as "2 PM" or "2:30"
-  - otherwise use "not_specified"
+  - use "exact_time" only when caller gives a specific clock time such as "10", "10 am", "2:30 pm", "14:00"
+  - otherwise use "{NOT_SPECIFIED}"
 
 - schedule_patch.exact_time_text:
-  - copy the exact time phrase only when schedule_patch.time_pref="exact_time"
-  - otherwise output "{NOT_SPECIFIED}"
+  - output ONLY a normalized 24-hour time string in HH:MM format when schedule_patch.time_pref="exact_time"
+  - examples:
+    - "10 am" -> "10:00"
+    - "10:30 am" -> "10:30"
+    - "2 pm" -> "14:00"
+    - "2:30 pm" -> "14:30"
+    - "14:00" -> "14:00"
+  - if caller gives an ambiguous time like "at 10" with no am/pm, copy it as the most likely spoken clinic-hour interpretation only if your business hours make it unambiguous; otherwise ask a clarification question
+  - if no exact clock time is clearly given, output "{NOT_SPECIFIED}"
 
-- If the caller gives an out-of-range or vague date, ask them to choose a specific day within the next two weeks.
+- If the caller gives an out-of-range or vague date, ask them to choose a specific day.
+- If the caller gives a simple date range with a clear starting day, interpret the request as starting from the FIRST day of that range.
+- For examples like "Tuesday to Friday", "between Tuesday and Friday", or "from Monday through Thursday":
+  - set datetime_detected = true
+  - set schedule_patch.date_mode = "specific_day"
+  - set schedule_patch.date_key to the first mentioned day if it maps clearly to one of the provided date_key values
+  - do not ask for clarification yet
+  - leave time_pref and exact_time_text based on what the caller said
+- If the range is complicated, ambiguous, non-contiguous, or cannot be mapped clearly to one start day, ask the caller to be more specific.
 """.strip()
     else:
         date_rules = f"""
@@ -289,7 +301,7 @@ Date/time rules:
 - Date/time collection is NOT allowed yet because phone, name, and reason_for_visit are not all filled.
 - Do not ask about date or time in this turn.
 - If the caller mentions date/time anyway, set datetime_detected=true.
-- Keep schedule_patch.date_mode="not_specified", schedule_patch.date_key="{NOT_SPECIFIED}", schedule_patch.time_pref="not_specified", and schedule_patch.exact_time_text="{NOT_SPECIFIED}" unless your backend intentionally wants volunteered date/time captured before the basic fields are done.
+- Keep schedule_patch.date_mode="{NOT_SPECIFIED}", schedule_patch.date_key="{NOT_SPECIFIED}", schedule_patch.time_pref="{NOT_SPECIFIED}", and schedule_patch.exact_time_text="{NOT_SPECIFIED}" unless your backend intentionally wants volunteered date/time captured before the basic fields are done.
 """.strip()
 
     system_content = f"""
@@ -384,6 +396,12 @@ Speaking behavior:
 - If the caller already gave useful info in this turn, acknowledge it briefly before asking the next question.
 - Never ask for the same field again if it was clearly provided in this turn.
 - If office info is asked together with scheduling info, answer briefly and then continue with the single allowed next question.
+- If current_step is not "none", you MUST always ask the next required question in the SAME turn.
+- Never end the response with only an acknowledgment.
+- Acknowledgment MUST be immediately followed by the next question.
+- When the caller gives a simple date range, do not explain the internal interpretation.
+- Treat it as availability starting from the first day of the range.
+- Only ask for clarification if the range is ambiguous or too broad to map safely.
 """.strip()
 
     human_content = "\n".join(

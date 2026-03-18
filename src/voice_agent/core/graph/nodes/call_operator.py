@@ -8,11 +8,10 @@ from typing import Any
 
 from langgraph.config import get_stream_writer
 
-from voice_agent.const import DEFAULT_TZ
+from voice_agent.const import DEFAULT_TZ, JSON_SENTINEL
 from voice_agent.core.graph.nodes.utils import set_node_data
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.call_operator import (
-    JSON_SENTINEL,
     build_call_operator_prompt,
 )
 from voice_agent.core.types import CallState, ClinicIntent, UserIntent
@@ -34,6 +33,14 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
         if v in {"false", "0", "no"}:
             return False
     return default
+
+def _normalize_schedule_patch(sp: dict) -> dict:
+    return {
+        "date_mode": _normalize_patch_value(sp.get("date_mode")),
+        "date_key": _normalize_patch_value(sp.get("date_key")),
+        "time_pref": _normalize_patch_value(sp.get("time_pref")),
+        "exact_time_text": _normalize_patch_value(sp.get("exact_time_text")),
+    }
 
 
 def _normalize_patch_value(value: Any) -> str:
@@ -208,11 +215,16 @@ async def node_call_operator(state: CallState) -> dict:
     if not isinstance(patch, dict):
         patch = {}
 
+    schedule_patch = data.get("schedule_patch") or {}
+    if not isinstance(schedule_patch, dict):
+        schedule_patch = {}
+
     normalized_patch = {
         "name": _normalize_patch_value(patch.get("name")),
         "phone": _normalize_patch_value(patch.get("phone")),
         "reason_for_visit": _normalize_patch_value(patch.get("reason_for_visit")),
         "requested_time_text": _normalize_patch_value(patch.get("requested_time_text")),
+        "schedule_patch": _normalize_schedule_patch(schedule_patch),
     }
 
     datetime_detected = _coerce_bool(data.get("datetime_detected"), default=False)

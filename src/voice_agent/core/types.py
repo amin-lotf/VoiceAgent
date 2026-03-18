@@ -75,8 +75,14 @@ class AppointmentDraft(TypedDict,total=False):
     name: str | None
     phone: str | None
     reason_for_visit: str | None
-    requested_time_text: str | None
+    requested_time: str | None
     last_offered_slot_start_at: str | None
+
+class SchedulePatch(TypedDict):
+    date_mode: str
+    date_key: str
+    time_pref: str
+    exact_time_text: str
 
 class AppointmentPatch(TypedDict, total=False):
     name: str | None
@@ -84,6 +90,7 @@ class AppointmentPatch(TypedDict, total=False):
     reason_for_visit: str | None
     requested_time_text: str | None
     last_offered_slot_start_at: str | None
+    schedule_patch: SchedulePatch | None
 
 
 class AppointmentCreate(TypedDict):
