@@ -23,7 +23,8 @@ def node_finalize_response(state: CallState) -> dict:
     - appends user + assistant messages
     - updates prev_* fields
     """
-    local_state = ensure_spoken_on_user_turn(state)
+    local_state: dict = {'assistant_text': state.get('assistant_text') or ''}
+    local_state.update(ensure_spoken_on_user_turn(state))
 
     user_text = (state.get("user_text") or "").strip()
     assistant_text = (local_state.get("assistant_text") or "").strip()
