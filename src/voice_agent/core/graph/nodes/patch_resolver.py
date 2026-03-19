@@ -221,7 +221,7 @@ def apply_appointment_patch(
     return updated
 
 
-def node_merger(state: CallState) -> dict:
+def node_patch_resolver(state: CallState) -> dict:
     appointment_draft: AppointmentDraft = state.get("appointment_draft") or {}
     appointment_patch: AppointmentPatch = state.get("appointment_patch") or {}
 

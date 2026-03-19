@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from voice_agent.core.graph.nodes.basic_info import node_basic_info
 from voice_agent.core.graph.nodes.call_operator import node_call_operator
-from voice_agent.core.graph.nodes.merger import node_merger
+from voice_agent.core.graph.nodes.patch_resolver import node_patch_resolver
 from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
 from voice_agent.core.graph.nodes.time_extractor import node_time_extractor
@@ -37,7 +37,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node("on_call_ended", node_on_call_ended)
-    graph.add_node("merger", node_merger)
+    graph.add_node("patch_resolver", node_patch_resolver)
     # graph.add_node('router_node', lambda state: state)
     graph.add_node("finalize_response", node_finalize_response)
     graph.add_edge(START, "route_event")
@@ -59,8 +59,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
 
     # graph.add_edge('call_operator', 'get_office_info')
     # graph.add_edge('get_office_info', 'router_node')
-    # graph.add_edge('basic_info', 'merger')
-    # graph.add_edge('time_extractor', 'merger')
+    # graph.add_edge('basic_info', 'patch_resolver')
+    # graph.add_edge('time_extractor', 'patch_resolver')
     def _after_call_operator(state: CallState):
         intent = state.get("clinic_intent")
         match intent:
@@ -69,16 +69,16 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
             case ClinicIntent.HUMAN_HANDOFF:
                 return 'handoff_fallback'
             case _:
-                return "merger"
+                return "patch_resolver"
 
     graph.add_conditional_edges('call_operator', _after_call_operator, {
-        'merger': 'merger',
+        'patch_resolver': 'patch_resolver',
         'handle_hangup': 'handle_hangup',
         'handoff_fallback': 'handoff_fallback',
     }
                                 )
 
-    graph.add_edge('merger', 'finalize_response')
+    graph.add_edge('patch_resolver', 'finalize_response')
 
     graph.add_conditional_edges("finalize_response",
                                 lambda state: 'end_call' if bool(state.get("end_call")) else 'keep_call',
