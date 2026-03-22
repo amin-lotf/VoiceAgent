@@ -12,7 +12,6 @@ from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.settings import settings
 from voice_agent.core.types import AppointmentStatus, AppointmentView, TimeSlot
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -40,11 +39,11 @@ def _validate_slot_start(slot_start: datetime) -> datetime:
 
 
 async def list_future_appointments_by_phone(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    phone: str,
-    now: Optional[datetime] = None,
-    include_statuses: Sequence[AppointmentStatus] | None = None,
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        phone: str,
+        now: Optional[datetime] = None,
+        include_statuses: Sequence[AppointmentStatus] | None = None,
 ) -> list[AppointmentView]:
     statuses = include_statuses or (AppointmentStatus.HELD, AppointmentStatus.SCHEDULED)
     async with uow:
@@ -58,10 +57,10 @@ async def list_future_appointments_by_phone(
 
 
 async def list_free_slots(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    start_range: datetime,
-    end_range: datetime,
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        start_range: datetime,
+        end_range: datetime,
 ) -> list[TimeSlot]:
     """
     Returns available fixed-grid slots between two datetimes.
@@ -89,7 +88,8 @@ async def list_free_slots(
 
     cur_day = day
     while cur_day <= end_day:
-        for slot in iter_daily_slots(cur_day, settings.OPENING_TIME, settings.CLOSING_TIME, settings.APPOINTMENT_DURATION_MIN):
+        for slot in iter_daily_slots(cur_day, settings.OPENING_TIME, settings.CLOSING_TIME,
+                                     settings.APPOINTMENT_DURATION_MIN):
             if slot.start_at < start_range or slot.start_at >= end_range:
                 continue
             if slot.start_at in busy_starts:
@@ -100,20 +100,17 @@ async def list_free_slots(
     return out
 
 
-async def hold_slot(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    slot_start: datetime,
-    name: str,
-    phone: str,
-    reason_for_visit: str,
-    notes: list[str],
+async def create_appointment(
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        name: str,
+        phone: str,
+        reason_for_visit: str,
+        notes: list[str],
 ) -> AppointmentView:
     """
     Creates HELD appointment at a fixed slot. If slot already taken, raises SlotNotAvailable.
     """
-    slot_start = _validate_slot_start(slot_start)
-    slot_end = slot_start + timedelta(minutes=settings.APPOINTMENT_DURATION_MIN)
 
     try:
         async with uow:
@@ -121,21 +118,41 @@ async def hold_slot(
                 name=name,
                 phone=phone,
                 reason_for_visit=reason_for_visit,
-                start_at=slot_start,
-                end_at=slot_end,
                 notes=notes,
-                status=AppointmentStatus.HELD,
+                status=AppointmentStatus.PENDING,
             )
             return to_view(appt)
-    except IntegrityError as e:
+    except Exception as e:
         # Your ExcludeConstraint should raise an IntegrityError on overlap
-        raise SlotNotAvailable("That slot is already taken") from e
+        raise InvalidSlot("Failed to create appointment") from e
+
+
+async def hold_appointment(
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        appointment_id: int,
+        slot_start: datetime,
+) -> AppointmentView:
+    slot_start = _validate_slot_start(slot_start)
+    slot_end = slot_start + timedelta(minutes=settings.APPOINTMENT_DURATION_MIN)
+    async with uow:
+        appt = await uow.appointments.get(appointment_id)
+        if appt is None:
+            raise NotFound("Appointment not found")
+        appt = await uow.appointments.update_fields(
+            appointment_id,
+            start_at=slot_start,
+            end_at=slot_end,
+            status=AppointmentStatus.HELD,
+        )
+        assert appt is not None
+        return to_view(appt)
 
 
 async def confirm_appointment(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    appointment_id: int,
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        appointment_id: int,
 ) -> AppointmentView:
     async with uow:
         appt = await uow.appointments.get(appointment_id)
@@ -147,9 +164,9 @@ async def confirm_appointment(
 
 
 async def cancel_appointment(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    appointment_id: int,
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        appointment_id: int,
 ) -> AppointmentView:
     async with uow:
         appt = await uow.appointments.get(appointment_id)
@@ -161,10 +178,10 @@ async def cancel_appointment(
 
 
 async def reschedule_appointment(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    appointment_id: int,
-    slot_start: datetime,
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        appointment_id: int,
+        slot_start: datetime,
 ) -> AppointmentView:
     slot_start = _validate_slot_start(slot_start)
     slot_end = slot_start + timedelta(minutes=settings.APPOINTMENT_DURATION_MIN)
@@ -189,9 +206,9 @@ async def reschedule_appointment(
 
 
 async def delete_held_appointment(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    appointment_id: int,
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        appointment_id: int,
 ) -> bool:
     """
     Hard-delete a HELD appointment to immediately free the slot.
@@ -208,13 +225,13 @@ async def delete_held_appointment(
 
 
 async def update_held_appointment_details(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    appointment_id: int,
-    name: str,
-    phone: str,
-    reason_for_visit: str,
-    notes: list[str],
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        appointment_id: int,
+        name: str,
+        phone: str,
+        reason_for_visit: str,
+        notes: list[str],
 ) -> AppointmentView:
     async with uow:
         appt = await uow.appointments.get(appointment_id)
@@ -234,10 +251,10 @@ async def update_held_appointment_details(
 
 
 async def update_appointment_notes(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    appointment_id: int,
-    notes: list[str],
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        appointment_id: int,
+        notes: list[str],
 ) -> AppointmentView:
     async with uow:
         appt = await uow.appointments.get(appointment_id)

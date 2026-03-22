@@ -45,8 +45,6 @@ class SqlAlchemyAppointmentRepository:
         name: str | None,
         phone: str | None,
         reason_for_visit: str | None,
-        start_at: datetime,
-        end_at: datetime,
         notes: list[str] | None = None,
         status: AppointmentStatus = AppointmentStatus.HELD,
     ) -> Appointment:
@@ -54,8 +52,6 @@ class SqlAlchemyAppointmentRepository:
             name=name,
             phone=phone,
             reason_for_visit=reason_for_visit,
-            start_at=start_at,
-            end_at=end_at,
             notes=notes or [],
             status=status,
         )

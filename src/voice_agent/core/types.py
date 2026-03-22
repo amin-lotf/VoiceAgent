@@ -47,7 +47,11 @@ class ClinicIntent(StrEnum):
     CONTINUE = "continue"
 
 
-
+class AssistantPhase(StrEnum):
+    CollectingInfo = "CollectingInfo"
+    SearchingSlot = "SearchingSlot"
+    AwaitingConfirmation = "AwaitingConfirmation"
+    Done = "Done"
 
 
 class OfficeTopic(StrEnum):
@@ -61,9 +65,10 @@ class PatientType(StrEnum):
     EXISTING = "existing"
 
 class AppointmentStatus(StrEnum):
-    HELD = "held"         # optional: temporary hold before confirmation
-    SCHEDULED = "scheduled"
-    CANCELLED = "cancelled"
+    PENDING = "PENDING"
+    HELD = "HELD"         # optional: temporary hold before confirmation
+    SCHEDULED = "SCHEDULED"
+    CANCELLED = "CANCELLED"
 
 
 @dataclass(frozen=True)
@@ -150,7 +155,9 @@ class CallState(TypedDict, total=False):
     clinic_intent: NotRequired[ClinicIntent | None]
     user_intent: NotRequired[UserIntent | None]
     pending_intent: NotRequired[ClinicIntent | None]
-    appointment_view: NotRequired[AppointmentView]
+    held_appointment_view: NotRequired[AppointmentView]
+    scheduled_appointment_view: NotRequired[AppointmentView]
+    held_appointment_id: NotRequired[int | None]
     prev_assistant_text: NotRequired[str]
 
 

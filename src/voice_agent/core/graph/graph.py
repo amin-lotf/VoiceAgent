@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from voice_agent.core.graph.nodes.basic_info import node_basic_info
 from voice_agent.core.graph.nodes.call_operator import node_call_operator
+from voice_agent.core.graph.nodes.hold_appointment import node_hold_appointment
+from voice_agent.core.graph.nodes.load_or_create_appointment import node_load_or_create_appointment
 from voice_agent.core.graph.nodes.patch_resolver import node_patch_resolver
 from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
@@ -38,7 +40,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node("on_call_ended", node_on_call_ended)
     graph.add_node("patch_resolver", node_patch_resolver)
-    # graph.add_node('router_node', lambda state: state)
+    graph.add_node('load_or_create_appointment', partial(node_load_or_create_appointment,sessionmaker=sessionmaker))
+    graph.add_node('hold_appointment', partial(node_hold_appointment,sessionmaker=sessionmaker))
     graph.add_node("finalize_response", node_finalize_response)
     graph.add_edge(START, "route_event")
     graph.add_conditional_edges(
@@ -78,7 +81,9 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     }
                                 )
 
-    graph.add_edge('patch_resolver', 'finalize_response')
+    graph.add_edge('patch_resolver', 'load_or_create_appointment')
+    graph.add_edge('load_or_create_appointment', 'hold_appointment')
+    graph.add_edge('hold_appointment', 'finalize_response')
 
     graph.add_conditional_edges("finalize_response",
                                 lambda state: 'end_call' if bool(state.get("end_call")) else 'keep_call',
