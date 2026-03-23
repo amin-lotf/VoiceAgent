@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
+from voice_agent.common import parse_dt, to_default_tz_iso
+from voice_agent.const import DEFAULT_TZ
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.services.appointments import (
@@ -11,20 +12,8 @@ from voice_agent.core.services.appointments import (
     hold_appointment,
 )
 from voice_agent.core.types import CallState, AppointmentView
-from voice_agent.core.settings import settings
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_dt(value: object) -> Optional[datetime]:
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str) and value.strip():
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError:
-            return None
-    return None
 
 
 async def node_hold_appointment(
@@ -48,7 +37,7 @@ async def node_hold_appointment(
     appointment_draft = state.get("appointment_draft") or {}
 
     raw_slot_start = appointment_draft.get("requested_time")
-    slot_start = _parse_dt(raw_slot_start)
+    slot_start = parse_dt(raw_slot_start)
 
     appointment_id = state.get("held_appointment_id")
 
@@ -61,7 +50,7 @@ async def node_hold_appointment(
         return {}
 
     # Optional: never search in the past
-    now = datetime.now(slot_start.tzinfo)
+    now = datetime.now(DEFAULT_TZ)
     if slot_start < now:
         slot_start = now
 
@@ -105,7 +94,17 @@ async def node_hold_appointment(
             "slot_found": False,
         }
 
-    appointment_draft["last_offered_slot_start_at"]=held_view.get("start_at") if isinstance(held_view, dict) else None,
+    last_offered_local = to_default_tz_iso(
+        held_view.get("start_at") if isinstance(held_view, dict) else None
+    )
+
+    if isinstance(held_view, dict):
+        if held_view.get("start_at"):
+            held_view["start_at"] = to_default_tz_iso(held_view["start_at"])
+        if held_view.get("end_at"):
+            held_view["end_at"] = to_default_tz_iso(held_view["end_at"])
+
+    appointment_draft["last_offered_slot_start_at"] = last_offered_local
 
     local_state: dict = {
         "held_appointment_view": held_view if isinstance(held_view, dict) else {},
@@ -114,7 +113,7 @@ async def node_hold_appointment(
 
     logger.warning(
         "hold_appointment_node: held appointment_id=%s start_at=%s status=%s",
-        local_state.get("held_appointment_id", "N/A"),
+        held_view.get("id", "N/A"),
         held_view.get("start_at") if isinstance(held_view, dict) else None,
         held_view.get("status") if isinstance(held_view, dict) else None,
     )

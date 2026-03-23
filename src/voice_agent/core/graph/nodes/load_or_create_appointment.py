@@ -106,16 +106,12 @@ async def node_load_or_create_appointment(
     local_state: dict = {
         "held_appointment_view": held_view if isinstance(held_view, dict) else {},
         "scheduled_appointment_view": scheduled_view if isinstance(scheduled_view, dict) else {},
-        "appointment_id": int(held_view["id"]) if isinstance(held_view, dict) and held_view.get("id") else None,
+        "held_appointment_id": int(held_view["id"]) if isinstance(held_view, dict) and held_view.get("id") else None,
     }
-
-    # Optional convenience flags
-    if isinstance(held_view, dict):
-        local_state["held_appointment_id"] = int(held_view["id"])
 
     logger.warning(
         "load_or_create_appointment: ready id=%s status=%s",
-        local_state.get("appointment_id"),
+        local_state.get("held_appointment_id"),
         held_view.get("status") if isinstance(held_view, dict) else None,
     )
     return local_state
