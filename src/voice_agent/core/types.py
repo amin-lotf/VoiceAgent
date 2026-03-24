@@ -154,6 +154,8 @@ class CallState(TypedDict, total=False):
     user_text: NotRequired[str | None]
     prev_user_text: NotRequired[str | None]
     pending_question: NotRequired[str | None]
+    is_pending_question: NotRequired[bool]
+    assistant_phase: NotRequired[AssistantPhase | None]
     clinic_intent: NotRequired[ClinicIntent | None]
     user_intent: NotRequired[UserIntent | None]
     pending_intent: NotRequired[ClinicIntent | None]

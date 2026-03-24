@@ -11,10 +11,13 @@ from langgraph.config import get_stream_writer
 from voice_agent.const import DEFAULT_TZ, JSON_SENTINEL
 from voice_agent.core.graph.nodes.utils import set_node_data
 from voice_agent.core.llm.openai_llm import LLM
-from voice_agent.core.prompts.call_operator import (
-    build_call_operator_prompt,
+from voice_agent.core.prompts.call_operator import build_call_operator_prompt
+from voice_agent.core.types import (
+    CallState,
+    ClinicIntent,
+    UserIntent,
+    AssistantPhase,   # add this
 )
-from voice_agent.core.types import CallState, ClinicIntent, UserIntent
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +37,8 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
             return False
     return default
 
-def _normalize_schedule_patch(sp: dict) -> dict:
-    return {
-        "date_mode": _normalize_patch_value(sp.get("date_mode")),
-        "date_key": _normalize_patch_value(sp.get("date_key")),
-        "time_pref": _normalize_patch_value(sp.get("time_pref")),
-        "exact_time_text": _normalize_patch_value(sp.get("exact_time_text")),
-    }
-
 
 def _normalize_patch_value(value: Any) -> str:
-    """
-    Normalize model patch values so downstream merge logic can rely on one sentinel.
-    """
     if value is None:
         return NOT_SPECIFIED
 
@@ -61,6 +53,15 @@ def _normalize_patch_value(value: Any) -> str:
         return NOT_SPECIFIED
 
     return value
+
+
+def _normalize_schedule_patch(sp: dict) -> dict:
+    return {
+        "date_mode": _normalize_patch_value(sp.get("date_mode")),
+        "date_key": _normalize_patch_value(sp.get("date_key")),
+        "time_pref": _normalize_patch_value(sp.get("time_pref")),
+        "exact_time_text": _normalize_patch_value(sp.get("exact_time_text")),
+    }
 
 
 def _parse_operator_output(full_text: str) -> tuple[str, dict[str, Any]]:
@@ -100,6 +101,7 @@ async def node_call_operator(state: CallState) -> dict:
     - streams assistant text first
     - captures JSON tail after sentinel
     - returns clinic_intent + user_intent + appointment_patch + assistant_text
+    - returns assistant_phase + is_pending_question
     """
     local_state: dict[str, Any] = {}
 
@@ -108,6 +110,7 @@ async def node_call_operator(state: CallState) -> dict:
         now=datetime.now(DEFAULT_TZ),
     )
     logger.warning("=====================\ncall_operator: prompt=%s\n=============================", prompt)
+
     writer = get_stream_writer()
     streamed_text_parts: list[str] = []
     full_output_parts: list[str] = []
@@ -130,7 +133,6 @@ async def node_call_operator(state: CallState) -> dict:
                 if not sentinel_seen:
                     idx = tail_buffer.find(JSON_SENTINEL)
                     if idx == -1:
-                        # Keep a suffix buffer so we don't accidentally stream part of the sentinel.
                         safe_prefix_len = max(0, len(tail_buffer) - len(JSON_SENTINEL))
                         if safe_prefix_len > 0:
                             speakable = tail_buffer[:safe_prefix_len]
@@ -157,16 +159,26 @@ async def node_call_operator(state: CallState) -> dict:
     except Exception:
         logger.warning("call_operator failed; using fallback", exc_info=True)
         fallback = "Sorry, could you repeat that?"
+
         local_state["assistant_text"] = fallback
         local_state["assistant_streamed"] = False
         local_state["clinic_intent"] = ClinicIntent.CONTINUE
         local_state["user_intent"] = state.get("user_intent") or UserIntent.UNDECIDED
+        local_state["assistant_phase"] = state.get("assistant_phase") or AssistantPhase.COLLECTING_INFO
+        local_state["is_pending_question"] = True
+        local_state["pending_question"] = fallback
         local_state["end_call"] = False
         local_state["appointment_patch"] = {
             "name": NOT_SPECIFIED,
             "phone": NOT_SPECIFIED,
             "reason_for_visit": NOT_SPECIFIED,
-            "requested_time_text": NOT_SPECIFIED,
+            "requested_time": NOT_SPECIFIED,
+            "schedule_patch": {
+                "date_mode": NOT_SPECIFIED,
+                "date_key": NOT_SPECIFIED,
+                "time_pref": NOT_SPECIFIED,
+                "exact_time_text": NOT_SPECIFIED,
+            },
         }
 
         set_node_data(
@@ -182,10 +194,11 @@ async def node_call_operator(state: CallState) -> dict:
         return local_state
 
     t1 = time.perf_counter()
-    logger.warning(f"call_operator: LLM request took {t1 - t0:0.2f}s")
+    logger.warning("call_operator: LLM request took %.2fs", t1 - t0)
 
     full_output = "".join(full_output_parts)
-    logger.warning(f"+++++++++++++++\ncall_operator: full_output={full_output}\n++++++++++++++++++++")
+    logger.warning("+++++++++++++++\ncall_operator: full_output=%s\n++++++++++++++++++++", full_output)
+
     assistant_text, data = _parse_operator_output(full_output)
 
     if not assistant_text:
@@ -195,20 +208,28 @@ async def node_call_operator(state: CallState) -> dict:
     try:
         clinic_intent = ClinicIntent(clinic_intent_raw)
     except Exception:
-        logger.warning(f"call_operator: invalid clinic_intent={clinic_intent_raw}")
+        logger.warning("call_operator: invalid clinic_intent=%s", clinic_intent_raw)
         clinic_intent = ClinicIntent.CONTINUE
 
     user_intent_raw = data.get("user_intent")
     try:
         user_intent = UserIntent(user_intent_raw)
     except Exception:
-        logger.warning(f"call_operator: invalid user_intent={user_intent_raw}")
+        logger.warning("call_operator: invalid user_intent=%s", user_intent_raw)
         current_user_intent = state.get("user_intent")
         try:
             user_intent = UserIntent(current_user_intent)
         except Exception:
             user_intent = UserIntent.UNDECIDED
 
+    assistant_phase_raw = data.get("assistant_phase")
+    try:
+        assistant_phase = AssistantPhase(assistant_phase_raw)
+    except Exception:
+        logger.warning("call_operator: invalid assistant_phase=%s", assistant_phase_raw)
+        assistant_phase = state.get("assistant_phase") or AssistantPhase.COLLECTING_INFO
+
+    is_pending_question = _coerce_bool(data.get("is_pending_question"), default=False)
     end_call = _coerce_bool(data.get("end_call"), default=False)
 
     patch = data.get("patch") or {}
@@ -223,7 +244,7 @@ async def node_call_operator(state: CallState) -> dict:
         "name": _normalize_patch_value(patch.get("name")),
         "phone": _normalize_patch_value(patch.get("phone")),
         "reason_for_visit": _normalize_patch_value(patch.get("reason_for_visit")),
-        "requested_time_text": _normalize_patch_value(patch.get("requested_time_text")),
+        "requested_time": _normalize_patch_value(patch.get("requested_time")),
         "schedule_patch": _normalize_schedule_patch(schedule_patch),
     }
 
@@ -232,8 +253,13 @@ async def node_call_operator(state: CallState) -> dict:
     local_state["assistant_text"] = assistant_text
     local_state["clinic_intent"] = clinic_intent
     local_state["user_intent"] = user_intent
+    local_state["assistant_phase"] = assistant_phase
+    local_state["is_pending_question"] = is_pending_question
     local_state["end_call"] = end_call
     local_state["appointment_patch"] = normalized_patch
+
+    # Persist pending_question only when assistant asked a question this turn
+    local_state["pending_question"] = assistant_text if is_pending_question else None
 
     set_node_data(
         local_state,
@@ -247,9 +273,11 @@ async def node_call_operator(state: CallState) -> dict:
     )
 
     logger.warning(
-        "call_operator: clinic_intent=%s user_intent=%s end_call=%s",
+        "call_operator: clinic_intent=%s user_intent=%s assistant_phase=%s is_pending_question=%s end_call=%s",
         clinic_intent,
         user_intent,
+        assistant_phase,
+        is_pending_question,
         end_call,
     )
     return local_state

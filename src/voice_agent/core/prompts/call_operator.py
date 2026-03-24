@@ -2,21 +2,12 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from enum import StrEnum
 from zoneinfo import ZoneInfo
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from voice_agent.const import DEFAULT_TZ, JSON_SENTINEL, NOT_SPECIFIED
-from voice_agent.core.types import AppointmentDraft, CallState
-
-
-class AssistantPhase(StrEnum):
-    COLLECTING_INFO = "collecting_info"
-    SEARCHING_SLOT = "searching_slot"
-    FINALIZING_APPOINTMENT = "finalizing_appointment"
-    POST_APPOINTMENT = "post_appointment"
-    DONE = "done"
+from voice_agent.core.types import AppointmentDraft, CallState, AssistantPhase
 
 
 def _pretty_json(data: object) -> str:
