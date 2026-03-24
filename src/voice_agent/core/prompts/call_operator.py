@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from enum import StrEnum
 from zoneinfo import ZoneInfo
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from voice_agent.const import DEFAULT_TZ, JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.types import AppointmentDraft, CallState
+
+
+class AssistantPhase(StrEnum):
+    COLLECTING_INFO = "collecting_info"
+    SEARCHING_SLOT = "searching_slot"
+    FINALIZING_APPOINTMENT = "finalizing_appointment"
+    POST_APPOINTMENT = "post_appointment"
+    DONE = "done"
 
 
 def _pretty_json(data: object) -> str:
@@ -97,6 +106,27 @@ def build_next_14_days(now: datetime, tz_info: ZoneInfo = DEFAULT_TZ) -> list[di
     return items
 
 
+def _has_requested_time(appointment: AppointmentDraft) -> bool:
+    return bool(appointment.get("requested_time"))
+
+
+def _all_basic_info_collected(appointment: AppointmentDraft) -> bool:
+    return bool(
+        appointment.get("phone")
+        and appointment.get("name")
+        and appointment.get("reason_for_visit")
+    )
+
+
+def _all_required_info_collected(appointment: AppointmentDraft) -> bool:
+    return bool(
+        appointment.get("phone")
+        and appointment.get("name")
+        and appointment.get("reason_for_visit")
+        and appointment.get("requested_time")
+    )
+
+
 def get_next_required_field(
     *,
     user_intent: str,
@@ -111,15 +141,9 @@ def get_next_required_field(
         return "name"
     if not appointment.get("reason_for_visit"):
         return "reason_for_visit"
-    return "date_time"
-
-
-def _all_basic_info_collected(appointment: AppointmentDraft) -> bool:
-    return bool(
-        appointment.get("phone")
-        and appointment.get("name")
-        and appointment.get("reason_for_visit")
-    )
+    if not appointment.get("requested_time"):
+        return "date_time"
+    return "none"
 
 
 def _build_collection_rules(
@@ -135,23 +159,23 @@ def _build_collection_rules(
     has_phone = bool(appointment.get("phone"))
     has_name = bool(appointment.get("name"))
     has_reason = bool(appointment.get("reason_for_visit"))
+    has_requested_time = bool(appointment.get("requested_time"))
     basic_done = _all_basic_info_collected(appointment)
 
     if current_step == "none":
         return """
 Collection behavior:
-- The caller's scheduling intent is not yet clear.
-- Do not force collection yet.
+- The caller's scheduling intent is not yet clear, or all required collection fields are already complete.
+- Do not force another collection question unless a field is still actually missing.
 - You may still extract any clearly volunteered phone, name, reason_for_visit, or scheduling info from this turn.
 - Ask at most ONE question.
-- If you ask a question, it should only clarify the caller's main intent.
 """.strip()
 
     rules: list[str] = [
         "Collection behavior:",
         "- Ask at most ONE question.",
         "- You may extract any clearly stated phone, name, reason_for_visit, or date/time info from the caller's utterance, even if you do not ask about it.",
-        "- If the caller clearly corrects or replaces an already collected phone, name, or reason_for_visit, update patch with the new value.",
+        "- If the caller clearly corrects or replaces an already collected field, update patch with the new value.",
         "- Never ask again for a field that is already filled unless the caller is clearly changing it.",
     ]
 
@@ -170,7 +194,7 @@ Collection behavior:
     else:
         rules.append('- Reason for visit already exists. Do not ask for it again unless the caller clearly changes it.')
 
-    if basic_done:
+    if basic_done and not has_requested_time:
         rules.extend(
             [
                 "- Phone, name, and reason_for_visit are already collected.",
@@ -178,7 +202,7 @@ Collection behavior:
                 '- If you ask a scheduling question, ask only for appointment date/time preference.',
             ]
         )
-    else:
+    elif not basic_done:
         rules.extend(
             [
                 "- Do not start date/time collection yet.",
@@ -186,8 +210,83 @@ Collection behavior:
                 "- If the caller volunteers date/time anyway, you may detect and extract it in JSON, but do not move the conversation to date/time yet.",
             ]
         )
+    else:
+        rules.append("- requested_time already exists. Do not ask for another date/time unless the caller is changing it.")
 
     return "\n".join(rules)
+
+
+def _build_phase_rules() -> str:
+    return f"""
+Assistant phase rules:
+- You must output exactly one assistant_phase from:
+  - {AssistantPhase.COLLECTING_INFO.value}
+  - {AssistantPhase.SEARCHING_SLOT.value}
+  - {AssistantPhase.FINALIZING_APPOINTMENT.value}
+  - {AssistantPhase.POST_APPOINTMENT.value}
+  - {AssistantPhase.DONE.value}
+
+Definitions:
+- COLLECTING_INFO:
+  - Use when any required field is still missing:
+    - phone
+    - name
+    - reason_for_visit
+    - requested_time
+  - Use when you are still asking a question to collect or clarify required information.
+  - In this phase, if the spoken reply asks a real question, set is_pending_question=true.
+
+- SEARCHING_SLOT:
+  - Use when all required fields are available for scheduling:
+    - phone
+    - name
+    - reason_for_visit
+    - requested_time
+  - And there is no unanswered pending question from the assistant anymore.
+  - In this phase, do NOT ask another question.
+  - The spoken reply should say a short processing line such as:
+    - "Got it. One moment while I check availability."
+  - Set is_pending_question=false.
+
+- FINALIZING_APPOINTMENT:
+  - Use when all required fields are available AND last_offered_slot_start_at already exists.
+  - This means a slot has been found/offered and the backend is moving toward final confirmation/finalization.
+  - In this phase, do NOT ask another question.
+  - The spoken reply should be a short non-question line like:
+    - "Perfect. Let me finalize that for you."
+  - Set is_pending_question=false.
+
+- POST_APPOINTMENT:
+  - Use when the appointment has just been completed/booked and the assistant should ask whether anything else should be noted or added.
+  - This is the one allowed post-booking question phase.
+  - Example spoken reply:
+    - "Your appointment is booked. Is there anything else you'd like me to note?"
+  - Set is_pending_question=true.
+
+- DONE:
+  - Use when the conversation is finished after post-appointment handling or clear goodbye.
+  - Example spoken reply:
+    - "You're all set. See you then. Goodbye."
+  - Set is_pending_question=false.
+
+Pending-question resolution:
+- You will be given:
+  - current persisted phase
+  - pending_question from prior turn, if any
+  - current caller text
+- If pending_question exists and the current caller text clearly answers it, treat that pending question as resolved for this turn.
+- Do NOT keep the conversation in a question-asking state just because pending_question exists in memory if the current caller text answered it.
+- If you ask a new question in this turn, set is_pending_question=true.
+- If you do not ask a question in this turn, set is_pending_question=false.
+
+Phase priority:
+1) If the caller is ending the call -> DONE
+2) If current persisted phase is FINALIZING_APPOINTMENT and the appointment is now being communicated as booked -> POST_APPOINTMENT
+3) If current persisted phase is POST_APPOINTMENT and the caller has nothing else or says goodbye -> DONE
+4) If all required info exists and last_offered_slot_start_at exists and there is no active unanswered question -> FINALIZING_APPOINTMENT
+5) If all required info exists and last_offered_slot_start_at does NOT exist and there is no active unanswered question -> SEARCHING_SLOT
+6) Otherwise -> COLLECTING_INFO
+""".strip()
 
 
 def build_call_operator_prompt(
@@ -198,6 +297,8 @@ def build_call_operator_prompt(
 ) -> list:
     user_text = (state.get("user_text") or "").strip()
     assistant_text = (state.get("assistant_text") or "").strip()
+    pending_question = (state.get("pending_question") or "").strip()
+    current_phase = str(state.get("phase") or "").strip() or AssistantPhase.COLLECTING_INFO.value
 
     appointment: AppointmentDraft = state.get("appointment_draft") or {}
     current_user_intent = str(state.get("user_intent") or "undecided").strip() or "undecided"
@@ -206,6 +307,8 @@ def build_call_operator_prompt(
     confirmed_name = appointment.get("name")
     confirmed_phone = appointment.get("phone")
     confirmed_reason = appointment.get("reason_for_visit")
+    confirmed_requested_time = appointment.get("requested_time")
+    last_offered_slot_start_at = appointment.get("last_offered_slot_start_at")
 
     clinic_facts = {
         "hours": "We are open Monday through Friday, 9 AM to 5 PM.",
@@ -224,19 +327,25 @@ def build_call_operator_prompt(
         user_intent=current_user_intent,
         appointment=appointment,
     )
+    phase_rules = _build_phase_rules()
 
     basic_done = _all_basic_info_collected(appointment)
+    all_required_done = _all_required_info_collected(appointment)
+
     next_14_days = build_next_14_days(now=now, tz_info=tz_info) if basic_done else None
 
     output_schema = {
         "user_intent": default_user_intent,
         "clinic_intent": "continue",
         "end_call": False,
+        "assistant_phase": AssistantPhase.COLLECTING_INFO.value,
+        "is_pending_question": True,
         "current_step": current_step,
         "patch": {
             "name": NOT_SPECIFIED,
             "phone": NOT_SPECIFIED,
             "reason_for_visit": NOT_SPECIFIED,
+            "requested_time": NOT_SPECIFIED,
         },
         "datetime_detected": False,
         "schedule_patch": {
@@ -247,7 +356,6 @@ def build_call_operator_prompt(
         },
     }
 
-    date_rules = ""
     if basic_done and next_14_days:
         date_rules = f"""
 Date/time rules:
@@ -282,8 +390,15 @@ Date/time rules:
     - "2 pm" -> "14:00"
     - "2:30 pm" -> "14:30"
     - "14:00" -> "14:00"
-  - if caller gives an ambiguous time like "at 10" with no am/pm, copy it as the most likely spoken clinic-hour interpretation only if your business hours make it unambiguous; otherwise ask a clarification question
   - if no exact clock time is clearly given, output "{NOT_SPECIFIED}"
+
+- patch.requested_time:
+  - output a plain string only if the caller clearly gives or updates scheduling preference in this turn
+  - this can be natural language, for example:
+    - "tomorrow morning"
+    - "next Tuesday at 10:00"
+    - "earliest available"
+  - otherwise output "{NOT_SPECIFIED}"
 
 - If the caller gives an out-of-range or vague date, ask them to choose a specific day.
 - If the caller gives a simple date range with a clear starting day, interpret the request as starting from the FIRST day of that range.
@@ -291,6 +406,7 @@ Date/time rules:
   - set datetime_detected = true
   - set schedule_patch.date_mode = "specific_day"
   - set schedule_patch.date_key to the first mentioned day if it maps clearly to one of the provided date_key values
+  - set patch.requested_time to the caller's scheduling wording if helpful
   - do not ask for clarification yet
   - leave time_pref and exact_time_text based on what the caller said
 - If the range is complicated, ambiguous, non-contiguous, or cannot be mapped clearly to one start day, ask the caller to be more specific.
@@ -301,7 +417,8 @@ Date/time rules:
 - Date/time collection is NOT allowed yet because phone, name, and reason_for_visit are not all filled.
 - Do not ask about date or time in this turn.
 - If the caller mentions date/time anyway, set datetime_detected=true.
-- Keep schedule_patch.date_mode="{NOT_SPECIFIED}", schedule_patch.date_key="{NOT_SPECIFIED}", schedule_patch.time_pref="{NOT_SPECIFIED}", and schedule_patch.exact_time_text="{NOT_SPECIFIED}" unless your backend intentionally wants volunteered date/time captured before the basic fields are done.
+- patch.requested_time should remain "{NOT_SPECIFIED}" unless you intentionally want to store volunteered date/time text before basics are done.
+- Keep schedule_patch.date_mode="{NOT_SPECIFIED}", schedule_patch.date_key="{NOT_SPECIFIED}", schedule_patch.time_pref="{NOT_SPECIFIED}", and schedule_patch.exact_time_text="{NOT_SPECIFIED}" unless your backend intentionally wants volunteered date/time captured early.
 """.strip()
 
     system_content = f"""
@@ -329,7 +446,6 @@ Hard requirements:
 - Keep the assistant text concise and natural.
 - Ask at most ONE question at a time.
 - Do not mention JSON, schema, backend, routing, extraction, or internal logic.
-- Do not repeat clinic facts unnecessarily.
 - If the caller only asks office information and it can be answered from clinic facts below, answer it directly.
 - If the caller says goodbye or clearly wants to end the call, respond briefly and set clinic_intent="hangup" and end_call=true.
 - If the caller clearly asks for a human or asks for something outside the assistant's capability, set clinic_intent="human_handoff".
@@ -366,6 +482,13 @@ Field rules:
   - usually true for hangup
   - otherwise false
 
+- assistant_phase:
+  - must follow the phase rules below exactly
+
+- is_pending_question:
+  - true only when the spoken assistant reply in THIS turn asks a real question that expects a caller answer
+  - false for processing lines, confirmation lines without a question, goodbye lines, and slot-search/finalization lines
+
 - current_step:
   - copy exactly this value: "{current_step}"
   - do not invent another value
@@ -383,9 +506,15 @@ Field rules:
   - output the new value only if the caller explicitly gives or clearly confirms/corrects the visit reason in this turn
   - otherwise output "{NOT_SPECIFIED}"
 
+- patch.requested_time:
+  - output the new value only if the caller explicitly gives or clearly confirms/corrects their scheduling preference in this turn
+  - otherwise output "{NOT_SPECIFIED}"
+
 - datetime_detected:
   - true if this turn mentions any date/time/scheduling expression
   - otherwise false
+
+{phase_rules}
 
 {collection_rules}
 
@@ -395,10 +524,12 @@ Speaking behavior:
 - Sound natural, calm, and brief.
 - If the caller already gave useful info in this turn, acknowledge it briefly before asking the next question.
 - Never ask for the same field again if it was clearly provided in this turn.
-- If office info is asked together with scheduling info, answer briefly and then continue with the single allowed next question.
-- If current_step is not "none", you MUST always ask the next required question in the SAME turn.
-- Never end the response with only an acknowledgment.
-- Acknowledgment MUST be immediately followed by the next question.
+- If office info is asked together with scheduling info, answer briefly and then continue with the single allowed next question only if you are still in COLLECTING_INFO.
+- In SEARCHING_SLOT, do not ask a question.
+- In FINALIZING_APPOINTMENT, do not ask a question.
+- In POST_APPOINTMENT, ask only one short post-booking question.
+- In DONE, do not ask a question.
+- Never end the response with only an acknowledgment when still in COLLECTING_INFO.
 - When the caller gives a simple date range, do not explain the internal interpretation.
 - Treat it as availability starting from the first day of the range.
 - Only ask for clarification if the range is ambiguous or too broad to map safely.
@@ -410,9 +541,13 @@ Speaking behavior:
             f"Caller now: {user_text or '[silence]'}",
             f"Assistant text already produced this turn: {assistant_text or 'none'}",
             "",
+            f"Current persisted phase: {current_phase}",
+            f"Pending question from prior turn: {pending_question or 'none'}",
+            "",
             f"Current state user_intent: {current_user_intent}",
             f"Current required step: {current_step}",
             f"Basic info complete: {basic_done}",
+            f"All required scheduling info complete: {all_required_done}",
             "",
             "Current appointment draft:",
             _pretty_json(
@@ -420,12 +555,20 @@ Speaking behavior:
                     "name": confirmed_name or "none",
                     "phone": confirmed_phone or "none",
                     "reason_for_visit": confirmed_reason or "none",
-                    "requested_time_text": appointment.get("requested_time_text") or "none",
+                    "requested_time": confirmed_requested_time or "none",
+                    "last_offered_slot_start_at": last_offered_slot_start_at or "none",
                 }
             ),
             "",
             "Recent message history:",
             _format_messages(recent_messages),
+            "",
+            "Important turn objective:",
+            "- If required fields are still missing, continue collecting exactly one thing at a time.",
+            "- If all required fields are now complete and no unanswered question remains, stop asking questions and move to SEARCHING_SLOT.",
+            "- If all required fields are complete and last_offered_slot_start_at exists and no unanswered question remains, move to FINALIZING_APPOINTMENT with no question.",
+            "- If the current persisted phase is FINALIZING_APPOINTMENT and the appointment is being communicated as booked, move to POST_APPOINTMENT.",
+            "- If the current persisted phase is POST_APPOINTMENT and the caller has nothing else, move to DONE.",
             "",
             f"Now produce the spoken assistant reply first, then {JSON_SENTINEL}, then the JSON object.",
         ]

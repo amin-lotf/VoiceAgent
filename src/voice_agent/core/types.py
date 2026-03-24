@@ -48,10 +48,11 @@ class ClinicIntent(StrEnum):
 
 
 class AssistantPhase(StrEnum):
-    CollectingInfo = "CollectingInfo"
-    SearchingSlot = "SearchingSlot"
-    AwaitingConfirmation = "AwaitingConfirmation"
-    Done = "Done"
+    COLLECTING_INFO = "collecting_info"
+    SEARCHING_SLOT = "searching_slot"
+    FINALIZING_APPOINTMENT = "finalizing_appointment"
+    POST_APPOINTMENT = "post_appointment"
+    DONE = "done"
 
 
 class OfficeTopic(StrEnum):
@@ -152,6 +153,7 @@ class CallState(TypedDict, total=False):
     event: NotRequired[CallEvent]
     user_text: NotRequired[str | None]
     prev_user_text: NotRequired[str | None]
+    pending_question: NotRequired[str | None]
     clinic_intent: NotRequired[ClinicIntent | None]
     user_intent: NotRequired[UserIntent | None]
     pending_intent: NotRequired[ClinicIntent | None]
