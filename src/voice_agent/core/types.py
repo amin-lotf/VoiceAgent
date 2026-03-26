@@ -50,6 +50,7 @@ class ClinicIntent(StrEnum):
 class AssistantPhase(StrEnum):
     COLLECTING_INFO = "collecting_info"
     SEARCHING_SLOT = "searching_slot"
+    AWAITING_SLOT_CONFIRMATION = "awaiting_slot_confirmation"
     FINALIZING_APPOINTMENT = "finalizing_appointment"
     POST_APPOINTMENT = "post_appointment"
     DONE = "done"
@@ -82,6 +83,7 @@ class AppointmentDraft(TypedDict,total=False):
     phone: str | None
     reason_for_visit: str | None
     requested_time: str | None
+    requested_time_text: str | None
     last_offered_slot_start_at: str | None
 
 class SchedulePatch(TypedDict):
@@ -94,7 +96,7 @@ class AppointmentPatch(TypedDict, total=False):
     name: str | None
     phone: str | None
     reason_for_visit: str | None
-    requested_time_text: str | None
+    requested_time: str | None
     last_offered_slot_start_at: str | None
     schedule_patch: SchedulePatch | None
 

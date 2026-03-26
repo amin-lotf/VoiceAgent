@@ -208,6 +208,11 @@ def apply_appointment_patch(
         if not _is_not_specified(new_value):
             updated[field] = new_value
 
+    requested_time_text = patch.get("requested_time")
+    if not _is_not_specified(requested_time_text):
+        updated["requested_time_text"] = requested_time_text
+
+
     schedule_patch = patch.get("schedule_patch")
     resolved_requested_time = resolve_requested_time(
         schedule_patch=schedule_patch,

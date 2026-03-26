@@ -10,6 +10,20 @@ from voice_agent.const import DEFAULT_TZ, JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.types import AppointmentDraft, CallState, AssistantPhase
 
 
+# -------------------------------------------------------------------
+# Suggested enum update
+# -------------------------------------------------------------------
+#
+# class AssistantPhase(StrEnum):
+#     COLLECTING_INFO = "collecting_info"
+#     SEARCHING_SLOT = "searching_slot"
+#     AWAITING_SLOT_CONFIRMATION = "awaiting_slot_confirmation"
+#     FINALIZING_APPOINTMENT = "finalizing_appointment"
+#     POST_APPOINTMENT = "post_appointment"
+#     DONE = "done"
+# -------------------------------------------------------------------
+
+
 def _pretty_json(data: object) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
 
@@ -202,7 +216,7 @@ Collection behavior:
             ]
         )
     else:
-        rules.append("- requested_time already exists. Do not ask for another date/time unless the caller is changing it.")
+        rules.append("- requested_time already exists. Do not ask for another date/time unless the caller is clearly changing it.")
 
     return "\n".join(rules)
 
@@ -213,6 +227,7 @@ Assistant phase rules:
 - You must output exactly one assistant_phase from:
   - {AssistantPhase.COLLECTING_INFO.value}
   - {AssistantPhase.SEARCHING_SLOT.value}
+  - awaiting_slot_confirmation
   - {AssistantPhase.FINALIZING_APPOINTMENT.value}
   - {AssistantPhase.POST_APPOINTMENT.value}
   - {AssistantPhase.DONE.value}
@@ -233,18 +248,30 @@ Definitions:
     - name
     - reason_for_visit
     - requested_time
-  - And there is no unanswered pending question from the assistant anymore.
+  - And there is no unanswered pending question.
+  - And no offered slot is currently available yet.
   - In this phase, do NOT ask another question.
   - The spoken reply should say a short processing line such as:
     - "Got it. One moment while I check availability."
   - Set is_pending_question=false.
 
+- AWAITING_SLOT_CONFIRMATION:
+  - Use when all required scheduling fields exist AND last_offered_slot_start_at already exists, but the caller has NOT yet confirmed that offered slot.
+  - This is the phase where you present the offered slot and ask the caller to confirm yes/no.
+  - In this phase, the spoken reply SHOULD usually be a confirmation question.
+  - If requested_time_text exists, use it naturally when presenting the slot.
+  - Examples:
+    - "You asked for tomorrow morning. I found 10 AM. Does that work for you?"
+    - "You requested next Tuesday at 2 PM. That time is not available, but I do have 3 PM. Would you like me to book that?"
+    - "I found an available slot at 10 AM tomorrow. Would you like me to confirm it?"
+  - Set is_pending_question=true when you ask that confirmation question.
+
 - FINALIZING_APPOINTMENT:
-  - Use when all required fields are available AND last_offered_slot_start_at already exists.
-  - This means a slot has been found/offered and the backend is moving toward final confirmation/finalization.
+  - Use when the caller has clearly accepted the offered slot and the backend should now confirm/finalize it.
   - In this phase, do NOT ask another question.
   - The spoken reply should be a short non-question line like:
     - "Perfect. Let me finalize that for you."
+    - "Great. I'll confirm that now."
   - Set is_pending_question=false.
 
 - POST_APPOINTMENT:
@@ -270,13 +297,29 @@ Pending-question resolution:
 - If you ask a new question in this turn, set is_pending_question=true.
 - If you do not ask a question in this turn, set is_pending_question=false.
 
+Slot confirmation behavior:
+- If last_offered_slot_start_at exists and the caller has not clearly accepted or rejected it yet, use awaiting_slot_confirmation.
+- If current persisted phase is awaiting_slot_confirmation and the caller clearly says yes, yes please, okay, that works, confirm it, book it, or similar acceptance, move to FINALIZING_APPOINTMENT.
+- If current persisted phase is awaiting_slot_confirmation and the caller clearly rejects the offered slot, remain in COLLECTING_INFO or continue scheduling conversation naturally to get another preference.
+- Do not jump directly from SEARCHING_SLOT to FINALIZING_APPOINTMENT unless the caller has already clearly confirmed the offered slot.
+
+How to talk about requested vs offered time:
+- requested_time_text stores the caller's original natural scheduling wording.
+- requested_time may be normalized or backend-resolved.
+- last_offered_slot_start_at is the actual held slot from backend.
+- You do NOT need to claim they are identical.
+- If the original request was broad, like "tomorrow morning", and the offered slot is specific, like 10 AM, present it as a match within that broad preference.
+- If the original request was exact and the offered slot differs, explicitly say the requested time was unavailable and offer the alternative.
+- Be natural and concise. Do not mention internal fields.
+
 Phase priority:
 1) If the caller is ending the call -> DONE
-2) If current persisted phase is FINALIZING_APPOINTMENT and the appointment is now being communicated as booked -> POST_APPOINTMENT
-3) If current persisted phase is POST_APPOINTMENT and the caller has nothing else or says goodbye -> DONE
-4) If all required info exists and last_offered_slot_start_at exists and there is no active unanswered question -> FINALIZING_APPOINTMENT
-5) If all required info exists and last_offered_slot_start_at does NOT exist and there is no active unanswered question -> SEARCHING_SLOT
-6) Otherwise -> COLLECTING_INFO
+2) If current persisted phase is POST_APPOINTMENT and the caller has nothing else or says goodbye -> DONE
+3) If current persisted phase is FINALIZING_APPOINTMENT and the appointment is now being communicated as booked -> POST_APPOINTMENT
+4) If current persisted phase is awaiting_slot_confirmation and the caller clearly accepts the offered slot -> FINALIZING_APPOINTMENT
+5) If all required info exists and last_offered_slot_start_at exists and the caller has NOT clearly accepted yet -> awaiting_slot_confirmation
+6) If all required info exists and last_offered_slot_start_at does NOT exist and there is no active unanswered question -> SEARCHING_SLOT
+7) Otherwise -> COLLECTING_INFO
 """.strip()
 
 
@@ -299,6 +342,7 @@ def build_call_operator_prompt(
     confirmed_phone = appointment.get("phone")
     confirmed_reason = appointment.get("reason_for_visit")
     confirmed_requested_time = appointment.get("requested_time")
+    confirmed_requested_time_text = appointment.get("requested_time_text")
     last_offered_slot_start_at = appointment.get("last_offered_slot_start_at")
 
     clinic_facts = {
@@ -478,7 +522,7 @@ Field rules:
 
 - is_pending_question:
   - true only when the spoken assistant reply in THIS turn asks a real question that expects a caller answer
-  - false for processing lines, confirmation lines without a question, goodbye lines, and slot-search/finalization lines
+  - false for processing lines, finalizing lines, goodbye lines, and non-question lines
 
 - current_step:
   - copy exactly this value: "{current_step}"
@@ -517,11 +561,12 @@ Speaking behavior:
 - Never ask for the same field again if it was clearly provided in this turn.
 - If office info is asked together with scheduling info, answer briefly and then continue with the single allowed next question only if you are still in COLLECTING_INFO.
 - In SEARCHING_SLOT, do not ask a question.
+- In awaiting_slot_confirmation, usually ask one short yes/no confirmation question about the offered slot.
 - In FINALIZING_APPOINTMENT, do not ask a question.
 - In POST_APPOINTMENT, ask only one short post-booking question.
 - In DONE, do not ask a question.
 - Never end the response with only an acknowledgment when still in COLLECTING_INFO.
-- When the caller gives a simple date range, do not explain the internal interpretation.
+- When the caller gives a simple date range, do not explain internal interpretation.
 - Treat it as availability starting from the first day of the range.
 - Only ask for clarification if the range is ambiguous or too broad to map safely.
 """.strip()
@@ -547,6 +592,7 @@ Speaking behavior:
                     "phone": confirmed_phone or "none",
                     "reason_for_visit": confirmed_reason or "none",
                     "requested_time": confirmed_requested_time or "none",
+                    "requested_time_text": confirmed_requested_time_text or "none",
                     "last_offered_slot_start_at": last_offered_slot_start_at or "none",
                 }
             ),
@@ -557,9 +603,10 @@ Speaking behavior:
             "Important turn objective:",
             "- If required fields are still missing, continue collecting exactly one thing at a time.",
             "- If all required fields are now complete and no unanswered question remains, stop asking questions and move to SEARCHING_SLOT.",
-            "- If all required fields are complete and last_offered_slot_start_at exists and no unanswered question remains, move to FINALIZING_APPOINTMENT with no question.",
-            "- If the current persisted phase is FINALIZING_APPOINTMENT and the appointment is being communicated as booked, move to POST_APPOINTMENT.",
-            "- If the current persisted phase is POST_APPOINTMENT and the caller has nothing else, move to DONE.",
+            "- If a slot has already been found and stored in last_offered_slot_start_at, present that offered slot to the caller and ask for confirmation in awaiting_slot_confirmation unless the caller already clearly accepted it.",
+            "- If current phase is awaiting_slot_confirmation and the caller clearly accepts the offered slot, move to FINALIZING_APPOINTMENT with no question.",
+            "- If current persisted phase is FINALIZING_APPOINTMENT and the appointment is being communicated as booked, move to POST_APPOINTMENT.",
+            "- If current persisted phase is POST_APPOINTMENT and the caller has nothing else, move to DONE.",
             "",
             f"Now produce the spoken assistant reply first, then {JSON_SENTINEL}, then the JSON object.",
         ]

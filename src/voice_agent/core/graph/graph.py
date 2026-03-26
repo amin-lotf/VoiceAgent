@@ -12,7 +12,7 @@ from voice_agent.core.graph.nodes.patch_resolver import node_patch_resolver
 from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
 from voice_agent.core.graph.nodes.time_extractor import node_time_extractor
-from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent
+from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase
 from voice_agent.core.graph.nodes.greeting import node_on_call_started
 from voice_agent.core.graph.nodes.handoff import node_handoff_fallback
 from voice_agent.core.graph.nodes.routing import (
@@ -40,8 +40,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node("on_call_ended", node_on_call_ended)
     graph.add_node("patch_resolver", node_patch_resolver)
-    graph.add_node('load_or_create_appointment', partial(node_load_or_create_appointment,sessionmaker=sessionmaker))
-    graph.add_node('hold_appointment', partial(node_hold_appointment,sessionmaker=sessionmaker))
+    graph.add_node('load_or_create_appointment', partial(node_load_or_create_appointment, sessionmaker=sessionmaker))
+    graph.add_node('hold_appointment', partial(node_hold_appointment, sessionmaker=sessionmaker))
     graph.add_node("finalize_response", node_finalize_response)
     graph.add_edge(START, "route_event")
     graph.add_conditional_edges(
@@ -83,7 +83,14 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
 
     graph.add_edge('patch_resolver', 'load_or_create_appointment')
     graph.add_edge('load_or_create_appointment', 'hold_appointment')
-    graph.add_edge('hold_appointment', 'finalize_response')
+    graph.add_conditional_edges(
+        'hold_appointment',
+        lambda state: 'call_operator' if
+        state.get('assistant_phase') == AssistantPhase.SEARCHING_SLOT else
+        'finalize_response',
+        {'call_operator': 'call_operator', 'finalize_response': 'finalize_response'},
+    )
+    # graph.add_edge('hold_appointment', 'finalize_response')
 
     graph.add_conditional_edges("finalize_response",
                                 lambda state: 'end_call' if bool(state.get("end_call")) else 'keep_call',
