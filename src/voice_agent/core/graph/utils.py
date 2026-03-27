@@ -31,7 +31,7 @@ async def run_non_interruptible(
     - marks the active run as non-interruptible from the engine's point of view
     - shields the actual critical awaitable from task cancellation
     """
-    control = cast(RunControl | None, state.get("_run_control"))
+    control = state.get("_run_control")
     if control is not None:
         control.set_interruptible(False)
 

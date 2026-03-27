@@ -182,6 +182,8 @@ Collection behavior:
         "- You may extract any clearly stated phone, name, reason_for_visit, or date/time info from the caller's utterance, even if you do not ask about it.",
         "- If the caller clearly corrects or replaces an already collected field, update patch with the new value.",
         "- Never ask again for a field that is already filled unless the caller is clearly changing it.",
+        "- Questions must always be OPEN - ENDED.",
+        "  - Do NOT guide the user's answer with examples or options."
     ]
 
     if not has_phone:
@@ -227,7 +229,7 @@ Assistant phase rules:
 - You must output exactly one assistant_phase from:
   - {AssistantPhase.COLLECTING_INFO.value}
   - {AssistantPhase.SEARCHING_SLOT.value}
-  - awaiting_slot_confirmation
+  - {AssistantPhase.AWAITING_SLOT_CONFIRMATION.value}
   - {AssistantPhase.FINALIZING_APPOINTMENT.value}
   - {AssistantPhase.POST_APPOINTMENT.value}
   - {AssistantPhase.DONE.value}
@@ -381,6 +383,7 @@ def build_call_operator_prompt(
             "phone": NOT_SPECIFIED,
             "reason_for_visit": NOT_SPECIFIED,
             "requested_time": NOT_SPECIFIED,
+            "notes": [],
         },
         "datetime_detected": False,
         "schedule_patch": {
@@ -434,6 +437,23 @@ Date/time rules:
     - "next Tuesday at 10:00"
     - "earliest available"
   - otherwise output "{NOT_SPECIFIED}"
+  
+- patch.notes:
+  - Always output a list of short strings.
+  - Extract any additional useful information that is NOT one of:
+    - name
+    - phone
+    - reason_for_visit
+    - requested_time
+  - Examples of notes:
+    - "prefers female doctor"
+    - "first time visit"
+    - "has insurance"
+    - "needs wheelchair access"
+    - "follow-up appointment"
+    - "pain started last week"
+  - Do NOT duplicate reason_for_visit inside notes.
+  - If nothing relevant → output empty list []
 
 - If the caller gives an out-of-range or vague date, ask them to choose a specific day.
 - If the caller gives a simple date range with a clear starting day, interpret the request as starting from the FIRST day of that range.
@@ -569,6 +589,41 @@ Speaking behavior:
 - When the caller gives a simple date range, do not explain internal interpretation.
 - Treat it as availability starting from the first day of the range.
 - Only ask for clarification if the range is ambiguous or too broad to map safely.
+- If the user already gave a vague time (e.g., "tomorrow morning"), do NOT ask to clarify time further.
+- Proceed naturally to backend slot search.
+STRICT RULES — DO NOT SUGGEST OPTIONS:
+
+- NEVER suggest specific times (e.g., "9 or 10?", "morning or afternoon?", "10 AM works?")
+- NEVER give multiple choice options for time.
+- NEVER assume a time.
+
+- If the user gives a broad time (e.g., "tomorrow morning"):
+  - Accept it naturally.
+  - DO NOT ask to refine it into exact hours.
+  - Let backend resolve it.
+
+- Only ask:
+  - "What time works best for you?"
+  - NOT "Is 9 or 10 okay?"
+
+BAD:
+- "Would 9 or 10 work?"
+- "Morning or afternoon?"
+
+GOOD:
+- "What time works best for you?"
+- NEVER suggest reasons for visit.
+- NEVER give examples like:
+  - "Is it a checkup, pain, or something else?"
+
+- Always ask open-ended:
+  - "What is the reason for your visit?"
+
+BAD:
+- "Is it a consultation or checkup?"
+GOOD:
+- "What is the reason for your visit?"
+
 """.strip()
 
     human_content = "\n".join(

@@ -85,12 +85,14 @@ class AppointmentDraft(TypedDict,total=False):
     requested_time: str | None
     requested_time_text: str | None
     last_offered_slot_start_at: str | None
+    notes: list[str]
 
 class SchedulePatch(TypedDict):
     date_mode: str
     date_key: str
     time_pref: str
     exact_time_text: str
+
 
 class AppointmentPatch(TypedDict, total=False):
     name: str | None
@@ -99,6 +101,7 @@ class AppointmentPatch(TypedDict, total=False):
     requested_time: str | None
     last_offered_slot_start_at: str | None
     schedule_patch: SchedulePatch | None
+    notes: list[str]
 
 
 class AppointmentCreate(TypedDict):

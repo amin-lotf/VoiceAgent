@@ -5,6 +5,7 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from voice_agent.core.graph.nodes.basic_info import node_basic_info
+from voice_agent.core.graph.nodes.book_appointment import node_book_appointment
 from voice_agent.core.graph.nodes.call_operator import node_call_operator
 from voice_agent.core.graph.nodes.hold_appointment import node_hold_appointment
 from voice_agent.core.graph.nodes.load_or_create_appointment import node_load_or_create_appointment
@@ -39,9 +40,10 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node("on_call_ended", node_on_call_ended)
-    graph.add_node("patch_resolver", node_patch_resolver)
+    graph.add_node('patch_resolver', partial(node_patch_resolver, sessionmaker=sessionmaker))
     graph.add_node('load_or_create_appointment', partial(node_load_or_create_appointment, sessionmaker=sessionmaker))
     graph.add_node('hold_appointment', partial(node_hold_appointment, sessionmaker=sessionmaker))
+    graph.add_node('book_appointment', partial(node_book_appointment, sessionmaker=sessionmaker))
     graph.add_node("finalize_response", node_finalize_response)
     graph.add_edge(START, "route_event")
     graph.add_conditional_edges(
@@ -81,7 +83,28 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     }
                                 )
 
-    graph.add_edge('patch_resolver', 'load_or_create_appointment')
+    def _after_patch_resolver(state: CallState):
+        phase = state.get("assistant_phase")
+        logger.warning(f"patch_resolver phase: {phase}")
+        match phase:
+            case AssistantPhase.FINALIZING_APPOINTMENT:
+                return 'book_appointment'
+            case AssistantPhase.AWAITING_SLOT_CONFIRMATION:
+                return 'finalize_response'
+            case _:
+                logger.warning(f"Unknown phase: {phase}")
+                return "load_or_create_appointment"
+
+    graph.add_conditional_edges(
+        'patch_resolver',
+        _after_patch_resolver,
+        {
+            'book_appointment': 'book_appointment',
+            'finalize_response': 'finalize_response',
+            'load_or_create_appointment': 'load_or_create_appointment'
+        },
+    )
+
     graph.add_edge('load_or_create_appointment', 'hold_appointment')
     graph.add_conditional_edges(
         'hold_appointment',
@@ -90,7 +113,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'finalize_response',
         {'call_operator': 'call_operator', 'finalize_response': 'finalize_response'},
     )
-    # graph.add_edge('hold_appointment', 'finalize_response')
+    graph.add_edge('book_appointment', 'call_operator')
 
     graph.add_conditional_edges("finalize_response",
                                 lambda state: 'end_call' if bool(state.get("end_call")) else 'keep_call',

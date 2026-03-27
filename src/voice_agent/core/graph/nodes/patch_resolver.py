@@ -3,9 +3,13 @@ from __future__ import annotations
 from datetime import datetime, date, time, timedelta
 from zoneinfo import ZoneInfo
 import logging
+from typing import Any
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
-from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch
+from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
+from voice_agent.core.graph.utils import run_non_interruptible
+from voice_agent.core.services.appointments import update_active_appointment_details
+from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch, AppointmentView
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,6 @@ def _next_business_day(d: date) -> date:
 
 
 def _start_of_next_week(d: date) -> date:
-    # next Monday
     days_until_next_monday = 7 - d.weekday()
     if days_until_next_monday <= 0:
         days_until_next_monday += 7
@@ -53,7 +56,6 @@ def _start_of_next_week(d: date) -> date:
 
 
 def _first_business_day_this_week_from(d: date) -> date | None:
-    # choose earliest valid day from today through Friday
     cur = d
     end = d + timedelta(days=(4 - d.weekday())) if d.weekday() <= 4 else d
     while cur <= end:
@@ -64,10 +66,6 @@ def _first_business_day_this_week_from(d: date) -> date | None:
 
 
 def _parse_exact_time_text(exact_time_text: str) -> tuple[int, int] | None:
-    """
-    Accepts normalized HH:MM.
-    Returns (hour, minute) or None.
-    """
     if not exact_time_text:
         return None
 
@@ -87,6 +85,7 @@ def _parse_exact_time_text(exact_time_text: str) -> tuple[int, int] | None:
 
     return hour, minute
 
+
 def _schedule_patch_is_effectively_empty(schedule_patch: dict | None) -> bool:
     if not schedule_patch:
         return True
@@ -105,14 +104,8 @@ def _schedule_patch_is_effectively_empty(schedule_patch: dict | None) -> bool:
         and exact_time_text in empty_values
     )
 
+
 def _resolve_time_from_patch(schedule_patch: dict) -> tuple[int, int]:
-    """
-    Earliest-time policy:
-    - not_specified -> opening hour
-    - morning -> opening hour
-    - afternoon -> 12:00
-    - exact_time -> parsed HH:MM, else opening hour
-    """
     time_pref = (schedule_patch.get("time_pref") or "").strip().lower()
     exact_time_text = (schedule_patch.get("exact_time_text") or "").strip()
 
@@ -139,14 +132,6 @@ def _resolve_date_from_patch(
     schedule_patch: dict,
     now: datetime,
 ) -> date | None:
-    """
-    Earliest-date policy:
-    - specific_day -> date_key
-    - next_week -> next Monday
-    - this_week -> earliest business day from today to Friday
-    - earliest -> today if business day else next business day
-    - not_specified -> today if business day else next business day
-    """
     date_mode = (schedule_patch.get("date_mode") or "").strip().lower()
     date_key = (schedule_patch.get("date_key") or "").strip()
 
@@ -193,6 +178,28 @@ def resolve_requested_time(
     return _combine_local(base_date, hour, minute, tz_info)
 
 
+def _merge_notes(
+    current_notes: list[str] | None,
+    patch_notes: list[str] | None,
+) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+
+    for item in (current_notes or []):
+        text = str(item).strip()
+        if text and text not in seen:
+            merged.append(text)
+            seen.add(text)
+
+    for item in (patch_notes or []):
+        text = str(item).strip()
+        if text and text not in seen:
+            merged.append(text)
+            seen.add(text)
+
+    return merged
+
+
 def apply_appointment_patch(
     *,
     appointment_draft: AppointmentDraft,
@@ -212,6 +219,12 @@ def apply_appointment_patch(
     if not _is_not_specified(requested_time_text):
         updated["requested_time_text"] = requested_time_text
 
+    patch_notes = patch.get("notes")
+    if patch_notes:
+        updated["notes"] = _merge_notes(
+            updated.get("notes"),
+            patch_notes,
+        )
 
     schedule_patch = patch.get("schedule_patch")
     resolved_requested_time = resolve_requested_time(
@@ -223,10 +236,59 @@ def apply_appointment_patch(
     if resolved_requested_time is not None:
         updated["requested_time"] = resolved_requested_time.isoformat()
 
+    last_offered_slot_start_at = patch.get("last_offered_slot_start_at")
+    if not _is_not_specified(last_offered_slot_start_at):
+        updated["last_offered_slot_start_at"] = last_offered_slot_start_at
+
     return updated
 
 
-def node_patch_resolver(state: CallState) -> dict:
+def _view_id(view: object) -> int | None:
+    if not isinstance(view, dict):
+        return None
+    raw = view.get("id")
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _has_updatable_core_fields(draft: AppointmentDraft) -> bool:
+    return all(
+        not _is_not_specified(draft.get(field))
+        for field in ("name", "phone", "reason_for_visit")
+    )
+
+
+async def _sync_view_from_draft(
+    state: CallState,
+    *,
+    sessionmaker,
+    appointment_id: int,
+    appointment_draft: AppointmentDraft,
+) -> AppointmentView:
+    async def _commit() -> AppointmentView:
+        async with sessionmaker() as session:
+            uow = SqlAlchemyUnitOfWork(session)
+            return await update_active_appointment_details(
+                uow,
+                appointment_id=appointment_id,
+                name=str(appointment_draft["name"]),
+                phone=str(appointment_draft["phone"]),
+                reason_for_visit=str(appointment_draft["reason_for_visit"]),
+                notes=list(appointment_draft.get("notes") or []),
+            )
+
+    return await run_non_interruptible(state, _commit)
+
+
+async def node_patch_resolver(
+    state: CallState,
+    *,
+    sessionmaker,
+) -> dict:
     appointment_draft: AppointmentDraft = state.get("appointment_draft") or {}
     appointment_patch: AppointmentPatch = state.get("appointment_patch") or {}
 
@@ -239,9 +301,40 @@ def node_patch_resolver(state: CallState) -> dict:
         tz_info=DEFAULT_TZ,
     )
 
-    local_state: dict = {
+    local_state: dict[str, Any] = {
         "appointment_draft": updated_appointment,
     }
+
+    if not _has_updatable_core_fields(updated_appointment):
+        logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)
+        return local_state
+
+    held_view = state.get("held_appointment_view") or {}
+    scheduled_view = state.get("scheduled_appointment_view") or {}
+
+    held_id = _view_id(held_view)
+    scheduled_id = _view_id(scheduled_view)
+
+    try:
+        if held_id is not None:
+            updated_held = await _sync_view_from_draft(
+                state,
+                sessionmaker=sessionmaker,
+                appointment_id=held_id,
+                appointment_draft=updated_appointment,
+            )
+            local_state["held_appointment_view"] = updated_held
+
+        if scheduled_id is not None:
+            updated_scheduled = await _sync_view_from_draft(
+                state,
+                sessionmaker=sessionmaker,
+                appointment_id=scheduled_id,
+                appointment_draft=updated_appointment,
+            )
+            local_state["scheduled_appointment_view"] = updated_scheduled
+    except Exception:
+        logger.exception("Failed to sync appointment details to DB")
 
     logger.warning("appointment_draft: %s", updated_appointment)
     return local_state
