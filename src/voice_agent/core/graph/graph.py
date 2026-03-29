@@ -105,7 +105,14 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         },
     )
 
-    graph.add_edge('load_or_create_appointment', 'hold_appointment')
+    graph.add_conditional_edges(
+        'load_or_create_appointment',
+        lambda state: 'hold_appointment' if
+        state.get('assistant_phase') == AssistantPhase.SEARCHING_SLOT else
+        'finalize_response',
+        {'hold_appointment': 'hold_appointment', 'finalize_response': 'finalize_response'},
+    )
+
     graph.add_conditional_edges(
         'hold_appointment',
         lambda state: 'call_operator' if

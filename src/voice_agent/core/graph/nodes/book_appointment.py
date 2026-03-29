@@ -37,19 +37,19 @@ async def node_book_appointment(
     Confirm the currently held appointment.
 
     Flow:
-    1) Confirm held_appointment_id -> SCHEDULED
+    1) Confirm current_appointment_id -> SCHEDULED
     2) If state already has a scheduled_appointment_view, cancel that old appointment
     3) Assign the newly confirmed appointment to scheduled_appointment_view
 
     Rules:
-    - If held_appointment_id is missing -> no-op
+    - If current_appointment_id is missing -> no-op
     - If old scheduled appointment has same id as held one -> do not cancel it
     - Runs DB writes in non-interruptible sections
     """
 
-    held_id = state.get("held_appointment_id")
+    held_id = state.get("current_appointment_id")
     if not held_id:
-        logger.info("node_book_appointment: no held_appointment_id, skipping")
+        logger.info("node_book_appointment: no current_appointment_id, skipping")
         return {}
 
     old_scheduled_view: AppointmentView = state.get("scheduled_appointment_view") or {}
@@ -95,21 +95,14 @@ async def node_book_appointment(
             )
             # keep the newly scheduled appointment in state anyway
             return {
-                "scheduled_appointment_view": (
-                    new_scheduled_view if isinstance(new_scheduled_view, dict) else {}
-                ),
-                "held_appointment_view": {},
-                "held_appointment_id": None,
+                "current_appointment_view": new_scheduled_view if isinstance(new_scheduled_view, dict) else {},
+                "current_appointment_id": None,
                 "pending_question": None,
                 "is_pending_question": False,
             }
-
     return {
-        "scheduled_appointment_view": (
-            new_scheduled_view if isinstance(new_scheduled_view, dict) else {}
-        ),
-        "held_appointment_view": {},
-        "held_appointment_id": None,
+        "current_appointment_view": new_scheduled_view if isinstance(new_scheduled_view, dict) else {},
+        "current_appointment_id": None,
         "pending_question": None,
         "is_pending_question": False,
     }

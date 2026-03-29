@@ -86,6 +86,7 @@ class AppointmentDraft(TypedDict,total=False):
     requested_time_text: str | None
     last_offered_slot_start_at: str | None
     notes: list[str]
+    status: AppointmentStatus
 
 class SchedulePatch(TypedDict):
     date_mode: str
@@ -164,9 +165,9 @@ class CallState(TypedDict, total=False):
     clinic_intent: NotRequired[ClinicIntent | None]
     user_intent: NotRequired[UserIntent | None]
     pending_intent: NotRequired[ClinicIntent | None]
-    held_appointment_view: NotRequired[AppointmentView]
     scheduled_appointment_view: NotRequired[AppointmentView]
-    held_appointment_id: NotRequired[int | None]
+    current_appointment_view: NotRequired[AppointmentView]
+    current_appointment_id: NotRequired[int | None]
     prev_assistant_text: NotRequired[str]
 
 

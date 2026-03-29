@@ -24,18 +24,18 @@ async def node_load_or_create_appointment(
     sessionmaker,
 ) -> dict:
     """
-    Ensures state['held_appointment_view'] exists once phone is known.
+    Ensures state['current_appointment_view'] exists once phone is known.
 
     Rules:
     - If phone is missing -> no-op
-    - If held_appointment_view already exists -> no-op
+    - If current_appointment_view already exists -> no-op
     - Else:
         1) Look for earliest future active appointment by phone
         2) If found, load it into state
         3) If not found, create a new PENDING appointment
     """
     appointment_draft: AppointmentDraft = state.get("appointment_draft") or {}
-    held_appointment_view: AppointmentView = state.get("held_appointment_view") or {}
+    current_appointment_view: AppointmentView = state.get("current_appointment_view") or {}
 
     phone = (appointment_draft.get("phone") or "").strip()
     name = (appointment_draft.get("name") or "").strip()
@@ -46,11 +46,11 @@ async def node_load_or_create_appointment(
         logger.warning("load_or_create_appointment: skipped, phone missing")
         return {}
 
-    # 2) Already have held_appointment_view -> no-op
-    if not _is_empty_appointment_view(held_appointment_view):
+    # 2) Already have current_appointment_view -> no-op
+    if not _is_empty_appointment_view(current_appointment_view):
         logger.warning(
-            "load_or_create_appointment: skipped, held_appointment_view already exists id=%s",
-            held_appointment_view.get("id"),
+            "load_or_create_appointment: skipped, current_appointment_view already exists id=%s",
+            current_appointment_view.get("id"),
         )
         return {}
 
@@ -104,14 +104,14 @@ async def node_load_or_create_appointment(
         return {}
 
     local_state: dict = {
-        "held_appointment_view": held_view if isinstance(held_view, dict) else {},
+        "current_appointment_view": held_view if isinstance(held_view, dict) else {},
         "scheduled_appointment_view": scheduled_view if isinstance(scheduled_view, dict) else {},
-        "held_appointment_id": int(held_view["id"]) if isinstance(held_view, dict) and held_view.get("id") else None,
+        "current_appointment_id": int(held_view["id"]) if isinstance(held_view, dict) and held_view.get("id") else None,
     }
 
     logger.warning(
         "load_or_create_appointment: ready id=%s status=%s",
-        local_state.get("held_appointment_id"),
+        local_state.get("current_appointment_id"),
         held_view.get("status") if isinstance(held_view, dict) else None,
     )
     return local_state

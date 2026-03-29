@@ -28,7 +28,7 @@ async def node_hold_appointment(
 
     Rules:
     - If slot_start missing -> no-op
-    - If held_appointment_id missing -> fallback to appointment_id
+    - If current_appointment_id missing -> fallback to appointment_id
     - If no appointment id -> no-op
     - Search free slots from slot_start forward
     - Hold the first available slot
@@ -39,7 +39,7 @@ async def node_hold_appointment(
     raw_slot_start = appointment_draft.get("requested_time")
     slot_start = parse_dt(raw_slot_start)
 
-    appointment_id = state.get("held_appointment_id")
+    appointment_id = state.get("current_appointment_id")
 
     if not slot_start:
         logger.warning("hold_appointment_node: skipped, slot_start missing/invalid")
@@ -83,8 +83,8 @@ async def node_hold_appointment(
     except ValueError as e:
         logger.warning("hold_appointment_node: %s", e)
         return {
-            "held_appointment_view": {},
-            "held_appointment_id": None,
+            "current_appointment_view": {},
+            "current_appointment_id": None,
             "last_offered_slot_start_at": None,
             "slot_found": False,
         }
@@ -107,7 +107,7 @@ async def node_hold_appointment(
     appointment_draft["last_offered_slot_start_at"] = last_offered_local
 
     local_state: dict = {
-        "held_appointment_view": held_view if isinstance(held_view, dict) else {},
+        "current_appointment_view": held_view if isinstance(held_view, dict) else {},
         "appointment_draft": appointment_draft,
     }
 

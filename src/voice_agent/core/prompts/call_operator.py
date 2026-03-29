@@ -243,6 +243,15 @@ Definitions:
     - requested_time
   - Use when you are still asking a question to collect or clarify required information.
   - In this phase, if the spoken reply asks a real question, set is_pending_question=true.
+  
+  Appointment state awareness:
+- You are given current_appointment_view which represents the real appointment state from backend.
+- current_appointment_view.status can be:
+  - "held"
+  - "scheduled"
+  - or empty if none exists
+
+- Always rely on current_appointment_view.status instead of guessing.
 
 - SEARCHING_SLOT:
   - Use when all required fields are available for scheduling:
@@ -317,7 +326,7 @@ How to talk about requested vs offered time:
 Phase priority:
 1) If the caller is ending the call -> DONE
 2) If current persisted phase is POST_APPOINTMENT and the caller has nothing else or says goodbye -> DONE
-3) If current persisted phase is FINALIZING_APPOINTMENT and the appointment is now being communicated as booked -> POST_APPOINTMENT
+3) If current persisted phase is FINALIZING_APPOINTMENT AND current_appointment_view.status == "scheduled" -> POST_APPOINTMENT
 4) If current persisted phase is awaiting_slot_confirmation and the caller clearly accepts the offered slot -> FINALIZING_APPOINTMENT
 5) If all required info exists and last_offered_slot_start_at exists and the caller has NOT clearly accepted yet -> awaiting_slot_confirmation
 6) If all required info exists and last_offered_slot_start_at does NOT exist and there is no active unanswered question -> SEARCHING_SLOT
@@ -365,7 +374,7 @@ def build_call_operator_prompt(
         appointment=appointment,
     )
     phase_rules = _build_phase_rules()
-
+    current_appointment_view = state.get("current_appointment_view") or {}
     basic_done = _all_basic_info_collected(appointment)
     all_required_done = _all_required_info_collected(appointment)
 
@@ -637,6 +646,10 @@ GOOD:
             "",
             f"Current state user_intent: {current_user_intent}",
             f"Current required step: {current_step}",
+            "",
+            "Current appointment (source of truth):",
+            _pretty_json(current_appointment_view or {"status": "none"}),
+            "",
             f"Basic info complete: {basic_done}",
             f"All required scheduling info complete: {all_required_done}",
             "",
@@ -660,7 +673,7 @@ GOOD:
             "- If all required fields are now complete and no unanswered question remains, stop asking questions and move to SEARCHING_SLOT.",
             "- If a slot has already been found and stored in last_offered_slot_start_at, present that offered slot to the caller and ask for confirmation in awaiting_slot_confirmation unless the caller already clearly accepted it.",
             "- If current phase is awaiting_slot_confirmation and the caller clearly accepts the offered slot, move to FINALIZING_APPOINTMENT with no question.",
-            "- If current persisted phase is FINALIZING_APPOINTMENT and the appointment is being communicated as booked, move to POST_APPOINTMENT.",
+            "- If current persisted phase is FINALIZING_APPOINTMENT AND current_appointment_view.status == scheduled move to POST_APPOINTMENT"
             "- If current persisted phase is POST_APPOINTMENT and the caller has nothing else, move to DONE.",
             "",
             f"Now produce the spoken assistant reply first, then {JSON_SENTINEL}, then the JSON object.",

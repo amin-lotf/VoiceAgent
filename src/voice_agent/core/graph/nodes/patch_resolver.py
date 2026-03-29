@@ -309,11 +309,9 @@ async def node_patch_resolver(
         logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)
         return local_state
 
-    held_view = state.get("held_appointment_view") or {}
-    scheduled_view = state.get("scheduled_appointment_view") or {}
+    held_view = state.get("current_appointment_view") or {}
 
     held_id = _view_id(held_view)
-    scheduled_id = _view_id(scheduled_view)
 
     try:
         if held_id is not None:
@@ -323,16 +321,8 @@ async def node_patch_resolver(
                 appointment_id=held_id,
                 appointment_draft=updated_appointment,
             )
-            local_state["held_appointment_view"] = updated_held
+            local_state["current_appointment_view"] = updated_held
 
-        if scheduled_id is not None:
-            updated_scheduled = await _sync_view_from_draft(
-                state,
-                sessionmaker=sessionmaker,
-                appointment_id=scheduled_id,
-                appointment_draft=updated_appointment,
-            )
-            local_state["scheduled_appointment_view"] = updated_scheduled
     except Exception:
         logger.exception("Failed to sync appointment details to DB")
 
