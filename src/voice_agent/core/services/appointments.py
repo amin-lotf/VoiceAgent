@@ -219,8 +219,8 @@ async def delete_held_appointment(
         appt = await uow.appointments.get(appointment_id)
         if appt is None:
             return False
-        if appt.status != AppointmentStatus.HELD:
-            raise NotFound("Only HELD appointments can be deleted")
+        if not appt.status in (AppointmentStatus.HELD, AppointmentStatus.PENDING):
+            raise NotFound("Only HELD or PENDING appointments can be deleted")
         return await uow.appointments.delete(appointment_id)
 
 

@@ -16,7 +16,16 @@ from voice_agent.const import DEFAULT_TZ
 from voice_agent.core.types import CallEvent, CallState, AppointmentCreate
 
 
-
+def view_id(view: object) -> int | None:
+    if not isinstance(view, dict):
+        return None
+    raw = view.get("id")
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 

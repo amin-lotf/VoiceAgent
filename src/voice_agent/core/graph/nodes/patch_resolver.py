@@ -7,6 +7,7 @@ from typing import Any
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
+from voice_agent.core.graph.nodes.utils import view_id
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.services.appointments import update_active_appointment_details
 from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch, AppointmentView
@@ -243,16 +244,7 @@ def apply_appointment_patch(
     return updated
 
 
-def _view_id(view: object) -> int | None:
-    if not isinstance(view, dict):
-        return None
-    raw = view.get("id")
-    if raw in (None, ""):
-        return None
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return None
+
 
 
 def _has_updatable_core_fields(draft: AppointmentDraft) -> bool:
@@ -311,7 +303,7 @@ async def node_patch_resolver(
 
     held_view = state.get("current_appointment_view") or {}
 
-    held_id = _view_id(held_view)
+    held_id = view_id(held_view)
 
     try:
         if held_id is not None:

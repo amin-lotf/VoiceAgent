@@ -39,7 +39,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     # graph.add_node("get_office_info", node_office_info)
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
-    graph.add_node("on_call_ended", node_on_call_ended)
+    graph.add_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
     graph.add_node('patch_resolver', partial(node_patch_resolver, sessionmaker=sessionmaker))
     graph.add_node('load_or_create_appointment', partial(node_load_or_create_appointment, sessionmaker=sessionmaker))
     graph.add_node('hold_appointment', partial(node_hold_appointment, sessionmaker=sessionmaker))

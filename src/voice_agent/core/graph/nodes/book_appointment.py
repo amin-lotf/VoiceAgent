@@ -95,13 +95,13 @@ async def node_book_appointment(
             )
             # keep the newly scheduled appointment in state anyway
             return {
-                "current_appointment_view": new_scheduled_view if isinstance(new_scheduled_view, dict) else {},
+                "scheduled_appointment_view": new_scheduled_view if isinstance(new_scheduled_view, dict) else {},
                 "current_appointment_id": None,
                 "pending_question": None,
                 "is_pending_question": False,
             }
     return {
-        "current_appointment_view": new_scheduled_view if isinstance(new_scheduled_view, dict) else {},
+        "scheduled_appointment_view": new_scheduled_view if isinstance(new_scheduled_view, dict) else {},
         "current_appointment_id": None,
         "pending_question": None,
         "is_pending_question": False,
