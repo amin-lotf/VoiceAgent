@@ -6,7 +6,7 @@ import time
 from langgraph.config import get_stream_writer
 
 from voice_agent.core.graph.nodes.utils import stream_text_response
-from voice_agent.core.llm.huggingface_llm import agent_model
+from voice_agent.core.llm.huggingface_llm import agent_model, gen_pipe, model, llm
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.greeting_huggingface import build_greeting_prompt
 from voice_agent.core.types import CallPhase, CallState

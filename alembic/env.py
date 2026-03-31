@@ -6,6 +6,8 @@ from sqlalchemy import pool
 from alembic import context
 from voice_agent.core.db.base import Base
 from voice_agent.core.db.models import Appointment
+from dotenv import load_dotenv
+load_dotenv()
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
