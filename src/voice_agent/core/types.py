@@ -46,13 +46,15 @@ class ClinicIntent(StrEnum):
     HANGUP = "hangup"
     CONTINUE = "continue"
 
+class NextAction(StrEnum):
+    ASK_USER = "ask_user"
+    FINALIZE_APPOINTMENT = "finalize_appointment"
+    END_CALL = "end_call"
+
 
 class AssistantPhase(StrEnum):
     COLLECTING_INFO = "collecting_info"
-    SEARCHING_SLOT = "searching_slot"
-    AWAITING_SLOT_CONFIRMATION = "awaiting_slot_confirmation"
     FINALIZING_APPOINTMENT = "finalizing_appointment"
-    POST_APPOINTMENT = "post_appointment"
     DONE = "done"
 
 
@@ -77,6 +79,28 @@ class AppointmentStatus(StrEnum):
 class TimeSlot:
     start_at: datetime
     end_at: datetime
+
+class ExtractorNode(StrEnum):
+    BASIC_INFO = "basic_info"
+    TIME_SLOT = "time_slot"
+
+
+class AppointmentField(StrEnum):
+    NAME = "name"
+    PHONE = "phone"
+    REASON_FOR_VISIT = "reason_for_visit"
+    NOTES = "notes"
+
+class DirectiveKind(StrEnum):
+    REQUEST_MISSING_INFO = "request_missing_info"
+
+class AssistantDirective(TypedDict, total=False):
+    field: AppointmentField | None
+    kind: DirectiveKind
+    priority: int
+    source: ExtractorNode
+
+
 
 class AppointmentDraft(TypedDict,total=False):
     name: str | None
@@ -164,11 +188,12 @@ class CallState(TypedDict, total=False):
     assistant_phase: NotRequired[AssistantPhase | None]
     clinic_intent: NotRequired[ClinicIntent | None]
     user_intent: NotRequired[UserIntent | None]
-    pending_intent: NotRequired[ClinicIntent | None]
     scheduled_appointment_view: NotRequired[AppointmentView]
     current_appointment_view: NotRequired[AppointmentView]
     current_appointment_id: NotRequired[int | None]
     prev_assistant_text: NotRequired[str]
+    next_action: NotRequired[NextAction]
+    directives: NotRequired[list[AssistantDirective]]
 
 
 

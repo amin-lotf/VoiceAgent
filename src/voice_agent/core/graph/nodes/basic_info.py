@@ -1,47 +1,74 @@
-import asyncio
-import time
+from __future__ import annotations
 
-from voice_agent.core.graph.nodes.utils import safe_json_parse, set_node_data
-from voice_agent.core.llm.huggingface_llm import agent_model
-from voice_agent.core.llm.openai_llm import LLM
-from voice_agent.core.prompts.basic_info import build_local_basic_info_extract_prompt
-from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch
-import logging
+from typing import Any, TypedDict
+from enum import StrEnum
 
-logger = logging.getLogger(__name__)
+from voice_agent.const import NOT_SPECIFIED
+from voice_agent.core.types import CallState, AppointmentDraft, AppointmentField, AssistantDirective, DirectiveKind, \
+    ExtractorNode
 
-async def node_basic_info(state: CallState) -> dict:
-    return {}
-    local_state: dict ={}
-    user_text = (state.get("user_text") or "").strip()
-    appointment_draft: AppointmentDraft = state.setdefault("appointment_draft", {})
-    local_patch: AppointmentPatch = {}
-    if user_text:
-        local_prompt = build_local_basic_info_extract_prompt(
-            user_text=user_text,
-            appointment=appointment_draft
+
+def _is_missing(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and value.strip().lower() in {
+        "",
+        "not_specified",
+        str(NOT_SPECIFIED).lower(),
+    }:
+        return True
+    return False
+
+
+def _build_basic_info_directives(
+    draft: AppointmentDraft,
+) -> list[AssistantDirective]:
+    directives: list[AssistantDirective] = []
+
+    if _is_missing(draft.get("phone")):
+        directives.append(
+            {
+                "field": AppointmentField.PHONE,
+                "kind": DirectiveKind.REQUEST_MISSING_INFO,
+                "priority": 100,
+                "source": ExtractorNode.BASIC_INFO,
+            }
         )
-        try:
-            t0 = time.perf_counter()
-            resp = await asyncio.to_thread(agent_model.invoke, local_prompt)
-            # resp = await LLM.ainvoke(local_prompt)
-            t1 = time.perf_counter()
-            raw = getattr(resp, "content", "") or ""
-            parsed = safe_json_parse(raw)
-            logger.warning(
-                "----------\nbasic_info time=%0.2fs raw=%s parsed=%s\n-----------",
-                t1 - t0,
-                raw,
-                parsed,
-            )
-            if isinstance(parsed, dict):
-                local_patch = parsed.get("patch") or {}
-        except Exception:
-            logger.exception("local_extract failed")
-    local_state['node_data']={
-        'basic_info':{
-            'appointment_patch': local_patch,
+
+
+    if _is_missing(draft.get("name")):
+        directives.append(
+            {
+                "field": AppointmentField.NAME,
+                "kind": DirectiveKind.REQUEST_MISSING_INFO,
+                "priority": 90,
+                "source": ExtractorNode.BASIC_INFO,
+            }
+        )
+
+
+    if _is_missing(draft.get("reason_for_visit")):
+        directives.append(
+            {
+                "field": AppointmentField.REASON_FOR_VISIT,
+                "kind": DirectiveKind.REQUEST_MISSING_INFO,
+                "priority": 80,
+                "source": ExtractorNode.BASIC_INFO,
+            }
+        )
+
+    return directives
+
+
+async def node_basic_info(state: CallState) -> dict[str, Any]:
+    appointment_draft: AppointmentDraft = state.get("appointment_draft") or {}
+
+    directives = _build_basic_info_directives(appointment_draft)
+
+    return {
+        "node_data": {
+            "basic_info": {
+                "directives": directives,
+            }
         }
     }
-    # set_node_data(state, node = 'basic_info',n_data = {'appointment_patch': local_patch})
-    return local_state
