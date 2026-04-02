@@ -1,4 +1,7 @@
-async def node_office_info(state):
+from voice_agent.core.types import CallState
+
+
+async def node_office_info(state:CallState):
     return {
         "node_data": {
             "office_info": {

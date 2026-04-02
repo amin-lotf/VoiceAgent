@@ -1,6 +1,29 @@
 from langchain_core.messages import SystemMessage, HumanMessage
 from voice_agent.const import JSON_SENTINEL
 from voice_agent.core.prompts.operator_blocks import *
+from voice_agent.core.types import CallState
+
+
+def _format_messages(messages: list[dict]) -> str:
+    if not messages:
+        return "none"
+
+    lines: list[str] = []
+    for m in messages:
+        role = (m.get("role") or "unknown").strip()
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        lines.append(f"{role}: {content}")
+
+    return "\n".join(lines) if lines else "none"
+
+
+def _get_recent_messages(state: CallState, limit: int = 8) -> list[dict]:
+    messages = state.get("messages") or []
+    if not isinstance(messages, list):
+        return []
+    return messages[-limit:]
 
 
 def build_operator_prompt(state):
@@ -11,6 +34,7 @@ def build_operator_prompt(state):
 
     appointment = state.get("appointment_draft") or {}
     user_text = state.get("user_text") or ""
+    recent_messages = _get_recent_messages(state, limit=8)
 
     output_schema = {
         "clinic_intent": "continue",
@@ -53,8 +77,13 @@ Then {JSON_SENTINEL}
 Then JSON.
 """.strip()
 
+
+
     human = f"""
-Caller: {user_text}
+Recent message history:
+{_format_messages(recent_messages)}
+
+Caller Now: {user_text}
 
 Current draft:
 {appointment}

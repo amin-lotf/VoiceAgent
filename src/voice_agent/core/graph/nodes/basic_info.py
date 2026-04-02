@@ -61,7 +61,7 @@ def _build_basic_info_directives(
 
 
 async def node_basic_info(state: CallState) -> dict[str, Any]:
-    appointment_draft: AppointmentDraft = state.get("appointment_draft") or {}
+    appointment_draft = state.get("appointment_draft") or {}
 
     directives = _build_basic_info_directives(appointment_draft)
 

@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
-
 from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.types import CallState, AssistantDirective, AppointmentField
-from voice_agent.core.prompts.operator_blocks import (
-    REQUESTING_FIELD_RULES,
-    EXISTING_FIELD_RULES, GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, PATCH_FIELD_RULES,
-)
+from voice_agent.core.prompts.operator_blocks import PATCH_FIELD_RULES
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _has_value(v):
     return v not in (None, "", NOT_SPECIFIED)
@@ -35,14 +32,14 @@ def _build_field_rules(state, directives: list[AssistantDirective]) -> list[str]
 
 async def node_directive_prompt_builder(state):
     directives = state.get("directives") or []
-
+    logger.warning(f"directives: {directives}")
     rules = _build_field_rules(state, directives)
 
     return {
         "node_data": {
             "directive_prompt_builder": {
                 "rules": rules,
-                "active_fields": [d["field"].value for d in directives if d.get("field")]
+                "active_fields": [d["field"] for d in directives if d.get("field")]
             }
         }
     }

@@ -6,7 +6,6 @@ import time
 
 from voice_agent.core.graph.const import MAX_INFO_TIME_MENTIONS
 from voice_agent.core.graph.nodes.utils import safe_json_parse, set_node_data
-from voice_agent.core.llm.huggingface_llm import agent_model
 from voice_agent.core.prompts.intent_router import build_intent_router_prompt
 from voice_agent.core.types import CallState, ClinicIntent, OfficeTopic
 
@@ -40,7 +39,8 @@ async def node_detect_intent(state: CallState) -> dict:
 
     try:
         t0 = time.perf_counter()
-        resp = await asyncio.to_thread(agent_model.invoke, prompt)
+        # resp = await asyncio.to_thread(agent_model.invoke, prompt)
+        resp = None
         t1 = time.perf_counter()
         logger.warning(f"intent_router: LLM request took {t1 - t0:0.2f}s")
         data = safe_json_parse(resp.content or "", logger=logger)

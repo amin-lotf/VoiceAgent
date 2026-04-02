@@ -7,10 +7,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from voice_agent.core.graph.nodes.basic_info import node_basic_info
 from voice_agent.core.graph.nodes.book_appointment import node_book_appointment
 from voice_agent.core.graph.nodes.call_operator import node_call_operator
+from voice_agent.core.graph.nodes.directive_prompt_builder import node_directive_prompt_builder
 from voice_agent.core.graph.nodes.hold_appointment import node_hold_appointment
 from voice_agent.core.graph.nodes.load_or_create_appointment import node_load_or_create_appointment
 from voice_agent.core.graph.nodes.patch_resolver import node_patch_resolver
 from voice_agent.core.graph.nodes.office_info import node_office_info
+from voice_agent.core.graph.nodes.planner import node_planner
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
 from voice_agent.core.graph.nodes.time_extractor import node_time_extractor
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase
@@ -32,18 +34,16 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     # Nodes
     graph.add_node("route_event", node_route_event)
     graph.add_node("on_call_started", node_on_call_started)
+    graph.add_node("get_office_info", node_office_info)
+    graph.add_node("planner", node_planner)
+    graph.add_node("directive_prompt_builder", node_directive_prompt_builder)
     graph.add_node("call_operator", node_call_operator)
-    # graph.add_node("basic_info", node_basic_info)
-    # graph.add_node("slot_filling", node_fill_appointment_slot)
-    # graph.add_node("time_extractor", node_time_extractor)
-    # graph.add_node("get_office_info", node_office_info)
+    graph.add_node('patch_resolver', partial(node_patch_resolver, sessionmaker=sessionmaker))
+    graph.add_node('pass_through', lambda state: state)
+    graph.add_node("basic_info", node_basic_info)
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
-    graph.add_node('patch_resolver', partial(node_patch_resolver, sessionmaker=sessionmaker))
-    graph.add_node('load_or_create_appointment', partial(node_load_or_create_appointment, sessionmaker=sessionmaker))
-    graph.add_node('hold_appointment', partial(node_hold_appointment, sessionmaker=sessionmaker))
-    graph.add_node('book_appointment', partial(node_book_appointment, sessionmaker=sessionmaker))
     graph.add_node("finalize_response", node_finalize_response)
     graph.add_edge(START, "route_event")
     graph.add_conditional_edges(
@@ -52,20 +52,19 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         {
             CallEvent.CALL_STARTED: "on_call_started",
             # CallEvent.USER_TURN: "triage_precheck",
-            CallEvent.USER_TURN: "call_operator",
+            CallEvent.USER_TURN: "get_office_info",
             CallEvent.CALL_ENDED: "on_call_ended",
             None: "finalize_response",
         },
     )
 
-    graph.add_edge("on_call_started", 'finalize_response')
+    graph.add_edge("on_call_started", 'pass_through')
     graph.add_edge("handle_hangup", "finalize_response")
     graph.add_edge("handoff_fallback", 'finalize_response')
+    graph.add_edge('get_office_info','planner')
+    graph.add_edge('planner','directive_prompt_builder')
+    graph.add_edge('directive_prompt_builder','call_operator')
 
-    # graph.add_edge('call_operator', 'get_office_info')
-    # graph.add_edge('get_office_info', 'router_node')
-    # graph.add_edge('basic_info', 'patch_resolver')
-    # graph.add_edge('time_extractor', 'patch_resolver')
     def _after_call_operator(state: CallState):
         intent = state.get("clinic_intent")
         match intent:
@@ -82,45 +81,11 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'handoff_fallback': 'handoff_fallback',
     }
                                 )
+    graph.add_edge('patch_resolver', 'pass_through')
+    graph.add_edge('pass_through', 'basic_info')
+    graph.add_edge('basic_info', 'finalize_response')
 
-    def _after_patch_resolver(state: CallState):
-        phase = state.get("assistant_phase")
-        logger.warning(f"patch_resolver phase: {phase}")
-        match phase:
-            case AssistantPhase.FINALIZING_APPOINTMENT:
-                return 'book_appointment'
-            case AssistantPhase.AWAITING_SLOT_CONFIRMATION:
-                return 'finalize_response'
-            case _:
-                logger.warning(f"Unknown phase: {phase}")
-                return "load_or_create_appointment"
 
-    graph.add_conditional_edges(
-        'patch_resolver',
-        _after_patch_resolver,
-        {
-            'book_appointment': 'book_appointment',
-            'finalize_response': 'finalize_response',
-            'load_or_create_appointment': 'load_or_create_appointment'
-        },
-    )
-
-    graph.add_conditional_edges(
-        'load_or_create_appointment',
-        lambda state: 'hold_appointment' if
-        state.get('assistant_phase') == AssistantPhase.SEARCHING_SLOT else
-        'finalize_response',
-        {'hold_appointment': 'hold_appointment', 'finalize_response': 'finalize_response'},
-    )
-
-    graph.add_conditional_edges(
-        'hold_appointment',
-        lambda state: 'call_operator' if
-        state.get('assistant_phase') == AssistantPhase.SEARCHING_SLOT else
-        'finalize_response',
-        {'call_operator': 'call_operator', 'finalize_response': 'finalize_response'},
-    )
-    graph.add_edge('book_appointment', 'call_operator')
 
     graph.add_conditional_edges("finalize_response",
                                 lambda state: 'end_call' if bool(state.get("end_call")) else 'keep_call',

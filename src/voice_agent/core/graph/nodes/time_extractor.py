@@ -2,7 +2,6 @@ import asyncio
 import time
 
 from voice_agent.core.graph.nodes.utils import safe_json_parse, set_node_data
-from voice_agent.core.llm.huggingface_llm import agent_model
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.basic_info import build_local_basic_info_extract_prompt
 from voice_agent.core.prompts.extract_date_time import build_time_extract_prompt
