@@ -43,7 +43,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node('pass_through', lambda state: state)
     graph.add_node("basic_info", node_basic_info)
     graph.add_node("verify_appointment_info", node_verify_appointment_info)
-    graph.add_node("book_appointment", node_book_appointment)
+    graph.add_node("book_appointment", partial(node_book_appointment, sessionmaker=sessionmaker))
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
@@ -86,7 +86,18 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                                 )
     graph.add_edge('patch_resolver', 'pass_through')
     graph.add_edge('pass_through', 'basic_info')
-    graph.add_edge('basic_info', 'verify_appointment_info')
+
+    def _after_basic_info(state: CallState):
+        assistant_phase = state.get("assistant_phase")
+        if assistant_phase == AssistantPhase.POST_APPOINTMENT:
+            return 'finalize_response'
+        return 'verify_appointment_info'
+    graph.add_conditional_edges('basic_info', _after_basic_info, {
+        'verify_appointment_info': 'verify_appointment_info',
+        'finalize_response': 'finalize_response',
+    }
+                                )
+
     graph.add_edge('verify_appointment_info', 'finalize_response')
 
     def _after_verify_appointment_info(state: CallState):

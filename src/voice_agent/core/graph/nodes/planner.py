@@ -1,5 +1,7 @@
 from voice_agent.core.types import CallState, AssistantDirective, ExtractorNode
+import logging
 
+logger = logging.getLogger(__name__)
 
 def collect_directives(state: CallState) -> list[AssistantDirective]:
     node_data = state.get("node_data") or {}
@@ -25,6 +27,7 @@ def collect_directives(state: CallState) -> list[AssistantDirective]:
 
 async def node_planner(state: CallState) -> dict:
     directives = collect_directives(state)
+    logger.warning(f"plannder:directives: {directives}")
     return {
         "directives": directives,
     }

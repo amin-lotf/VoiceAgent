@@ -1,12 +1,12 @@
 from voice_agent.const import NOT_SPECIFIED
-from voice_agent.core.types import AppointmentField
-
+from voice_agent.core.types import AppointmentField, DirectiveKind
 
 GLOBAL_OPERATOR_RULES = [
     "Write the spoken reply first, then the JSON sentinel, then one valid JSON.",
     "The spoken reply must sound natural and suitable for a phone call.",
     "Keep responses concise.",
     "Ask at most one question.",
+    "Do not combine multiple questions into one."
     "Only ask a question when the current rules explicitly require or allow that question.",
     "Do not invent new questions, new fields, or new steps that are not explicitly requested by the current rules.",
     "If no rule explicitly tells you to ask a question, do not ask one.",
@@ -26,7 +26,6 @@ OFFICE_INFO_RULES = [
     "If the user asks about office information, answer directly from office knowledge.",
     "Do not force the booking flow before answering office questions.",
 ]
-
 
 REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     AppointmentField.NAME: [
@@ -49,8 +48,14 @@ REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
         "Do not turn it into multiple-choice.",
         "Accept brief answers.",
     ],
+    AppointmentField.NOTES: [
+        "You may ask whether the caller wants anything noted for the appointment.",
+        "Present notes as optional, not required.",
+        "Ask naturally and briefly.",
+        "Do not pressure the caller to add notes.",
+        "Accept short answers.",
+    ],
 }
-
 
 EXISTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     AppointmentField.NAME: [
@@ -69,6 +74,15 @@ EXISTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     ],
 }
 
+INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
+    DirectiveKind.INFORM_SCHEDULED: [
+        "Tell the caller that the appointment is successfully booked.",
+        "If the caller's name is available, say it is booked under that name.",
+        "Keep the wording natural and suitable for a phone call.",
+        "Do not say the appointment is pending, being checked, or being finalized.",
+        "Do not ask for required booking fields again.",
+    ],
+}
 
 PATCH_FIELD_RULES = {
     AppointmentField.NAME: [

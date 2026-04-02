@@ -1,6 +1,9 @@
 from typing import Any
-from voice_agent.core.types import CallState, AppointmentDraft, AssistantPhase, AppointmentField
+from voice_agent.core.types import CallState, AppointmentDraft, AssistantPhase, \
+    RequiredAppointmentField
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _is_missing(value: object) -> bool:
     if value is None:
@@ -11,17 +14,12 @@ def _is_missing(value: object) -> bool:
 
 
 def _is_draft_complete(draft: AppointmentDraft) -> bool:
-    return all(not _is_missing(draft.get(field.value)) for field in AppointmentField)
+    return all(not _is_missing(draft.get(field.value)) for field in RequiredAppointmentField)
 
 
 async def node_verify_appointment_info(state: CallState) -> dict[str, Any]:
     draft: AppointmentDraft = state.get("appointment_draft", {})
-
+    local_state ={}
     if _is_draft_complete(draft):
-        return {
-            "assistant_phase": AssistantPhase.FINALIZING_APPOINTMENT
-        }
-
-    return {
-        "assistant_phase": AssistantPhase.COLLECTING_INFO
-    }
+        local_state['assistant_phase'] = AssistantPhase.FINALIZING_APPOINTMENT
+    return local_state

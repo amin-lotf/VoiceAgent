@@ -93,6 +93,11 @@ class AppointmentField(StrEnum):
     REASON_FOR_VISIT = "reason_for_visit"
     NOTES = "notes"
 
+class RequiredAppointmentField(StrEnum):
+    NAME = "name"
+    PHONE = "phone"
+    REASON_FOR_VISIT = "reason_for_visit"
+
 class DirectiveKind(StrEnum):
     REQUEST_MISSING_INFO = "request_missing_info"
     REQUEST_CONFIRMATION = "request_confirmation"

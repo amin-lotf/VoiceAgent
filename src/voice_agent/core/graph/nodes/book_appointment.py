@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
+from voice_agent.core.graph.nodes.utils import set_node_data
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.services.appointments import (
     confirm_appointment,
@@ -43,13 +44,9 @@ async def node_book_appointment(
 
     directives = _build_basic_info_directives(draft)
 
-    return {
-        "appointment_draft": draft,
-        "assistant_phase": AssistantPhase.POST_APPOINTMENT,
-        "node_data": {
-            'book_appointment': {
-                'directives': directives,
-            },
-            "exclusive_directives": True
-        }
-    }
+    local_state = { 'appointment_draft': draft, 'assistant_phase': AssistantPhase.POST_APPOINTMENT}
+    set_node_data(local_state,'book_appointment',{'directives': directives})
+    set_node_data(local_state,'book_appointment',{"exclusive_directives": True})
+
+    logger.warning(f'local_state: {local_state}')
+    return local_state
