@@ -55,6 +55,7 @@ class NextAction(StrEnum):
 class AssistantPhase(StrEnum):
     COLLECTING_INFO = "collecting_info"
     FINALIZING_APPOINTMENT = "finalizing_appointment"
+    POST_APPOINTMENT = "post_appointment"
     DONE = "done"
 
 
@@ -83,6 +84,7 @@ class TimeSlot:
 class ExtractorNode(StrEnum):
     BASIC_INFO = "basic_info"
     TIME_SLOT = "time_slot"
+    BOOK_APPOINTMENT = "book_appointment"
 
 
 class AppointmentField(StrEnum):
@@ -93,6 +95,8 @@ class AppointmentField(StrEnum):
 
 class DirectiveKind(StrEnum):
     REQUEST_MISSING_INFO = "request_missing_info"
+    REQUEST_CONFIRMATION = "request_confirmation"
+    INFORM_SCHEDULED = "inform_scheduled"
 
 class AssistantDirective(TypedDict, total=False):
     field: AppointmentField | None
@@ -106,9 +110,6 @@ class AppointmentDraft(TypedDict,total=False):
     name: str | None
     phone: str | None
     reason_for_visit: str | None
-    requested_time: str | None
-    requested_time_text: str | None
-    last_offered_slot_start_at: str | None
     notes: list[str]
     status: AppointmentStatus
 

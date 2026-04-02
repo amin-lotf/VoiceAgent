@@ -15,6 +15,7 @@ from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.graph.nodes.planner import node_planner
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
 from voice_agent.core.graph.nodes.time_extractor import node_time_extractor
+from voice_agent.core.graph.nodes.verify_appointment_info import node_verify_appointment_info
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase
 from voice_agent.core.graph.nodes.greeting import node_on_call_started
 from voice_agent.core.graph.nodes.handoff import node_handoff_fallback
@@ -41,6 +42,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node('patch_resolver', partial(node_patch_resolver, sessionmaker=sessionmaker))
     graph.add_node('pass_through', lambda state: state)
     graph.add_node("basic_info", node_basic_info)
+    graph.add_node("verify_appointment_info", node_verify_appointment_info)
+    graph.add_node("book_appointment", node_book_appointment)
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
@@ -83,9 +86,22 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                                 )
     graph.add_edge('patch_resolver', 'pass_through')
     graph.add_edge('pass_through', 'basic_info')
-    graph.add_edge('basic_info', 'finalize_response')
+    graph.add_edge('basic_info', 'verify_appointment_info')
+    graph.add_edge('verify_appointment_info', 'finalize_response')
 
+    def _after_verify_appointment_info(state: CallState):
+        assistant_phase = state.get("assistant_phase")
+        if assistant_phase == AssistantPhase.FINALIZING_APPOINTMENT:
+            return 'book_appointment'
+        return 'finalize_response'
 
+    graph.add_conditional_edges('verify_appointment_info', _after_verify_appointment_info, {
+        'book_appointment': 'book_appointment',
+        'finalize_response': 'finalize_response',
+    }
+                                )
+
+    graph.add_edge('book_appointment', 'planner')
 
     graph.add_conditional_edges("finalize_response",
                                 lambda state: 'end_call' if bool(state.get("end_call")) else 'keep_call',
