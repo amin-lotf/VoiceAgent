@@ -120,6 +120,7 @@ class AppointmentDraft(TypedDict,total=False):
     notes: list[str]
     requested_time_text: str | None  # raw user input (e.g. "tomorrow morning")
     requested_time_iso: str | None  # normalized ISO (e.g. "2026-04-05T09:00:00+08:00")
+    last_offered_slot_start_at: str | None  # latest offered slot in ISO datetime
     status: AppointmentStatus
 
 class SchedulePatch(TypedDict):
@@ -127,6 +128,7 @@ class SchedulePatch(TypedDict):
     date_key: str
     time_pref: str
     exact_time_text: str
+    relative_to_offered:str
 
 
 class AppointmentPatch(TypedDict, total=False):

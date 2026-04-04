@@ -14,7 +14,7 @@ from voice_agent.core.graph.nodes.patch_resolver import node_patch_resolver
 from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.graph.nodes.planner import node_planner
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
-from voice_agent.core.graph.nodes.time_extractor import node_time_extractor
+from voice_agent.core.graph.nodes.datetime_extractor import node_time_extractor
 from voice_agent.core.graph.nodes.time_slot import node_time_slot
 from voice_agent.core.graph.nodes.verify_appointment_info import node_verify_appointment_info
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase
