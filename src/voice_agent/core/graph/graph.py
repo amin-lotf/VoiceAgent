@@ -15,6 +15,7 @@ from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.graph.nodes.planner import node_planner
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
 from voice_agent.core.graph.nodes.time_extractor import node_time_extractor
+from voice_agent.core.graph.nodes.time_slot import node_time_slot
 from voice_agent.core.graph.nodes.verify_appointment_info import node_verify_appointment_info
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase
 from voice_agent.core.graph.nodes.greeting import node_on_call_started
@@ -40,8 +41,10 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("directive_prompt_builder", node_directive_prompt_builder)
     graph.add_node("call_operator", node_call_operator)
     graph.add_node('patch_resolver', partial(node_patch_resolver, sessionmaker=sessionmaker))
-    graph.add_node('pass_through', lambda state: state)
+    graph.add_node('fields_input_gate', lambda state: state)
+    graph.add_node('fields_output_gate', lambda state: state)
     graph.add_node("basic_info", node_basic_info)
+    graph.add_node("time_slot", node_time_slot)
     graph.add_node("verify_appointment_info", node_verify_appointment_info)
     graph.add_node("book_appointment", partial(node_book_appointment, sessionmaker=sessionmaker))
     graph.add_node("handoff_fallback", node_handoff_fallback)
@@ -61,12 +64,12 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         },
     )
 
-    graph.add_edge("on_call_started", 'pass_through')
+    graph.add_edge("on_call_started", 'fields_input_gate')
     graph.add_edge("handle_hangup", "finalize_response")
     graph.add_edge("handoff_fallback", 'finalize_response')
-    graph.add_edge('get_office_info','planner')
-    graph.add_edge('planner','directive_prompt_builder')
-    graph.add_edge('directive_prompt_builder','call_operator')
+    graph.add_edge('get_office_info', 'planner')
+    graph.add_edge('planner', 'directive_prompt_builder')
+    graph.add_edge('directive_prompt_builder', 'call_operator')
 
     def _after_call_operator(state: CallState):
         intent = state.get("clinic_intent")
@@ -84,19 +87,25 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'handoff_fallback': 'handoff_fallback',
     }
                                 )
-    graph.add_edge('patch_resolver', 'pass_through')
-    graph.add_edge('pass_through', 'basic_info')
+    graph.add_edge('patch_resolver', 'fields_input_gate')
+    graph.add_edge('fields_input_gate', 'basic_info')
+    graph.add_edge('fields_input_gate', 'time_slot')
+    graph.add_edge('basic_info', 'fields_output_gate')
+    graph.add_edge('time_slot', 'fields_output_gate')
 
-    def _after_basic_info(state: CallState):
+    def _after_fields_output_gate(state: CallState):
         assistant_phase = state.get("assistant_phase")
         if assistant_phase == AssistantPhase.POST_APPOINTMENT:
             return 'finalize_response'
         return 'verify_appointment_info'
-    graph.add_conditional_edges('basic_info', _after_basic_info, {
+
+    graph.add_conditional_edges('fields_output_gate', _after_fields_output_gate, {
         'verify_appointment_info': 'verify_appointment_info',
         'finalize_response': 'finalize_response',
     }
                                 )
+
+
 
     graph.add_edge('verify_appointment_info', 'finalize_response')
 

@@ -45,13 +45,14 @@ def build_operator_prompt(state):
             "reason_for_visit": NOT_SPECIFIED,
             "notes": [],
         },
+        "datetime_detected": False,
     }
 
     all_rules = [
         *GLOBAL_OPERATOR_RULES,
         *CLINIC_INTENT_RULES,
+        *DATETIME_RULES,
         *OFFICE_INFO_RULES,
-        *PATCH_NOTES_RULES,
         *directive_prompts,
         *JSON_RULES,
     ]

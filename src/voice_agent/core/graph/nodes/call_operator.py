@@ -250,7 +250,12 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         clinic_intent = ClinicIntent.CONTINUE
 
     end_call = _coerce_bool(data.get("end_call"), default=False)
+    datetime_detected = _coerce_bool(data.get("datetime_detected"), default=False)
     normalized_patch = _normalize_patch(data)
+    user_text = (state.get("user_text") or "").strip()
+
+    if datetime_detected and user_text:
+        normalized_patch["requested_time_text"] = user_text
 
     local_state["assistant_text"] = assistant_text
     local_state["clinic_intent"] = clinic_intent

@@ -22,6 +22,15 @@ CLINIC_INTENT_RULES = [
     "Set end_call=true only when the call should end.",
 ]
 
+DATETIME_RULES = [
+    'Set "datetime_detected" to true only if the caller explicitly mentions a date or time expression for scheduling in Caller Now.',
+    'Set "datetime_detected" to false otherwise.',
+    'Use only the latest caller message.',
+    'Count expressions like "today", "tomorrow", "next Monday", "April 12", "morning", "afternoon", "evening", "at 3", and "3 pm" as datetime mentions.',
+    'Do not mark true for non-scheduling numbers such as phone numbers, addresses, or ages.',
+    'Do not infer missing time information from context or earlier turns.',
+]
+
 OFFICE_INFO_RULES = [
     "If the user asks about office information, answer directly from office knowledge.",
     "Do not force the booking flow before answering office questions.",
@@ -49,11 +58,19 @@ REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
         "Accept brief answers.",
     ],
     AppointmentField.NOTES: [
-        "You may ask whether the caller wants anything noted for the appointment.",
-        "Present notes as optional, not required.",
+        "Ask whether the caller wants anything noted for the appointment.",
         "Ask naturally and briefly.",
         "Do not pressure the caller to add notes.",
         "Accept short answers.",
+        "If the caller says there is nothing to add, acknowledge it and close naturally.",
+    ],
+    AppointmentField.REQUESTED_TIME_TEXT: [
+        "The requested appointment time is still missing.",
+        "Ask which day the caller wants to schedule the appointment.",
+        "Do not suggest specific times or options.",
+        "Do not ask for exact time unless the caller already provides it.",
+        "Accept natural phrases like 'tomorrow', 'next Monday', or 'this weekend'.",
+        "Once the caller provides a day or time expression, extract it and stop asking.",
     ],
 }
 
@@ -71,6 +88,11 @@ EXISTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     AppointmentField.REASON_FOR_VISIT: [
         "Reason for visit already exists.",
         "Do not ask for it again unless the user explicitly changes or clarifies it.",
+    ],
+    AppointmentField.REQUESTED_TIME_TEXT: [
+        "Requested appointment time already exists.",
+        "Do not ask for the day or time again unless the caller explicitly changes it.",
+        "If the caller provides a new date or time, extract and replace the existing value.",
     ],
 }
 
@@ -94,14 +116,13 @@ PATCH_FIELD_RULES = {
     AppointmentField.REASON_FOR_VISIT: [
         f"patch.reason_for_visit: only update if explicitly provided, else {NOT_SPECIFIED}",
     ],
+    AppointmentField.NOTES: [
+        "patch.notes must be a list of short strings.",
+        "Use notes only for extra useful info.",
+        "Do not duplicate existing fields.",
+        "If nothing → empty list.",
+    ]
 }
-
-PATCH_NOTES_RULES = [
-    "patch.notes must be a list of short strings.",
-    "Use notes only for extra useful info.",
-    "Do not duplicate existing fields.",
-    "If nothing → empty list.",
-]
 
 JSON_RULES = [
     "Return exactly one valid JSON.",

@@ -92,11 +92,13 @@ class AppointmentField(StrEnum):
     PHONE = "phone"
     REASON_FOR_VISIT = "reason_for_visit"
     NOTES = "notes"
+    REQUESTED_TIME_TEXT = "requested_time"
 
 class RequiredAppointmentField(StrEnum):
     NAME = "name"
     PHONE = "phone"
     REASON_FOR_VISIT = "reason_for_visit"
+    REQUESTED_TIME_ISO = "requested_time_iso"
 
 class DirectiveKind(StrEnum):
     REQUEST_MISSING_INFO = "request_missing_info"
@@ -116,6 +118,8 @@ class AppointmentDraft(TypedDict,total=False):
     phone: str | None
     reason_for_visit: str | None
     notes: list[str]
+    requested_time_text: str | None  # raw user input (e.g. "tomorrow morning")
+    requested_time_iso: str | None  # normalized ISO (e.g. "2026-04-05T09:00:00+08:00")
     status: AppointmentStatus
 
 class SchedulePatch(TypedDict):
@@ -129,9 +133,7 @@ class AppointmentPatch(TypedDict, total=False):
     name: str | None
     phone: str | None
     reason_for_visit: str | None
-    requested_time: str | None
-    last_offered_slot_start_at: str | None
-    schedule_patch: SchedulePatch | None
+    requested_time_text: str | None
     notes: list[str]
 
 
