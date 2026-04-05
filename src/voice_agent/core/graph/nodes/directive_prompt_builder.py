@@ -35,7 +35,7 @@ def _build_field_rules(
         if d.get("field") and d.get("kind") == DirectiveKind.REQUEST_MISSING_INFO
     }
 
-    for field in PATCH_FIELD_RULES.keys():
+    for field in AppointmentField:
         if field in active_fields:
             rules.extend(REQUESTING_FIELD_RULES[field])
             continue

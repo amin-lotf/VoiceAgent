@@ -92,13 +92,13 @@ class AppointmentField(StrEnum):
     PHONE = "phone"
     REASON_FOR_VISIT = "reason_for_visit"
     NOTES = "notes"
-    REQUESTED_TIME_TEXT = "requested_time"
+    REQUESTED_TIME_TEXT = "requested_time_text"
 
 class RequiredAppointmentField(StrEnum):
     NAME = "name"
     PHONE = "phone"
     REASON_FOR_VISIT = "reason_for_visit"
-    REQUESTED_TIME_ISO = "requested_time_iso"
+    REQUESTED_TIME_TEXT = "requested_time_text"
 
 class DirectiveKind(StrEnum):
     REQUEST_MISSING_INFO = "request_missing_info"

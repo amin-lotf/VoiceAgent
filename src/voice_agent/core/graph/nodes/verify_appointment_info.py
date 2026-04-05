@@ -22,4 +22,8 @@ async def node_verify_appointment_info(state: CallState) -> dict[str, Any]:
     local_state ={}
     if _is_draft_complete(draft):
         local_state['assistant_phase'] = AssistantPhase.FINALIZING_APPOINTMENT
+        logger.warning('verify_appointment_info: appointment is complete, moving to finalize_response')
+    else:
+        logger.warning('verify_appointment_info: appointment is incomplete, continuing to collect information')
+
     return local_state

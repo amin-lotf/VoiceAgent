@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
@@ -9,6 +10,8 @@ from langchain_core.messages import AIMessage
 from zoneinfo import ZoneInfo
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
+from voice_agent.core.graph.nodes.utils import set_node_data
+from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.datetime_extractor import build_time_resolution_prompt
 from voice_agent.core.types import CallState, AppointmentDraft
 
@@ -56,7 +59,7 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
-        candidate = text[start : end + 1]
+        candidate = text[start: end + 1]
         return json.loads(candidate)
 
     raise ValueError("No valid JSON object found in datetime extractor response")
@@ -81,15 +84,12 @@ def _normalize_schedule_patch(raw: dict[str, Any]) -> dict[str, str]:
 
 
 async def node_datetime_extractor(
-    state: CallState,
-    *,
-    datetime_llm,
-    now: datetime,
-    tz_info: ZoneInfo = DEFAULT_TZ,
+        state: CallState,
 ) -> dict[str, Any]:
     appointment: AppointmentDraft = dict(state.get("appointment_draft") or {})
     requested_time_text = (appointment.get("requested_time_text") or "").strip()
-
+    tz_info: ZoneInfo = DEFAULT_TZ
+    now = datetime.now(tz_info)
     if not requested_time_text:
         logger.info("datetime_extractor skipped: no requested_time_text")
         return {}
@@ -101,19 +101,34 @@ async def node_datetime_extractor(
     )
 
     logger.info("datetime_extractor input requested_time_text=%r", requested_time_text)
-
+    start_time = time.perf_counter()
+    end_time: float | None = None
     try:
         # Preferred: model configured for JSON object output
-        llm_result: AIMessage = await datetime_llm.ainvoke(messages)
+        llm_result: AIMessage = await LLM.ainvoke(messages)
+        end_time = time.perf_counter()
         raw_text = _extract_json_text(llm_result.content)
         parsed = _parse_json_object(raw_text)
         schedule_patch = _normalize_schedule_patch(parsed)
 
-        logger.info("datetime_extractor parsed schedule_patch=%s", schedule_patch)
+        logger.warning(
+            "==========\ndatetime_extractor: total generation time = %.3fs, parsed schedule_patch=%s\n =========",
+            end_time - start_time,
+            schedule_patch)
 
-        return {
+        local_state ={
             "schedule_patch": schedule_patch,
         }
+
+        set_node_data(
+            local_state,
+            "datetime_extractor",
+            {
+                "total_seconds": None if end_time is None else end_time - start_time,
+            },
+        )
+
+        return local_state
 
     except Exception:
         logger.exception("datetime_extractor failed")

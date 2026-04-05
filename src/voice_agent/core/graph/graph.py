@@ -14,7 +14,7 @@ from voice_agent.core.graph.nodes.patch_resolver import node_patch_resolver
 from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.graph.nodes.planner import node_planner
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
-from voice_agent.core.graph.nodes.datetime_extractor import node_time_extractor
+from voice_agent.core.graph.nodes.datetime_extractor import  node_datetime_extractor
 from voice_agent.core.graph.nodes.time_slot import node_time_slot
 from voice_agent.core.graph.nodes.verify_appointment_info import node_verify_appointment_info
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase
@@ -46,6 +46,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("basic_info", node_basic_info)
     graph.add_node("time_slot", node_time_slot)
     graph.add_node("verify_appointment_info", node_verify_appointment_info)
+    graph.add_node("datetime_extractor", node_datetime_extractor)
     graph.add_node("book_appointment", partial(node_book_appointment, sessionmaker=sessionmaker))
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
@@ -107,20 +108,21 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
 
 
 
-    graph.add_edge('verify_appointment_info', 'finalize_response')
 
     def _after_verify_appointment_info(state: CallState):
         assistant_phase = state.get("assistant_phase")
         if assistant_phase == AssistantPhase.FINALIZING_APPOINTMENT:
-            return 'book_appointment'
+            return 'datetime_extractor'
         return 'finalize_response'
 
+
     graph.add_conditional_edges('verify_appointment_info', _after_verify_appointment_info, {
-        'book_appointment': 'book_appointment',
+        'datetime_extractor': 'datetime_extractor',
         'finalize_response': 'finalize_response',
     }
                                 )
 
+    graph.add_edge('datetime_extractor', 'book_appointment')
     graph.add_edge('book_appointment', 'planner')
 
     graph.add_conditional_edges("finalize_response",
