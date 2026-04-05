@@ -103,6 +103,7 @@ async def node_datetime_extractor(
     logger.info("datetime_extractor input requested_time_text=%r", requested_time_text)
     start_time = time.perf_counter()
     end_time: float | None = None
+    local_state = {}
     try:
         # Preferred: model configured for JSON object output
         llm_result: AIMessage = await LLM.ainvoke(messages)
@@ -116,9 +117,13 @@ async def node_datetime_extractor(
             end_time - start_time,
             schedule_patch)
 
-        local_state ={
-            "schedule_patch": schedule_patch,
-        }
+        set_node_data(
+            local_state,
+            'datetime_extractor',
+            {
+                "schedule_patch": schedule_patch
+            }
+        )
 
         set_node_data(
             local_state,
@@ -132,12 +137,18 @@ async def node_datetime_extractor(
 
     except Exception:
         logger.exception("datetime_extractor failed")
-        return {
-            "schedule_patch": {
-                "date_mode": str(NOT_SPECIFIED),
-                "date_key": str(NOT_SPECIFIED),
-                "time_pref": str(NOT_SPECIFIED),
-                "exact_time_text": str(NOT_SPECIFIED),
-                "relative_to_offered": str(NOT_SPECIFIED),
-            }
+        schedule_patch = {
+            "date_mode": str(NOT_SPECIFIED),
+            "date_key": str(NOT_SPECIFIED),
+            "time_pref": str(NOT_SPECIFIED),
+            "exact_time_text": str(NOT_SPECIFIED),
+            "relative_to_offered": str(NOT_SPECIFIED),
         }
+        set_node_data(
+            local_state,
+            'datetime_extractor',
+            {
+                "schedule_patch": schedule_patch
+            }
+        )
+        return local_state

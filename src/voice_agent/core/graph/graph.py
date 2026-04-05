@@ -10,6 +10,8 @@ from voice_agent.core.graph.nodes.call_operator import node_call_operator
 from voice_agent.core.graph.nodes.directive_prompt_builder import node_directive_prompt_builder
 from voice_agent.core.graph.nodes.hold_appointment import node_hold_appointment
 from voice_agent.core.graph.nodes.load_or_create_appointment import node_load_or_create_appointment
+from voice_agent.core.graph.nodes.node_schedule_patch_to_requested_time_iso import \
+    node_schedule_patch_to_requested_time_iso
 from voice_agent.core.graph.nodes.patch_resolver import node_patch_resolver
 from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.graph.nodes.planner import node_planner
@@ -47,6 +49,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("time_slot", node_time_slot)
     graph.add_node("verify_appointment_info", node_verify_appointment_info)
     graph.add_node("datetime_extractor", node_datetime_extractor)
+    graph.add_node("schedule_patch_to_requested_time_iso", node_schedule_patch_to_requested_time_iso)
     graph.add_node("book_appointment", partial(node_book_appointment, sessionmaker=sessionmaker))
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
@@ -122,7 +125,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     }
                                 )
 
-    graph.add_edge('datetime_extractor', 'book_appointment')
+    graph.add_edge('datetime_extractor', 'schedule_patch_to_requested_time_iso')
+    graph.add_edge('schedule_patch_to_requested_time_iso', 'book_appointment')
     graph.add_edge('book_appointment', 'planner')
 
     graph.add_conditional_edges("finalize_response",
