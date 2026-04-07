@@ -5,13 +5,13 @@ from voice_agent.core.types import (
     CallState,
     AssistantDirective,
     AppointmentField,
-    DirectiveKind,
+    DirectiveKind, ConfirmationTopic,
 )
 from voice_agent.core.prompts.operator_blocks import (
     PATCH_FIELD_RULES,
     REQUESTING_FIELD_RULES,
     EXISTING_FIELD_RULES,
-    INFORMATIVE_DIRECTIVE_RULES,
+    INFORMATIVE_DIRECTIVE_RULES, CONFIRMATION_RULES,
 )
 import logging
 
@@ -41,9 +41,36 @@ def _build_field_rules(
             continue
 
         if _has_value(draft.get(field.value)):
-            rules.extend(EXISTING_FIELD_RULES[field])
+            if EXISTING_FIELD_RULES.get(field):
+                rules.extend(EXISTING_FIELD_RULES[field])
 
     return rules
+
+def _build_confirmation_rules(
+    state: CallState,
+    directives: list[AssistantDirective],
+) -> list[str]:
+    rules: list[str] = []
+    active_confirmations = {
+        d.get("confirmation_topic")
+        for d in directives
+        if d.get("confirmation_topic") and d.get("kind") == DirectiveKind.REQUEST_CONFIRMATION
+    }
+    draft = state.get("appointment_draft") or {}
+    slot_iso = draft.get("last_offered_slot_start_at")
+
+    for confirmation_topic in ConfirmationTopic:
+        if confirmation_topic in active_confirmations:
+            rules.extend(CONFIRMATION_RULES[confirmation_topic])
+    if (
+            any(d.get("confirmation_topic") == ConfirmationTopic.HOLD_CONFIRMATION for d in directives)
+            and _has_value(slot_iso)
+    ):
+        rules.append(
+            f'There is a slot available at "{slot_iso}".'
+        )
+    return rules
+
 
 
 def _build_informative_rules(
@@ -81,9 +108,10 @@ async def node_directive_prompt_builder(state: CallState):
     logger.warning(f"directives: {directives}")
 
     field_rules = _build_field_rules(state, directives)
+    confirmation_rules = _build_confirmation_rules(state, directives)
     informative_rules = _build_informative_rules(state, directives)
 
-    rules = informative_rules + field_rules
+    rules = confirmation_rules + informative_rules + field_rules
 
     return {
         "node_data": {

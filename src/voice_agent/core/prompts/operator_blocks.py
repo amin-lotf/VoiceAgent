@@ -1,5 +1,5 @@
 from voice_agent.const import NOT_SPECIFIED
-from voice_agent.core.types import AppointmentField, DirectiveKind
+from voice_agent.core.types import AppointmentField, DirectiveKind, ConfirmationTopic
 
 GLOBAL_OPERATOR_RULES = [
     "Write the spoken reply first, then the JSON sentinel, then one valid JSON.",
@@ -96,6 +96,18 @@ EXISTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     ],
 }
 
+CONFIRMATION_RULES: dict[ConfirmationTopic, list[str]] = {
+    ConfirmationTopic.HOLD_CONFIRMATION: [
+        "Ask whether the offered date and time works for the caller.",
+        "Ask exactly one question.",
+        "Do not ask an open-ended scheduling question unless the caller has already rejected the offered slot.",
+        "If the caller rejects the offered slot without giving a replacement date or time, ask which day or time would work better.",
+        "If the caller rejects the offered slot and gives a replacement date or time, extract that new date or time and do not ask another question in the same turn.",
+        "Do not mention that the slot is held or reserved.",
+    ]
+}
+
+
 INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
     DirectiveKind.INFORM_SCHEDULED: [
         "Tell the caller that the appointment is successfully booked.",
@@ -103,6 +115,14 @@ INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
         "Keep the wording natural and suitable for a phone call.",
         "Do not say the appointment is pending, being checked, or being finalized.",
         "Do not ask for required booking fields again.",
+    ],
+    DirectiveKind.INFORM_HELD: [
+        "Tell the caller that a slot is available.",
+        "Use the latest offered slot from appointment_draft.last_offered_slot_start_at when available.",
+        "State the offered date and time naturally for speech.",
+        "Do not say the slot is held, reserved, blocked, or temporarily booked.",
+        "Do not say the appointment is already booked.",
+        "Keep the wording short and natural.",
     ],
 }
 

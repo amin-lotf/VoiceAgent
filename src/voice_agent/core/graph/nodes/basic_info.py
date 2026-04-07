@@ -5,7 +5,7 @@ from enum import StrEnum
 
 from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.types import CallState, AppointmentDraft, AppointmentField, AssistantDirective, DirectiveKind, \
-    ExtractorNode
+    DirectiveSourceNode
 
 
 def _is_missing(value: object) -> bool:
@@ -31,7 +31,7 @@ def _build_basic_info_directives(
                 "field": AppointmentField.PHONE,
                 "kind": DirectiveKind.REQUEST_MISSING_INFO,
                 "priority": 100,
-                "source": ExtractorNode.BASIC_INFO,
+                "source": DirectiveSourceNode.BASIC_INFO,
             }
         )
 
@@ -42,7 +42,7 @@ def _build_basic_info_directives(
                 "field": AppointmentField.NAME,
                 "kind": DirectiveKind.REQUEST_MISSING_INFO,
                 "priority": 90,
-                "source": ExtractorNode.BASIC_INFO,
+                "source": DirectiveSourceNode.BASIC_INFO,
             }
         )
 
@@ -53,7 +53,7 @@ def _build_basic_info_directives(
                 "field": AppointmentField.REASON_FOR_VISIT,
                 "kind": DirectiveKind.REQUEST_MISSING_INFO,
                 "priority": 80,
-                "source": ExtractorNode.BASIC_INFO,
+                "source": DirectiveSourceNode.BASIC_INFO,
             }
         )
 

@@ -163,10 +163,10 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     def _after_held_appointment_info(state: CallState):
         next_action = state.get("next_action")
         if next_action==NextAction.CALL_OPERATOR:
-            return 'call_operator'
+            return 'planner'
         return 'monitor_appointment_confirmation'
     graph.add_conditional_edges('held_appointment_info', _after_held_appointment_info, {
-        'call_operator': 'call_operator',
+        'planner': 'planner',
         'monitor_appointment_confirmation': 'monitor_appointment_confirmation',
     })
 

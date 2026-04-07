@@ -11,7 +11,7 @@ from voice_agent.core.services.appointments import (
     cancel_appointment,
 )
 from voice_agent.core.types import CallState, AppointmentView, AppointmentDraft, AppointmentStatus, DirectiveKind, \
-    ExtractorNode, AssistantPhase, AppointmentField, AssistantDirective
+    DirectiveSourceNode, AssistantPhase, AppointmentField, AssistantDirective, ConfirmationTopic
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +26,13 @@ def _build_held_appointment_directives(
                 {
                     "kind": DirectiveKind.INFORM_HELD,
                     "priority": 100,
-                    "source": ExtractorNode.HOLD_APPOINTMENT,
+                    "source": DirectiveSourceNode.HELD_APPOINTMENT_INFO,
                 },
                 {
-                    "kind": DirectiveKind.REQUEST_HOLD_CONFIRMATION,
+                    "kind": DirectiveKind.REQUEST_CONFIRMATION,
+                    "confirmation_topic": ConfirmationTopic.HOLD_CONFIRMATION,
                     "priority": 90,
-                    "source": ExtractorNode.HOLD_APPOINTMENT,
+                    "source": DirectiveSourceNode.HELD_APPOINTMENT_INFO,
                 }
             ]
         )
@@ -39,17 +40,15 @@ def _build_held_appointment_directives(
 
 
 async def node_held_appointment_info(
-        state: CallState,
-        *,
-        sessionmaker,
+        state: CallState
 ) -> dict[str, Any]:
     draft: AppointmentDraft = dict(state.get("appointment_draft") or {})
 
     directives = _build_held_appointment_directives(draft)
     local_state = {}
     if directives:
-        set_node_data(local_state, 'hold_appointment', {'directives': directives})
-        set_node_data(local_state, 'hold_appointment', {"exclusive_directives": True})
+        set_node_data(local_state, 'held_appointment_info', {'directives': directives})
+        set_node_data(local_state, 'held_appointment_info', {"exclusive_directives": True})
 
-    logger.warning(f'held_appointment_info: {local_state}')
+    logger.warning(f'=======\nheld_appointment_info: {local_state}\n=======')
     return local_state

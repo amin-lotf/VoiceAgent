@@ -11,7 +11,7 @@ from voice_agent.core.services.appointments import (
     cancel_appointment,
 )
 from voice_agent.core.types import CallState, AppointmentView, AppointmentDraft, AppointmentStatus, DirectiveKind, \
-    ExtractorNode, AssistantPhase, AppointmentField, AssistantDirective, NextAction
+    DirectiveSourceNode, AssistantPhase, AppointmentField, AssistantDirective, NextAction
 
 logger = logging.getLogger(__name__)
 
@@ -30,5 +30,5 @@ async def node_hold_appointment(
         'assistant_phase': AssistantPhase.HOLDING_APPOINTMENT,
         'next_action': NextAction.CALL_OPERATOR
     }
-    logger.warning(f'local_state: {local_state}')
+    logger.warning(f'=======\nhold_appointment:local_state: {local_state}\n=======')
     return local_state

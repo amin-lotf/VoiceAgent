@@ -11,7 +11,7 @@ from voice_agent.core.services.appointments import (
     cancel_appointment,
 )
 from voice_agent.core.types import CallState, AppointmentView, AppointmentDraft, AppointmentStatus, DirectiveKind, \
-    ExtractorNode, AssistantPhase, AppointmentField, AssistantDirective
+    DirectiveSourceNode, AssistantPhase, AppointmentField, AssistantDirective
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +23,13 @@ def _build_book_appointment_directives(
         {
             "kind": DirectiveKind.INFORM_SCHEDULED,
             "priority": 100,
-            "source": ExtractorNode.BOOK_APPOINTMENT,
+            "source": DirectiveSourceNode.BOOK_APPOINTMENT,
         },
         {
             "field": AppointmentField.NOTES,
             "kind": DirectiveKind.REQUEST_MISSING_INFO,
             "priority": 90,
-            "source": ExtractorNode.BOOK_APPOINTMENT,
+            "source": DirectiveSourceNode.BOOK_APPOINTMENT,
         }
     ]
     return directives

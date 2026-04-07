@@ -90,10 +90,10 @@ class TimeSlot:
     start_at: datetime
     end_at: datetime
 
-class ExtractorNode(StrEnum):
+class DirectiveSourceNode(StrEnum):
     BASIC_INFO = "basic_info"
     TIME_SLOT = "time_slot"
-    HOLD_APPOINTMENT = "hold_appointment"
+    HELD_APPOINTMENT_INFO = "held_appointment_info"
     BOOK_APPOINTMENT = "book_appointment"
 
 
@@ -104,6 +104,10 @@ class AppointmentField(StrEnum):
     NOTES = "notes"
     REQUESTED_TIME_TEXT = "requested_time_text"
 
+class ConfirmationTopic(StrEnum):
+    HOLD_CONFIRMATION = "hold_confirmation"
+    SCHEDULE_CONFIRMATION = "schedule_confirmation"
+
 class RequiredAppointmentField(StrEnum):
     NAME = "name"
     PHONE = "phone"
@@ -112,15 +116,16 @@ class RequiredAppointmentField(StrEnum):
 
 class DirectiveKind(StrEnum):
     REQUEST_MISSING_INFO = "request_missing_info"
-    REQUEST_HOLD_CONFIRMATION = "request_confirmation"
+    REQUEST_CONFIRMATION = "request_confirmation"
     INFORM_HELD = "inform_held"
     INFORM_SCHEDULED = "inform_scheduled"
 
 class AssistantDirective(TypedDict, total=False):
     field: AppointmentField | None
+    confirmation_topic: ConfirmationTopic | None
     kind: DirectiveKind
     priority: int
-    source: ExtractorNode
+    source: DirectiveSourceNode
 
 
 

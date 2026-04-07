@@ -5,7 +5,7 @@ from enum import StrEnum
 
 from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.types import CallState, AppointmentDraft, AppointmentField, AssistantDirective, DirectiveKind, \
-    ExtractorNode
+    DirectiveSourceNode
 
 
 def _is_missing(value: object) -> bool:
@@ -31,7 +31,7 @@ def _build_time_slot_directives(
                 "field": AppointmentField.REQUESTED_TIME_TEXT,
                 "kind": DirectiveKind.REQUEST_MISSING_INFO,
                 "priority": 70,
-                "source": ExtractorNode.TIME_SLOT,
+                "source": DirectiveSourceNode.TIME_SLOT,
             }
         )
     return directives
