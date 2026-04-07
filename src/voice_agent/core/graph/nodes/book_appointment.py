@@ -16,7 +16,7 @@ from voice_agent.core.types import CallState, AppointmentView, AppointmentDraft,
 logger = logging.getLogger(__name__)
 
 
-def _build_basic_info_directives(
+def _build_book_appointment_directives(
     draft: AppointmentDraft,
 ) -> list[AssistantDirective]:
     directives = [
@@ -42,7 +42,7 @@ async def node_book_appointment(
     draft: AppointmentDraft = dict(state.get("appointment_draft") or {})
     draft["status"] = AppointmentStatus.SCHEDULED
 
-    directives = _build_basic_info_directives(draft)
+    directives = _build_book_appointment_directives(draft)
 
     local_state = { 'appointment_draft': draft, 'assistant_phase': AssistantPhase.POST_APPOINTMENT}
     set_node_data(local_state,'book_appointment',{'directives': directives})

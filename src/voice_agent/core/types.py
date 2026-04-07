@@ -7,6 +7,7 @@ from typing import TypedDict, NotRequired, Required
 from uuid import UUID
 
 
+
 def merge_node_data(
     left: dict[str, dict[str, Any]] | None,
     right: dict[str, dict[str, Any]] | None,
@@ -41,19 +42,27 @@ class UserIntent(StrEnum):
     CANCEL = "cancel"
     UNDECIDED = "undecided"
 
+class ConfirmationIntent(StrEnum):
+    ACCEPT = "accept"
+    REJECT = "reject"
+    UNCLEAR = "unclear"
+    NOT_SPECIFIED = 'not_specified'
+
 class ClinicIntent(StrEnum):
     HUMAN_HANDOFF = "human_handoff"
     HANGUP = "hangup"
     CONTINUE = "continue"
 
 class NextAction(StrEnum):
-    ASK_USER = "ask_user"
-    FINALIZE_APPOINTMENT = "finalize_appointment"
-    END_CALL = "end_call"
+    EXTRACT_DATETIME = 'extract_datetime'
+    CALL_OPERATOR = 'call_operator'
+    BOOK_APPOINTMENT = 'book_appointment'
+    OTHER = 'other'
 
 
 class AssistantPhase(StrEnum):
     COLLECTING_INFO = "collecting_info"
+    HOLDING_APPOINTMENT = "holding_appointment"
     FINALIZING_APPOINTMENT = "finalizing_appointment"
     POST_APPOINTMENT = "post_appointment"
     DONE = "done"
@@ -84,6 +93,7 @@ class TimeSlot:
 class ExtractorNode(StrEnum):
     BASIC_INFO = "basic_info"
     TIME_SLOT = "time_slot"
+    HOLD_APPOINTMENT = "hold_appointment"
     BOOK_APPOINTMENT = "book_appointment"
 
 
@@ -102,7 +112,8 @@ class RequiredAppointmentField(StrEnum):
 
 class DirectiveKind(StrEnum):
     REQUEST_MISSING_INFO = "request_missing_info"
-    REQUEST_CONFIRMATION = "request_confirmation"
+    REQUEST_HOLD_CONFIRMATION = "request_confirmation"
+    INFORM_HELD = "inform_held"
     INFORM_SCHEDULED = "inform_scheduled"
 
 class AssistantDirective(TypedDict, total=False):
@@ -121,6 +132,7 @@ class AppointmentDraft(TypedDict,total=False):
     requested_time_text: str | None  # raw user input (e.g. "tomorrow morning")
     requested_time_iso: str | None  # normalized ISO (e.g. "2026-04-05T09:00:00+08:00")
     last_offered_slot_start_at: str | None  # latest offered slot in ISO datetime
+    offered_time_confirmed: bool | None
     status: AppointmentStatus
 
 class SchedulePatch(TypedDict):
@@ -136,6 +148,7 @@ class AppointmentPatch(TypedDict, total=False):
     phone: str | None
     reason_for_visit: str | None
     requested_time_text: str | None
+    confirmation_intent: ConfirmationIntent | None
     notes: list[str]
 
 

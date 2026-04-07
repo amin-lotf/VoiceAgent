@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from langgraph.config import get_stream_writer
 
 from voice_agent.const import DEFAULT_TZ
-from voice_agent.core.types import CallEvent, CallState, AppointmentCreate
+from voice_agent.core.types import CallEvent, CallState
 
 
 def view_id(view: object) -> int | None:

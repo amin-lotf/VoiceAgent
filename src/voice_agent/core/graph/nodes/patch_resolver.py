@@ -7,13 +7,19 @@ from typing import Any
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
-from voice_agent.core.graph.nodes.utils import view_id
+from voice_agent.core.graph.nodes.utils import view_id, set_node_data
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.services.appointments import update_active_appointment_details
-from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch, AppointmentView
+from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch, AppointmentView, ConfirmationIntent
 
 logger = logging.getLogger(__name__)
 
+def _is_missing(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    return False
 
 def _is_not_specified(value: object) -> bool:
     if value is None:
@@ -25,6 +31,9 @@ def _is_not_specified(value: object) -> bool:
     }:
         return True
     return False
+
+def _is_confirmed(intent: ConfirmationIntent) -> bool:
+    return intent == ConfirmationIntent.ACCEPT
 
 
 def _combine_local(d: date, hour: int, minute: int, tz_info: ZoneInfo) -> datetime:
@@ -78,6 +87,10 @@ def apply_appointment_patch(
             updated.get("notes"),
             patch_notes,
         )
+
+    confirmation_intent = patch.get("confirmation_intent") or ConfirmationIntent.NOT_SPECIFIED
+    if _is_confirmed(confirmation_intent):
+        updated["offered_time_confirmed"] = True
     return updated
 
 
@@ -127,9 +140,15 @@ async def node_patch_resolver(
         tz_info=DEFAULT_TZ,
     )
 
+
+
     local_state: dict[str, Any] = {
         "appointment_draft": updated_appointment,
     }
+    datetime_updated = not _is_missing(updated_appointment.get("requested_time_text"))
+
+    if datetime_updated:
+        set_node_data(local_state, "patch_resolver", {"datetime_updated": datetime_updated})
 
     if not _has_updatable_core_fields(updated_appointment):
         logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)

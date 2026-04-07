@@ -46,6 +46,7 @@ def build_operator_prompt(state):
             "notes": [],
         },
         "datetime_detected": False,
+        "confirmation_intent": NOT_SPECIFIED,
     }
 
     all_rules = [

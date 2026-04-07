@@ -11,3 +11,4 @@ PENDING_Q_CONFIRM_PROFILE_CHANGE = "confirm_profile_change"
 PENDING_Q_EXISTING_SCHEDULED_APPOINTMENT = "confirm_existing_scheduled_appointment"
 PENDING_Q_POST_BOOKING_NOTES = "post_booking_notes"
 MAX_INFO_TIME_MENTIONS = 6
+NOT_SPECIFIED="not_specified"

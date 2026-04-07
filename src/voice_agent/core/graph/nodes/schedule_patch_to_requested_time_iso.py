@@ -165,6 +165,10 @@ async def node_schedule_patch_to_requested_time_iso(
     datetime_node = (state.get("node_data") or {}).get("datetime_extractor") or {}
     raw_patch = datetime_node.get("schedule_patch") or {}
 
+    if not raw_patch:
+        logger.warning("schedule_patch_to_requested_time_iso skipped: no schedule_patch")
+        return {}
+
     date_mode = str(raw_patch.get("date_mode", NOT_SPECIFIED))
     date_key = str(raw_patch.get("date_key", NOT_SPECIFIED))
     time_pref = str(raw_patch.get("time_pref", NOT_SPECIFIED))

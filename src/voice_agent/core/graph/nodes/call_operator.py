@@ -14,7 +14,7 @@ from voice_agent.core.prompts.call_operator import build_operator_prompt
 from voice_agent.core.types import (
     AppointmentField,
     CallState,
-    ClinicIntent,
+    ClinicIntent, ConfirmationIntent,
 )
 
 logger = logging.getLogger(__name__)
@@ -253,9 +253,16 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     datetime_detected = _coerce_bool(data.get("datetime_detected"), default=False)
     normalized_patch = _normalize_patch(data)
     user_text = (state.get("user_text") or "").strip()
-
+    confirmation_intent_raw = _normalize_patch_value(data.get("confirmation_intent"))
+    try:
+        confirmation_intent = ConfirmationIntent(confirmation_intent_raw)
+    except Exception:
+        logger.warning("call_operator: invalidconfirmation_intent=%s", confirmation_intent_raw)
+        confirmation_intent = ConfirmationIntent.UNCLEAR
     if datetime_detected and user_text:
         normalized_patch["requested_time_text"] = user_text
+
+    normalized_patch["confirmation_intent"] = confirmation_intent
 
     local_state["assistant_text"] = assistant_text
     local_state["clinic_intent"] = clinic_intent
