@@ -13,6 +13,7 @@ from voice_agent.core.graph.nodes.hold_appointment import node_hold_appointment
 from voice_agent.core.graph.nodes.load_or_create_appointment import node_load_or_create_appointment
 from voice_agent.core.graph.nodes.monitor_appointment_confirmation import node_monitor_appointment_confirmation
 from voice_agent.core.graph.nodes.monitor_datetime import node_monitor_datetime
+from voice_agent.core.graph.nodes.reset_gate import node_reset_gate
 from voice_agent.core.graph.nodes.schedule_patch_to_requested_time_iso import \
     node_schedule_patch_to_requested_time_iso
 from voice_agent.core.graph.nodes.patch_resolver import node_patch_resolver
@@ -42,6 +43,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("route_event", node_route_event)
     graph.add_node("on_call_started", node_on_call_started)
     graph.add_node("get_office_info", node_office_info)
+    graph.add_node("reset_gate", node_reset_gate)
     graph.add_node("planner", node_planner)
     graph.add_node("directive_prompt_builder", node_directive_prompt_builder)
     graph.add_node("call_operator", node_call_operator)
@@ -62,6 +64,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
     graph.add_node("finalize_response", node_finalize_response)
+    graph.add_node("monitor_call", lambda state: state)
     graph.add_edge(START, "route_event")
     graph.add_conditional_edges(
         "route_event",
@@ -117,24 +120,11 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_edge('time_slot', 'fields_output_gate')
 
 
-    def _after_fields_output_gate(state: CallState):
-        assistant_phase = state.get("assistant_phase")
-        if assistant_phase == AssistantPhase.POST_APPOINTMENT:
-            return 'finalize_response'
-        return 'verify_appointment_info'
-
-    graph.add_conditional_edges('fields_output_gate', _after_fields_output_gate, {
-        'verify_appointment_info': 'verify_appointment_info',
-        'finalize_response': 'finalize_response',
-    }
-                                )
-
-
-
+    graph.add_edge('fields_output_gate', 'verify_appointment_info')
 
     def _after_verify_appointment_info(state: CallState):
-        assistant_phase = state.get("assistant_phase")
-        if assistant_phase == AssistantPhase.FINALIZING_APPOINTMENT:
+        next_action = state.get("next_action")
+        if next_action ==NextAction.HOLD_APPOINTMENT:
             return 'datetime_extractor'
         return 'finalize_response'
 
@@ -163,11 +153,11 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     def _after_held_appointment_info(state: CallState):
         next_action = state.get("next_action")
         if next_action==NextAction.CALL_OPERATOR:
-            return 'planner'
+            return 'finalize_response'
         return 'monitor_appointment_confirmation'
     graph.add_conditional_edges('held_appointment_info', _after_held_appointment_info, {
-        'planner': 'planner',
         'monitor_appointment_confirmation': 'monitor_appointment_confirmation',
+        'finalize_response': 'finalize_response',
     })
 
     def _after_monitor_appointment_confirmation(state: CallState):
@@ -181,9 +171,26 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     })
 
     # graph.add_edge('held_appointment_info', 'book_appointment')
-    graph.add_edge('book_appointment', 'planner')
+    graph.add_edge('book_appointment', 'finalize_response')
 
-    graph.add_conditional_edges("finalize_response",
+    # graph.add_edge('finalize_response', 'monitor_call')
+
+    def _after_finalize_response(state: CallState):
+        next_action = state.get("next_action")
+        if next_action == NextAction.CALL_OPERATOR:
+            return 'reset_gate'
+        return 'monitor_call'
+
+
+
+    graph.add_conditional_edges('finalize_response', _after_finalize_response, {
+        'reset_gate': 'reset_gate',
+        'monitor_call': 'monitor_call',
+    })
+
+    graph.add_edge('reset_gate', 'planner')
+
+    graph.add_conditional_edges("monitor_call",
                                 lambda state: 'end_call' if bool(state.get("end_call")) else 'keep_call',
                                 {"end_call": 'on_call_ended', 'keep_call': END},
                                 )

@@ -17,7 +17,7 @@ from voice_agent.core.types import (
     CallState,
     ChunkKind,
     EngineChunk,
-    RunResult,
+    RunResult, NextAction, AssistantPhase,
 )
 
 logger = logging.getLogger(__name__)
@@ -168,6 +168,7 @@ class InterviewEngine:
             state = {
                 "call_id": call_id,
                 "phase": CallPhase.GREETING,
+                "assistant_phase":AssistantPhase.COLLECTING_INFO,
                 "messages": [],
                 "assistant_text": "",
                 "assistant_streamed": False,
@@ -233,6 +234,7 @@ class InterviewEngine:
             state["event"] = event
             state["user_text"] = user_text
             state["meta"] = meta or {}
+            state["next_action"] = NextAction.OTHER
 
             control = RunControl(
                 set_interruptible=lambda value: self._set_active_interruptible(call_id, value)

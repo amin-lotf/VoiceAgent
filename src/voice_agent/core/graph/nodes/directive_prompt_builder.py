@@ -113,6 +113,8 @@ async def node_directive_prompt_builder(state: CallState):
 
     rules = confirmation_rules + informative_rules + field_rules
 
+    logger.warning(f"directive_prompt_builder: state: {state}")
+
     return {
         "node_data": {
             "directive_prompt_builder": {

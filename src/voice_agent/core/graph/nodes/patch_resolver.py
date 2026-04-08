@@ -140,15 +140,12 @@ async def node_patch_resolver(
         tz_info=DEFAULT_TZ,
     )
 
-
-
     local_state: dict[str, Any] = {
         "appointment_draft": updated_appointment,
     }
-    datetime_updated = not _is_missing(updated_appointment.get("requested_time_text"))
+    datetime_updated = not _is_missing(appointment_patch.get("requested_time_text"))
 
-    if datetime_updated:
-        set_node_data(local_state, "patch_resolver", {"datetime_updated": datetime_updated})
+    set_node_data(local_state, "patch_resolver", {"datetime_updated": datetime_updated})
 
     if not _has_updatable_core_fields(updated_appointment):
         logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)
@@ -171,5 +168,6 @@ async def node_patch_resolver(
     except Exception:
         logger.exception("Failed to sync appointment details to DB")
 
-    logger.warning("appointment_draft: %s", updated_appointment)
+    logger.warning("======\n patch_resolver: local state: %s \n ======", local_state)
+    logger.warning("======\n patch_resolver: state: %s \n ======", state)
     return local_state

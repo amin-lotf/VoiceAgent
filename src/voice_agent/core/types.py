@@ -14,8 +14,11 @@ def merge_node_data(
 ) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = deepcopy(left or {})
     for node_name, payload in (right or {}).items():
-        out.setdefault(node_name, {})
-        out[node_name].update(payload or {})
+        if payload == {}:
+            out[node_name] = {}
+        else:
+            out.setdefault(node_name, {})
+            out[node_name].update(payload or {})
     return out
 
 
@@ -55,6 +58,7 @@ class ClinicIntent(StrEnum):
 
 class NextAction(StrEnum):
     EXTRACT_DATETIME = 'extract_datetime'
+    HOLD_APPOINTMENT = 'hold_appointment'
     CALL_OPERATOR = 'call_operator'
     BOOK_APPOINTMENT = 'book_appointment'
     OTHER = 'other'

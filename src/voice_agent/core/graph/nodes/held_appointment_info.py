@@ -50,5 +50,5 @@ async def node_held_appointment_info(
         set_node_data(local_state, 'held_appointment_info', {'directives': directives})
         set_node_data(local_state, 'held_appointment_info', {"exclusive_directives": True})
 
-    logger.warning(f'=======\nheld_appointment_info: {local_state}\n=======')
+    logger.warning(f'=======\nlocal state: {local_state}\n=======')
     return local_state

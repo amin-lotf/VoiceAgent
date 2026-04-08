@@ -100,7 +100,7 @@ async def node_datetime_extractor(
         tz_info=tz_info,
     )
 
-    logger.info("datetime_extractor input requested_time_text=%r", requested_time_text)
+    logger.warning("datetime_extractor input requested_time_text=%r", requested_time_text)
     start_time = time.perf_counter()
     end_time: float | None = None
     local_state = {}

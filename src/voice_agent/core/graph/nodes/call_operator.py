@@ -257,7 +257,7 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     try:
         confirmation_intent = ConfirmationIntent(confirmation_intent_raw)
     except Exception:
-        logger.warning("call_operator: invalidconfirmation_intent=%s", confirmation_intent_raw)
+        logger.warning("call_operator: invalid confirmation_intent=%s", confirmation_intent_raw)
         confirmation_intent = ConfirmationIntent.UNCLEAR
     if datetime_detected and user_text:
         normalized_patch["requested_time_text"] = user_text

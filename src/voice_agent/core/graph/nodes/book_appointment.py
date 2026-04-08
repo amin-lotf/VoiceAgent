@@ -11,7 +11,7 @@ from voice_agent.core.services.appointments import (
     cancel_appointment,
 )
 from voice_agent.core.types import CallState, AppointmentView, AppointmentDraft, AppointmentStatus, DirectiveKind, \
-    DirectiveSourceNode, AssistantPhase, AppointmentField, AssistantDirective
+    DirectiveSourceNode, AssistantPhase, AppointmentField, AssistantDirective, NextAction
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,11 @@ async def node_book_appointment(
 
     directives = _build_book_appointment_directives(draft)
 
-    local_state = { 'appointment_draft': draft, 'assistant_phase': AssistantPhase.POST_APPOINTMENT}
+    local_state = {
+        'appointment_draft': draft,
+        'assistant_phase': AssistantPhase.POST_APPOINTMENT,
+        'next_action': NextAction.CALL_OPERATOR
+    }
     set_node_data(local_state,'book_appointment',{'directives': directives})
     set_node_data(local_state,'book_appointment',{"exclusive_directives": True})
 

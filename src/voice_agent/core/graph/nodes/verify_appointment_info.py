@@ -1,6 +1,6 @@
 from typing import Any
 from voice_agent.core.types import CallState, AppointmentDraft, AssistantPhase, \
-    RequiredAppointmentField
+    RequiredAppointmentField, NextAction
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,9 +21,11 @@ async def node_verify_appointment_info(state: CallState) -> dict[str, Any]:
     draft: AppointmentDraft = state.get("appointment_draft", {})
     local_state ={}
     if _is_draft_complete(draft):
-        local_state['assistant_phase'] = AssistantPhase.FINALIZING_APPOINTMENT
+        local_state['assistant_phase'] = AssistantPhase.HOLDING_APPOINTMENT
+        local_state['next_action'] = NextAction.HOLD_APPOINTMENT
         logger.warning('verify_appointment_info: appointment is complete, moving to finalize_response')
     else:
+        local_state['next_action'] = NextAction.OTHER
         logger.warning('verify_appointment_info: appointment is incomplete, continuing to collect information')
 
     return local_state

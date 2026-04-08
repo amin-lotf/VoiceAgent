@@ -25,6 +25,9 @@ def _get_recent_messages(state: CallState, limit: int = 8) -> list[dict]:
         return []
     return messages[-limit:]
 
+def _extend_section(rules: list[str], title: str, items: list[str]) -> None:
+    rules.append(f"[{title}]")
+    rules.extend(items)
 
 def build_operator_prompt(state):
     node_data = state.get("node_data") or {}
@@ -48,15 +51,15 @@ def build_operator_prompt(state):
         "datetime_detected": False,
         "confirmation_intent": NOT_SPECIFIED,
     }
+    all_rules=[]
+    _extend_section(all_rules, "Global operator rules", GLOBAL_OPERATOR_RULES)
+    _extend_section(all_rules, "Clinic intent rules", CLINIC_INTENT_RULES)
+    _extend_section(all_rules, "Datetime rules", DATETIME_RULES)
+    _extend_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
+    _extend_section(all_rules, "Directive prompt rules", directive_prompts)
+    _extend_section(all_rules, "Confirmation intent rules", CONFIRMATION_INTENT_RULES)
+    _extend_section(all_rules, "JSON rules", JSON_RULES)
 
-    all_rules = [
-        *GLOBAL_OPERATOR_RULES,
-        *CLINIC_INTENT_RULES,
-        *DATETIME_RULES,
-        *OFFICE_INFO_RULES,
-        *directive_prompts,
-        *JSON_RULES,
-    ]
 
     for field_rules in PATCH_FIELD_RULES.values():
         all_rules.extend(field_rules)

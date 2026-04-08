@@ -1,17 +1,28 @@
 from voice_agent.const import NOT_SPECIFIED
-from voice_agent.core.types import AppointmentField, DirectiveKind, ConfirmationTopic
+from voice_agent.core.types import AppointmentField, DirectiveKind, ConfirmationTopic, ConfirmationIntent
 
 GLOBAL_OPERATOR_RULES = [
     "Write the spoken reply first, then the JSON sentinel, then one valid JSON.",
     "The spoken reply must sound natural and suitable for a phone call.",
     "Keep responses concise.",
     "Ask at most one question.",
-    "Do not combine multiple questions into one."
+    "Do not combine multiple questions into one.",
     "Only ask a question when the current rules explicitly require or allow that question.",
     "Do not invent new questions, new fields, or new steps that are not explicitly requested by the current rules.",
     "If no rule explicitly tells you to ask a question, do not ask one.",
     "When no question is authorized by the current rules, give a short waiting/transition reply such as 'One moment please.' or 'Let me check that for you.'",
     "Do not mention internal logic, JSON, or system behavior.",
+]
+
+CONFIRMATION_INTENT_RULES = [
+    f'Allowed confirmation_intent: "{ConfirmationIntent.ACCEPT}", "{ConfirmationIntent.REJECT}", "{ConfirmationIntent.UNCLEAR}", "{ConfirmationIntent.NOT_SPECIFIED}".',
+    f'Set confirmation_intent to "{ConfirmationIntent.NOT_SPECIFIED}" when there is no active confirmation request in the current turn.',
+    f'Set confirmation_intent to "{ConfirmationIntent.ACCEPT}" only when the caller clearly accepts, agrees, confirms, or says the offered option works.',
+    f'Set confirmation_intent to "{ConfirmationIntent.REJECT}" only when the caller clearly rejects, declines, says it does not work, or asks for another option.',
+    f'Set confirmation_intent to "{ConfirmationIntent.UNCLEAR}" when the caller responds to the confirmation request but the meaning is ambiguous, incomplete, or cannot be classified as accept or reject.',
+    "Use only the latest caller message.",
+    "Do not infer confirmation from silence or from unrelated polite phrases.",
+    "If the caller rejects and also provides a replacement date or time, still set confirmation_intent to reject.",
 ]
 
 CLINIC_INTENT_RULES = [
