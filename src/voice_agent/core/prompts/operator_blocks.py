@@ -23,9 +23,13 @@ PRE_BOOKING_NO_QUESTION_RULES = [
 
 POST_BOOKING_NO_QUESTION_RULES = [
     "If no question is authorized by the current rules, do not ask one.",
-    "If the appointment is already completed and no further action is needed, give a brief closing reply.",
-    "Examples: 'You're all set.' 'If there's nothing else, we look forward to seeing you then.' 'Take care, goodbye.'",
-    "Do not use a waiting or transition reply in this case.",
+    "If the appointment has just been confirmed or booked in the immediately previous assistant turn, do not repeat the booking details unless a current rule explicitly tells you to restate them.",
+    "Do not restate the date, time, or caller name if they were already stated in the recent assistant message.",
+    "Do not announce the booking again with phrases like 'All set—your appointment is booked...' if that was already said in the recent context.",
+    "After booking, only say the minimum needed for the current step.",
+    "If another directive still requires a question and answer is not given yet, ask only that question and nothing else.",
+    "If no further action is needed, give a short closing reply instead of repeating the appointment summary.",
+    "Examples:  'If there's nothing else, we look forward to seeing you then.' 'Take care, goodbye.'",
 ]
 
 CONFIRMATION_INTENT_RULES = [
@@ -64,20 +68,20 @@ OFFICE_INFO_RULES = [
 REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     AppointmentField.NAME: [
         "The caller's name is still missing.",
-        "Ask for the caller's name naturally.",
+        "Ask for the caller's name naturally if the caller has not provided it yet in the current text.",
         "Do not ask for middle name or family name separately.",
         "Do not ask for spelling unless the name is unclear.",
         "Once the caller gives a name, extract it and stop asking for it.",
     ],
     AppointmentField.PHONE: [
         "The phone number is still missing.",
-        "Ask for the phone number naturally.",
+        "Ask for the phone number naturally if the caller has not provided it yet in the current text.",
         "Do not ask for country code unless needed.",
         "Once the caller gives a phone number, extract it and stop asking for it.",
     ],
     AppointmentField.REASON_FOR_VISIT: [
         "The reason for visit is still missing.",
-        "Ask for the reason for visit naturally.",
+        "Ask for the reason for visit naturally if the caller has not provided it yet in the current text.",
         "Do not suggest reasons.",
         "Do not turn it into multiple-choice.",
         "Accept brief answers.",
@@ -91,7 +95,7 @@ REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     ],
     AppointmentField.REQUESTED_TIME_TEXT: [
         "The requested appointment time is still missing.",
-        "Ask which day the caller wants to schedule the appointment.",
+        "Ask which day the caller wants to schedule the appointment if the caller has not provided it yet in the current text.",
         "Do not suggest specific times or options.",
         "Do not ask for exact time unless the caller already provides it.",
         "Accept natural phrases like 'tomorrow', 'next Monday', or 'this weekend'.",
@@ -131,7 +135,6 @@ CONFIRMATION_RULES: dict[ConfirmationTopic, list[str]] = {
         "Do not mention that the slot is held or reserved.",
     ]
 }
-
 
 INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
     DirectiveKind.INFORM_SCHEDULED: [
