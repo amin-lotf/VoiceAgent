@@ -1,8 +1,28 @@
 from langchain_core.messages import SystemMessage, HumanMessage
 from voice_agent.const import JSON_SENTINEL
 from voice_agent.core.prompts.operator_blocks import *
-from voice_agent.core.types import CallState
+from voice_agent.core.types import CallState, AppointmentStatus
 
+
+def _build_no_question_rules(state: CallState) -> list[str]:
+    directives = state.get("directives") or []
+    phase = state.get("assistant_phase")
+    draft = state.get("appointment_draft") or {}
+
+    has_open_question = any(
+        d.get("kind") in {
+            DirectiveKind.REQUEST_MISSING_INFO,
+            DirectiveKind.REQUEST_CONFIRMATION,
+        }
+        for d in directives
+    )
+
+    appointment_complete = bool(draft.get("status") == AppointmentStatus.SCHEDULED)
+
+    if not has_open_question and appointment_complete:
+        return POST_BOOKING_NO_QUESTION_RULES
+
+    return PRE_BOOKING_NO_QUESTION_RULES
 
 def _format_messages(messages: list[dict]) -> str:
     if not messages:
@@ -51,8 +71,9 @@ def build_operator_prompt(state):
         "datetime_detected": False,
         "confirmation_intent": NOT_SPECIFIED,
     }
+    global_rules= GLOBAL_OPERATOR_RULES + _build_no_question_rules(state)
     all_rules=[]
-    _extend_section(all_rules, "Global operator rules", GLOBAL_OPERATOR_RULES)
+    _extend_section(all_rules, "Global operator rules", global_rules)
     _extend_section(all_rules, "Clinic intent rules", CLINIC_INTENT_RULES)
     _extend_section(all_rules, "Datetime rules", DATETIME_RULES)
     _extend_section(all_rules, "Office info rules", OFFICE_INFO_RULES)

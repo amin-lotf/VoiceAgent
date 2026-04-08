@@ -44,7 +44,7 @@ async def node_time_slot(state: CallState) -> dict[str, Any]:
 
     return {
         "node_data": {
-            "basic_info": {
+            "time_slot": {
                 "directives": directives,
             }
         }

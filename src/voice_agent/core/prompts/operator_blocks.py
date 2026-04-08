@@ -14,6 +14,20 @@ GLOBAL_OPERATOR_RULES = [
     "Do not mention internal logic, JSON, or system behavior.",
 ]
 
+PRE_BOOKING_NO_QUESTION_RULES = [
+    "If no question is authorized by the current rules, do not ask one.",
+    "Instead, give a brief transition reply while the call flow continues.",
+    "Examples: 'One moment please.' 'Let me check that for you.'",
+    "Do not close the conversation in this case.",
+]
+
+POST_BOOKING_NO_QUESTION_RULES = [
+    "If no question is authorized by the current rules, do not ask one.",
+    "If the appointment is already completed and no further action is needed, give a brief closing reply.",
+    "Examples: 'You're all set.' 'If there's nothing else, we look forward to seeing you then.' 'Take care, goodbye.'",
+    "Do not use a waiting or transition reply in this case.",
+]
+
 CONFIRMATION_INTENT_RULES = [
     f'Allowed confirmation_intent: "{ConfirmationIntent.ACCEPT}", "{ConfirmationIntent.REJECT}", "{ConfirmationIntent.UNCLEAR}", "{ConfirmationIntent.NOT_SPECIFIED}".',
     f'Set confirmation_intent to "{ConfirmationIntent.NOT_SPECIFIED}" when there is no active confirmation request in the current turn.',
