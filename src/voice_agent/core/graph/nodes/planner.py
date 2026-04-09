@@ -34,7 +34,5 @@ async def node_planner(state: CallState) -> dict:
     directives = collect_directives(state)
     local_state = {'directives': directives}
     reset_directive_node_data(local_state)
-    logger.warning(f"planner:directives: {directives}")
-    logger.warning(f"planner:state: {state}")
-    logger.warning(f"planner:local_state: {local_state}")
+    logger.warning(f"=====\nplanner:directives: {directives}\n=====")
     return local_state

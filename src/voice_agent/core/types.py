@@ -57,6 +57,7 @@ class ClinicIntent(StrEnum):
     CONTINUE = "continue"
 
 class NextAction(StrEnum):
+    ASK_USER= 'ask_user'
     EXTRACT_DATETIME = 'extract_datetime'
     HOLD_APPOINTMENT = 'hold_appointment'
     CALL_OPERATOR = 'call_operator'
@@ -95,6 +96,7 @@ class TimeSlot:
     end_at: datetime
 
 class DirectiveSourceNode(StrEnum):
+    USER_INTENT = "user_intent"
     BASIC_INFO = "basic_info"
     TIME_SLOT = "time_slot"
     HELD_APPOINTMENT_INFO = "held_appointment_info"
@@ -119,6 +121,7 @@ class RequiredAppointmentField(StrEnum):
     REQUESTED_TIME_TEXT = "requested_time_text"
 
 class DirectiveKind(StrEnum):
+    REQUEST_USER_INTENT = "request_intent"
     REQUEST_MISSING_INFO = "request_missing_info"
     REQUEST_CONFIRMATION = "request_confirmation"
     INFORM_HELD = "inform_held"

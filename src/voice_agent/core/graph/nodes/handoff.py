@@ -12,10 +12,7 @@ EMERGENCY_FALLBACK_MESSAGE = (
 
 
 def node_handoff_fallback(state: CallState) -> CallState:
-    if state.get('intent') == ClinicIntent.TRIAGE:
-        state["assistant_text"] = EMERGENCY_FALLBACK_MESSAGE
-    else:
-        state["assistant_text"] = "I Will have our staff call you back."
+    state["assistant_text"] = "I Will have our staff call you back."
     writer = get_stream_writer()
     if writer:
         for word in state["assistant_text"].split():

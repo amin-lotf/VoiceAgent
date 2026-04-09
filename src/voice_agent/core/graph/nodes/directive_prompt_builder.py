@@ -12,7 +12,7 @@ from voice_agent.core.prompts.operator_blocks import (
     PATCH_FIELD_RULES,
     REQUESTING_FIELD_RULES,
     EXISTING_FIELD_RULES,
-    INFORMATIVE_DIRECTIVE_RULES, CONFIRMATION_RULES,
+    INFORMATIVE_DIRECTIVE_RULES, CONFIRMATION_RULES, EXISTING_USER_INTENT_RULES, REQUESTING_USER_INTENT_RULES,
 )
 import logging
 
@@ -45,6 +45,22 @@ def _build_field_rules(
             if EXISTING_FIELD_RULES.get(field):
                 rules.extend(EXISTING_FIELD_RULES[field])
 
+    return rules
+
+def _build_intent_rules(
+    state: CallState,
+    directives: list[AssistantDirective],
+) -> list[str]:
+    user_intent = state.get("user_intent")
+    rules: list[str] = []
+
+    for directive in directives:
+        if directive.get('kind') == DirectiveKind.REQUEST_USER_INTENT:
+            if _has_value(user_intent):
+                rules.extend(EXISTING_USER_INTENT_RULES)
+            else:
+                rules.extend(REQUESTING_USER_INTENT_RULES)
+            return rules
     return rules
 
 def _build_confirmation_rules(
@@ -106,15 +122,13 @@ def _build_informative_rules(
 
 async def node_directive_prompt_builder(state: CallState):
     directives = state.get("directives") or []
-    logger.warning(f"directives: {directives}")
 
     field_rules = _build_field_rules(state, directives)
     confirmation_rules = _build_confirmation_rules(state, directives)
     informative_rules = _build_informative_rules(state, directives)
+    intent_rules = _build_intent_rules(state, directives)
+    rules = intent_rules+confirmation_rules + informative_rules + field_rules
 
-    rules = confirmation_rules + informative_rules + field_rules
-
-    logger.warning(f"directive_prompt_builder: state: {state}")
 
     return {
         "node_data": {

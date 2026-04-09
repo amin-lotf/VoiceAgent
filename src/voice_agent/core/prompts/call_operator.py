@@ -61,6 +61,7 @@ def build_operator_prompt(state):
 
     output_schema = {
         "clinic_intent": "continue",
+        "user_intent": NOT_SPECIFIED,
         "end_call": False,
         "patch": {
             "name": NOT_SPECIFIED,
@@ -79,6 +80,9 @@ def build_operator_prompt(state):
     _extend_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
     _extend_section(all_rules, "Directive prompt rules", directive_prompts)
     _extend_section(all_rules, "Confirmation intent rules", CONFIRMATION_INTENT_RULES)
+    _extend_section(all_rules, "User intent rules", USER_INTENT_RULES)
+    _extend_section(all_rules, "Out of scope rules", OUT_OF_SCOPE_RULES)
+    _extend_section(all_rules, "Capability explanation rules", CAPABILITY_EXPLANATION_RULES)
     _extend_section(all_rules, "JSON rules", JSON_RULES)
 
 

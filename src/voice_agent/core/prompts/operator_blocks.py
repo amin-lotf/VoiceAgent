@@ -32,6 +32,16 @@ POST_BOOKING_NO_QUESTION_RULES = [
     "Examples:  'If there's nothing else, we look forward to seeing you then.' 'Take care, goodbye.'",
 ]
 
+USER_INTENT_RULES = [
+    'Allowed user_intent: "book_appointment", "reschedule", "cancel", "not_specified".',
+    'Use "book_appointment" when the caller clearly wants to make or schedule a new appointment.',
+    'Use "reschedule" when the caller clearly wants to move or change an existing appointment.',
+    'Use "cancel" when the caller clearly wants to cancel an existing appointment.',
+    'Use "not_specified" when the caller does not clearly state one of those intentions in the current text.',
+    "Do not guess.",
+    "Do not infer a new intent just because the conversation is ongoing.",
+]
+
 CONFIRMATION_INTENT_RULES = [
     f'Allowed confirmation_intent: "{ConfirmationIntent.ACCEPT}", "{ConfirmationIntent.REJECT}", "{ConfirmationIntent.UNCLEAR}", "{ConfirmationIntent.NOT_SPECIFIED}".',
     f'Set confirmation_intent to "{ConfirmationIntent.NOT_SPECIFIED}" when there is no active confirmation request in the current turn.',
@@ -160,6 +170,35 @@ INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
         "Keep the wording short and natural.",
     ],
 }
+
+REQUESTING_USER_INTENT_RULES = [
+    "The caller's appointment intent is still missing.",
+    "If the caller has not stated whether they want to book, reschedule, or cancel in the current text, ask a neutral help question.",
+    'Use a general prompt such as "How can I help you today?" or "How can I help?"',
+    "Do not proactively list booking, rescheduling, or canceling unless the caller asks what you can help with.",
+    "Do not assume the caller wants a new appointment unless they say so.",
+    "If the caller clearly states they want to book, reschedule, or cancel, extract that intent and do not ask another intent question in the same turn.",
+]
+
+EXISTING_USER_INTENT_RULES = [
+    "The caller's appointment intent is already known.",
+    "Do not ask how you can help again once the caller's intent is clear.",
+    "Keep the current intent unless the caller explicitly changes it.",
+    "If the caller clearly changes from booking to rescheduling or canceling, extract and replace the existing intent.",
+]
+
+OUT_OF_SCOPE_RULES = [
+    "If the caller asks for something unrelated to booking, rescheduling, or canceling an appointment, respond briefly and politely.",
+    "Say that you can only help with appointment-related requests.",
+    "Do not list all supported actions unless the caller asks what you can help with.",
+    'Example style: "Sorry, I can only help with appointments."',
+]
+
+CAPABILITY_EXPLANATION_RULES = [
+    "Only explain supported actions when the caller explicitly asks what you can help with or what you do.",
+    "In that case, say briefly that you can help book, reschedule, or cancel appointments.",
+    "Keep it short and natural.",
+]
 
 PATCH_FIELD_RULES = {
     AppointmentField.NAME: [

@@ -22,6 +22,7 @@ from voice_agent.core.graph.nodes.planner import node_planner
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
 from voice_agent.core.graph.nodes.datetime_extractor import  node_datetime_extractor
 from voice_agent.core.graph.nodes.time_slot import node_time_slot
+from voice_agent.core.graph.nodes.user_intent import node_user_intent
 from voice_agent.core.graph.nodes.verify_appointment_info import node_verify_appointment_info
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase, NextAction
 from voice_agent.core.graph.nodes.greeting import node_on_call_started
@@ -50,6 +51,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node('patch_resolver', partial(node_patch_resolver, sessionmaker=sessionmaker))
     graph.add_node('fields_input_gate', lambda state: state)
     graph.add_node('fields_output_gate', lambda state: state)
+    graph.add_node("user_intent", node_user_intent)
     graph.add_node("basic_info", node_basic_info)
     graph.add_node("time_slot", node_time_slot)
     graph.add_node("verify_appointment_info", node_verify_appointment_info)
@@ -78,7 +80,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         },
     )
 
-    graph.add_edge("on_call_started", 'fields_input_gate')
+    graph.add_edge("on_call_started", 'user_intent')
     graph.add_edge("handle_hangup", "finalize_response")
     graph.add_edge("handoff_fallback", 'finalize_response')
     graph.add_edge('get_office_info', 'planner')
@@ -104,16 +106,27 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     def _after_patch_resolver(state: CallState):
         assistant_phase = state.get("assistant_phase")
         if assistant_phase == AssistantPhase.COLLECTING_INFO:
-            return 'fields_input_gate'
+            return 'user_intent'
         return 'monitor_datetime'
 
 
     graph.add_conditional_edges('patch_resolver', _after_patch_resolver, {
         'monitor_datetime': 'monitor_datetime',
+        'user_intent': 'user_intent',
+    })
+
+    def _after_user_intent(state:CallState):
+        next_action = state.get("next_action")
+        if next_action == NextAction.ASK_USER:
+            return 'finalize_response'
+        return 'fields_input_gate'
+
+    graph.add_conditional_edges('user_intent', _after_user_intent, {
+        'finalize_response': 'finalize_response',
         'fields_input_gate': 'fields_input_gate',
     })
 
-    # graph.add_edge('patch_resolver', 'fields_input_gate')
+    # graph.add_edge('user_intent', 'fields_input_gate')
     graph.add_edge('fields_input_gate', 'basic_info')
     graph.add_edge('fields_input_gate', 'time_slot')
     graph.add_edge('basic_info', 'fields_output_gate')
