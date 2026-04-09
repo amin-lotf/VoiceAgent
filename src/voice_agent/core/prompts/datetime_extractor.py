@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
-from voice_agent.core.types import AppointmentDraft
+from voice_agent.core.types import AppointmentDraft, CallState
 
 
 def _pretty_json(data: object) -> str:
@@ -47,14 +47,17 @@ def build_next_14_days(now: datetime, tz_info: ZoneInfo = DEFAULT_TZ) -> list[di
 
 def build_time_resolution_prompt(
     *,
-    appointment: AppointmentDraft,
+    state: CallState,
     now: datetime,
     tz_info: ZoneInfo = DEFAULT_TZ,
 ) -> list:
+    appointment: AppointmentDraft = dict(state.get("appointment_draft") or {})
     requested_time_text = (appointment.get("requested_time_text") or "").strip()
     last_offered_slot_start_at = (appointment.get("last_offered_slot_start_at") or "").strip()
 
     next_14_days = build_next_14_days(now=now, tz_info=tz_info)
+    prev_user_text=state.get("prev_user_text") or 'none'
+    prev_assistant_text=state.get("prev_assistant_text") or 'none'
 
     output_schema = {
         "schedule_patch": {
@@ -250,6 +253,7 @@ Output:
         [
             f"Current clinic local time: {now.astimezone(tz_info).isoformat()}",
             "",
+            f'Assistant text already produced this turn: "{prev_assistant_text}"\n'
             f"requested_time_text: {requested_time_text or 'none'}",
             f"last_offered_slot_start_at: {last_offered_slot_start_at or 'none'}",
             "",

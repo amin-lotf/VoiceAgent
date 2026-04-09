@@ -95,7 +95,7 @@ async def node_datetime_extractor(
         return {}
 
     messages = build_time_resolution_prompt(
-        appointment=appointment,
+        state=state,
         now=now,
         tz_info=tz_info,
     )

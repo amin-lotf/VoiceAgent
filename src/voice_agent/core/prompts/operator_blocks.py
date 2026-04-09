@@ -95,11 +95,14 @@ REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     ],
     AppointmentField.REQUESTED_TIME_TEXT: [
         "The requested appointment time is still missing.",
-        "Ask which day the caller wants to schedule the appointment if the caller has not provided it yet in the current text.",
+        "Ask which day the caller wants to schedule the appointment only if the caller has not provided any day or time expression in the current text.",
         "Do not suggest specific times or options.",
-        "Do not ask for exact time unless the caller already provides it.",
-        "Accept natural phrases like 'tomorrow', 'next Monday', or 'this weekend'.",
-        "Once the caller provides a day or time expression, extract it and stop asking.",
+        "Do not ask for an exact clock time unless the caller already provides one.",
+        "Accept natural phrases like 'tomorrow', 'next Monday', 'this weekend', or 'morning'.",
+        "If the caller provides any day or time expression, extract it and stop asking for the requested time.",
+        "Do not confirm, approve, validate, or restate the requested time as available.",
+        "Do not say phrases like 'that works', 'perfect', 'okay for', or anything that sounds like the appointment time is confirmed.",
+        "After the caller provides a time expression, respond neutrally, for example by saying you will check availability.",
     ],
 }
 
@@ -132,6 +135,10 @@ CONFIRMATION_RULES: dict[ConfirmationTopic, list[str]] = {
         "Do not ask an open-ended scheduling question unless the caller has already rejected the offered slot.",
         "If the caller rejects the offered slot without giving a replacement date or time, ask which day or time would work better.",
         "If the caller rejects the offered slot and gives a replacement date or time, extract that new date or time and do not ask another question in the same turn.",
+        "If the caller rejects the offered slot and gives a replacement date or time, do not confirm, validate, or imply that the new time is available.",
+        "Do not propose a new slot in the same turn unless availability has already been explicitly provided by the system for that exact slot.",
+        "After a replacement date or time is provided, respond with a neutral transition such as 'Got it—one moment while I check that for you.'",
+        "Do not say phrases like 'that is available', 'that works', 'I can do that time', or 'does that work for you' before availability is checked.",
         "Do not mention that the slot is held or reserved.",
     ]
 }

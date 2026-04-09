@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from voice_agent.const import NOT_SPECIFIED
+from voice_agent.core.graph.utils import iso_to_human_readable
 from voice_agent.core.types import (
     CallState,
     AssistantDirective,
@@ -67,7 +68,7 @@ def _build_confirmation_rules(
             and _has_value(slot_iso)
     ):
         rules.append(
-            f'There is a slot available at "{slot_iso}".'
+            f'There is a slot available at "{iso_to_human_readable(str(slot_iso))}".'
         )
     return rules
 

@@ -1,7 +1,9 @@
 import asyncio
 from dataclasses import dataclass
-from typing import cast, Callable, Awaitable, TypeVar, Any
-
+from typing import  Callable, Awaitable, TypeVar, Any
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from voice_agent.const import DEFAULT_TZ
 T = TypeVar("T")
 
 
@@ -40,3 +42,36 @@ async def run_non_interruptible(
     finally:
         if control is not None:
             control.set_interruptible(True)
+
+
+
+
+
+
+def iso_to_human_readable(
+    iso_str: str,
+    *,
+    tz: ZoneInfo = DEFAULT_TZ,
+    include_weekday: bool = True,
+    include_time: bool = True,
+) -> str:
+    dt = datetime.fromisoformat(iso_str)
+
+    # Normalize timezone (important if DB stores mixed tz)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=tz)
+    else:
+        dt = dt.astimezone(tz)
+
+    parts = []
+
+    if include_weekday:
+        parts.append(dt.strftime("%A"))  # Monday
+
+    parts.append(dt.strftime("%B %-d"))  # April 13 (Linux/macOS)
+    # If on Windows use: "%B %d".lstrip("0")
+
+    if include_time:
+        parts.append(dt.strftime("%-I:%M %p"))  # 9:00 AM
+
+    return ", ".join(parts)
