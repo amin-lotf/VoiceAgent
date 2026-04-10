@@ -42,7 +42,7 @@ def stream_text_response( text: str) -> dict:
 
 
 def get_state_data(state: CallState, node: str) -> dict:
-    return state.get("node_data").get(node, {})
+    return state.get("node_data",{}).get(node, {})
 
 def set_node_data(state: dict, node: str,n_data:dict[str,Any]) -> None:
     state.setdefault('node_data', {})

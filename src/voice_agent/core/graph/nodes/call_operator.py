@@ -14,10 +14,25 @@ from voice_agent.core.prompts.call_operator import build_operator_prompt
 from voice_agent.core.types import (
     AppointmentField,
     CallState,
-    ClinicIntent, ConfirmationIntent,
+    ClinicIntent, ConfirmationIntent, UserIntent,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_user_intent(
+    previous_intent: UserIntent,
+    extracted_intent_raw: str | None,
+) -> UserIntent:
+    if extracted_intent_raw and extracted_intent_raw != NOT_SPECIFIED:
+        try:
+            return UserIntent(extracted_intent_raw)
+        except Exception:
+            logger.warning("Invalid extracted_intent=%s", extracted_intent_raw)
+            return UserIntent.UNDECIDED
+    if previous_intent and previous_intent != NOT_SPECIFIED:
+        return previous_intent
+    return UserIntent.UNDECIDED
 
 
 def _coerce_bool(value: Any, default: bool = False) -> bool:
@@ -249,6 +264,8 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         logger.warning("call_operator: invalid clinic_intent=%s", clinic_intent_raw)
         clinic_intent = ClinicIntent.CONTINUE
 
+
+
     end_call = _coerce_bool(data.get("end_call"), default=False)
     datetime_detected = _coerce_bool(data.get("datetime_detected"), default=False)
     normalized_patch = _normalize_patch(data)
@@ -263,6 +280,12 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         normalized_patch["requested_time_text"] = user_text
 
     normalized_patch["confirmation_intent"] = confirmation_intent
+
+    user_intent_raw = _normalize_patch_value(data.get("user_intent"))
+    previous_intent = state.get("user_intent") or UserIntent.UNDECIDED
+    user_intent = _resolve_user_intent(previous_intent, user_intent_raw)
+
+    normalized_patch["user_intent"] = user_intent
 
     local_state["assistant_text"] = assistant_text
     local_state["clinic_intent"] = clinic_intent

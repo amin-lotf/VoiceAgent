@@ -4,6 +4,7 @@ from typing import Any, TypedDict
 from enum import StrEnum
 
 from voice_agent.const import NOT_SPECIFIED
+from voice_agent.core.graph.nodes.utils import get_state_data, set_node_data
 from voice_agent.core.types import CallState, AppointmentDraft, AppointmentField, AssistantDirective, DirectiveKind, \
     DirectiveSourceNode, UserIntent, NextAction
 
@@ -41,11 +42,21 @@ async def node_user_intent(state: CallState) -> dict[str, Any]:
 
     directives = _build_user_intent_directives(user_intent)
     local_state = {}
-    if  directives:
+    if directives:
         local_state = {'next_action': NextAction.ASK_USER}
-    local_state["node_data"] = {
-        "user_intent": {
-            "directives": directives,
+    else:
+        patch_resolver = get_state_data(state, 'patch_resolver')
+        user_intent_updated = patch_resolver.get('user_intent_updated') or False
+        if user_intent_updated:
+            local_state = {'next_action': NextAction.CALL_OPERATOR}
+
+    set_node_data(
+        local_state,
+        "user_intent",
+        {
+            "user_intent": {
+                "directives": directives,
+            }
         }
-    }
+    )
     return local_state

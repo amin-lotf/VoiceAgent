@@ -25,7 +25,6 @@ async def node_verify_appointment_info(state: CallState) -> dict[str, Any]:
         local_state['next_action'] = NextAction.HOLD_APPOINTMENT
         logger.warning('verify_appointment_info: appointment is complete, moving to finalize_response')
     else:
-        local_state['next_action'] = NextAction.OTHER
         logger.warning('verify_appointment_info: appointment is incomplete, continuing to collect information')
 
     return local_state

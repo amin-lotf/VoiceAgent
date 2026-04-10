@@ -161,6 +161,7 @@ class AppointmentPatch(TypedDict, total=False):
     reason_for_visit: str | None
     requested_time_text: str | None
     confirmation_intent: ConfirmationIntent | None
+    user_intent: UserIntent | None
     notes: list[str]
 
 

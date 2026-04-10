@@ -7,6 +7,7 @@ GLOBAL_OPERATOR_RULES = [
     "Keep responses concise.",
     "Ask at most one question.",
     "Do not combine multiple questions into one.",
+    "Do not invent questions solely based on the output schema.",
     "Only ask a question when the current rules explicitly require or allow that question.",
     "Do not invent new questions, new fields, or new steps that are not explicitly requested by the current rules.",
     "If no rule explicitly tells you to ask a question, do not ask one.",
@@ -55,6 +56,7 @@ CONFIRMATION_INTENT_RULES = [
 
 CLINIC_INTENT_RULES = [
     'Allowed clinic_intent: "continue", "hangup", "human_handoff".',
+    f"user_intent: only update if explicitly provided, else {NOT_SPECIFIED}",
     'Use "hangup" if the caller clearly ends the call.',
     'Use "human_handoff" for human requests or urgent situations.',
     'Use "continue" otherwise.',
@@ -177,7 +179,7 @@ REQUESTING_USER_INTENT_RULES = [
     'Use a general prompt such as "How can I help you today?" or "How can I help?"',
     "Do not proactively list booking, rescheduling, or canceling unless the caller asks what you can help with.",
     "Do not assume the caller wants a new appointment unless they say so.",
-    "If the caller clearly states they want to book, reschedule, or cancel, extract that intent and do not ask another intent question in the same turn.",
+    "If the caller clearly states they want to book, reschedule, or cancel, extract that intent, do not ask another intent question in the same turn and give a short waiting/transition reply such as 'One moment please..",
 ]
 
 EXISTING_USER_INTENT_RULES = [

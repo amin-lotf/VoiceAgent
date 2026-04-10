@@ -10,7 +10,8 @@ from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.nodes.utils import view_id, set_node_data
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.services.appointments import update_active_appointment_details
-from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch, AppointmentView, ConfirmationIntent
+from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch, AppointmentView, ConfirmationIntent, \
+    UserIntent
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,9 @@ def apply_appointment_patch(
     confirmation_intent = patch.get("confirmation_intent") or ConfirmationIntent.NOT_SPECIFIED
     if _is_confirmed(confirmation_intent):
         updated["offered_time_confirmed"] = True
+
+
+
     return updated
 
 
@@ -140,9 +144,17 @@ async def node_patch_resolver(
         tz_info=DEFAULT_TZ,
     )
 
+
     local_state: dict[str, Any] = {
         "appointment_draft": updated_appointment,
     }
+    user_intent = appointment_patch.get("user_intent")
+    intent_updated = False
+    if user_intent and user_intent != UserIntent.UNDECIDED and user_intent != state.get("user_intent"):
+        local_state["user_intent"] = user_intent
+        intent_updated = True
+    set_node_data(local_state, "patch_resolver", {"user_intent_updated": intent_updated})
+
     datetime_updated = not _is_missing(appointment_patch.get("requested_time_text"))
 
     set_node_data(local_state, "patch_resolver", {"datetime_updated": datetime_updated})

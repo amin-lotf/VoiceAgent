@@ -74,16 +74,16 @@ def build_operator_prompt(state):
     }
     global_rules= GLOBAL_OPERATOR_RULES + _build_no_question_rules(state)
     all_rules=[]
-    _extend_section(all_rules, "Global operator rules", global_rules)
-    _extend_section(all_rules, "Clinic intent rules", CLINIC_INTENT_RULES)
-    _extend_section(all_rules, "Datetime rules", DATETIME_RULES)
-    _extend_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
+    _extend_section(all_rules, "Global operator", global_rules)
+    _extend_section(all_rules, "Clinic intent", CLINIC_INTENT_RULES)
+    _extend_section(all_rules, "Datetime", DATETIME_RULES)
+    _extend_section(all_rules, "Office info", OFFICE_INFO_RULES)
     _extend_section(all_rules, "Directive prompt rules", directive_prompts)
-    _extend_section(all_rules, "Confirmation intent rules", CONFIRMATION_INTENT_RULES)
-    _extend_section(all_rules, "User intent rules", USER_INTENT_RULES)
-    _extend_section(all_rules, "Out of scope rules", OUT_OF_SCOPE_RULES)
-    _extend_section(all_rules, "Capability explanation rules", CAPABILITY_EXPLANATION_RULES)
-    _extend_section(all_rules, "JSON rules", JSON_RULES)
+    _extend_section(all_rules, "Confirmation intent ", CONFIRMATION_INTENT_RULES)
+    _extend_section(all_rules, "User intent", USER_INTENT_RULES)
+    _extend_section(all_rules, "Out of scope", OUT_OF_SCOPE_RULES)
+    _extend_section(all_rules, "Capability explanation", CAPABILITY_EXPLANATION_RULES)
+    _extend_section(all_rules, "JSON", JSON_RULES)
 
 
     for field_rules in PATCH_FIELD_RULES.values():
