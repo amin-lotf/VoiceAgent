@@ -57,10 +57,92 @@ class InterviewEngine:
         self._active: dict[str, ActiveRun] = {}
 
         # Runtime-only pending user text accumulated during non-interruptible sections.
-        self._pending_texts: dict[str, list[str]] = {}
+        self._pending_texts: dict[str, str] = {}
 
         # Runtime-only latest deferred event/meta to use when draining buffered text.
         self._pending_event_meta: dict[str, tuple[CallEvent, dict[str, Any]]] = {}
+
+    def _append_or_replace_message(
+            self,
+            messages: list[dict[str, str]] | None,
+            *,
+            role: str,
+            content: str | None,
+            limit: int = 10,
+            replace_if_prefix: bool = False,
+    ) -> list[dict[str, str]]:
+        text = (content or "").strip()
+        if not text:
+            return list(messages or [])
+
+        out = list(messages or [])
+
+        if (
+                replace_if_prefix
+                and out
+                and out[-1].get("role") == role
+        ):
+            prev = (out[-1].get("content") or "").strip()
+            if prev and (text.startswith(prev) or prev.startswith(text)):
+                out[-1] = {"role": role, "content": text}
+                return out[-limit:]
+
+        out.append({"role": role, "content": text})
+        return out[-limit:]
+
+    def _append_message(
+            self,
+            messages: list[dict[str, str]] | None,
+            *,
+            role: str,
+            content: str | None,
+            limit: int = 10,
+    ) -> list[dict[str, str]]:
+        text = (content or "").strip()
+        if not text:
+            return list(messages or [])
+
+        out = list(messages or [])
+        out.append({"role": role, "content": text})
+        return out[-limit:]
+
+    def _should_record_user_event(self, event: CallEvent) -> bool:
+        return event == CallEvent.USER_TURN
+
+    def _apply_turn_history_on_start(
+            self,
+            *,
+            state: CallState,
+            event: CallEvent,
+            user_text: str | None,
+    ) -> None:
+        text = (user_text or "").strip()
+        if not text:
+            return
+        if not self._should_record_user_event(event):
+            return
+
+        state["messages"] = self._append_or_replace_message(
+            state.get("messages"),
+            role="user",
+            content=text,
+            replace_if_prefix=True,
+        )
+        state["prev_user_text"] = text
+
+    def _apply_turn_history_on_finish(
+            self,
+            *,
+            state: CallState,
+    ) -> None:
+        assistant_text = (state.get("assistant_text") or "").strip()
+        if assistant_text:
+            state["messages"] = self._append_message(
+                state.get("messages"),
+                role="assistant",
+                content=assistant_text,
+            )
+            state["prev_assistant_text"] = assistant_text
 
     # ----------------------------
     # Per-call lock helpers
@@ -123,12 +205,19 @@ class InterviewEngine:
     # ----------------------------
 
     def _append_pending_text(self, *, call_id: str, text: str | None) -> None:
-        if not text:
-            return
-        stripped = text.strip()
+        stripped = (text or "").strip()
         if not stripped:
             return
-        self._pending_texts.setdefault(call_id, []).append(stripped)
+
+        prev = self._pending_texts.get(call_id, "").strip()
+        if not prev:
+            self._pending_texts[call_id] = stripped
+            return
+
+        if stripped.startswith(prev) or prev.startswith(stripped):
+            self._pending_texts[call_id] = stripped
+        else:
+            self._pending_texts[call_id] = f"{prev} {stripped}".strip()
 
     def _set_pending_event_meta(
         self,
@@ -140,13 +229,11 @@ class InterviewEngine:
         self._pending_event_meta[call_id] = (event, meta or {})
 
     def _pop_pending_followup(
-        self,
-        *,
-        call_id: str,
+            self,
+            *,
+            call_id: str,
     ) -> tuple[CallEvent, str | None, dict[str, Any]]:
-        parts = self._pending_texts.pop(call_id, [])
-        text = " ".join(p for p in parts if p).strip() or None
-
+        text = self._pending_texts.pop(call_id, "").strip() or None
         event, meta = self._pending_event_meta.pop(call_id, (CallEvent.USER_TURN, {}))
         return event, text, meta
 
@@ -176,6 +263,8 @@ class InterviewEngine:
                 "appointment_draft": {},
                 "appointment_patch": {},
                 "end_call": False,
+                "prev_user_text": "",
+                "prev_assistant_text": "",
             }
         else:
             state.setdefault("messages", [])
@@ -183,6 +272,8 @@ class InterviewEngine:
             state.setdefault("appointment_draft", {})
             state.setdefault("appointment_patch", {})
             state.setdefault("end_call", False)
+            state.setdefault("prev_user_text", "")
+            state.setdefault("prev_assistant_text", "")
 
         return state
 
@@ -193,12 +284,14 @@ class InterviewEngine:
         return clean
 
     async def _persist_or_delete(
-        self,
-        *,
-        call_id: str,
-        final_state: CallState,
-        event: CallEvent,
+            self,
+            *,
+            call_id: str,
+            final_state: CallState,
+            event: CallEvent,
     ) -> None:
+        self._apply_turn_history_on_finish(state=final_state)
+
         safe_state = self._sanitize_state_for_persist(final_state)
         end_call = bool(safe_state.get("end_call", False))
 
@@ -235,6 +328,12 @@ class InterviewEngine:
             state["user_text"] = user_text
             state["meta"] = meta or {}
             state["next_action"] = NextAction.OTHER
+
+            self._apply_turn_history_on_start(
+                state=state,
+                event=event,
+                user_text=user_text,
+            )
 
             control = RunControl(
                 set_interruptible=lambda value: self._set_active_interruptible(call_id, value)
@@ -373,6 +472,7 @@ class InterviewEngine:
         Stream tokens/debug chunks and emit FINAL only after all deferred buffered
         text has been drained.
         """
+        logger.warning(f'user text: {user_text}')
         self._last_final_state: CallState | None = None
 
         can_start = await self.cancel_active(call_id=call_id)
@@ -460,6 +560,12 @@ class InterviewEngine:
                 state["event"] = next_event
                 state["user_text"] = next_user_text
                 state["meta"] = next_meta
+
+                self._apply_turn_history_on_start(
+                    state=state,
+                    event=next_event,
+                    user_text=next_user_text,
+                )
 
                 control = RunControl(
                     set_interruptible=lambda value: self._set_active_interruptible(call_id, value)

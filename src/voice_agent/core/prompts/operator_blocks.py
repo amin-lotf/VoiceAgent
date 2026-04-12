@@ -84,12 +84,14 @@ REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
         "Do not ask for middle name or family name separately.",
         "Do not ask for spelling unless the name is unclear.",
         "Once the caller gives a name, extract it and stop asking for it.",
+        "If caller denied to provide the name, politely remind them that it's required and ask to provide it.",
     ],
     AppointmentField.PHONE: [
         "The phone number is still missing.",
         "Ask for the phone number naturally if the caller has not provided it yet in the current text.",
         "Do not ask for country code unless needed.",
         "Once the caller gives a phone number, extract it and stop asking for it.",
+        "If caller denied to provide the phone number, politely remind them that it's required and ask  to provide it.",
     ],
     AppointmentField.REASON_FOR_VISIT: [
         "The reason for visit is still missing.",
@@ -97,6 +99,7 @@ REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
         "Do not suggest reasons.",
         "Do not turn it into multiple-choice.",
         "Accept brief answers.",
+        "if the caller denies to provide the reason set reason_for_visit='Personal reasons'."
     ],
     AppointmentField.NOTES: [
         "Ask whether the caller wants anything noted for the appointment.",

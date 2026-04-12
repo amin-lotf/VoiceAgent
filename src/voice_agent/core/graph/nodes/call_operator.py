@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -9,6 +10,7 @@ from langgraph.config import get_stream_writer
 
 from voice_agent.const import  JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data
+from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.call_operator import build_operator_prompt
 from voice_agent.core.types import (
@@ -200,6 +202,7 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     first_token_time: float | None = None
     end_time: float | None = None
     try:
+        # await run_non_interruptible(state, lambda: asyncio.sleep(10))
         if writer:
             async for chunk in LLM.astream(prompt):
                 token = chunk.content or ""

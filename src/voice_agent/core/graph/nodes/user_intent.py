@@ -7,7 +7,9 @@ from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import get_state_data, set_node_data
 from voice_agent.core.types import CallState, AppointmentDraft, AppointmentField, AssistantDirective, DirectiveKind, \
     DirectiveSourceNode, UserIntent, NextAction
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _is_missing(value: object) -> bool:
     if value is None:
@@ -54,9 +56,9 @@ async def node_user_intent(state: CallState) -> dict[str, Any]:
         local_state,
         "user_intent",
         {
-            "user_intent": {
                 "directives": directives,
-            }
         }
     )
+
+    logger.warning("======\n user_intent: local state: %s \n ======", local_state)
     return local_state

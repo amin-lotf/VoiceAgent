@@ -2,7 +2,9 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from voice_agent.const import JSON_SENTINEL
 from voice_agent.core.prompts.operator_blocks import *
 from voice_agent.core.types import CallState, AppointmentStatus
+import  logging
 
+logger = logging.getLogger(__name__)
 
 def _build_no_question_rules(state: CallState) -> list[str]:
     directives = state.get("directives") or []
@@ -118,6 +120,9 @@ Caller Now: {user_text}
 Current draft:
 {appointment}
 """.strip()
+
+
+    logger.warning(f"====\nGenerated prompt for call operator:\n{human}\n")
 
     return [
         SystemMessage(content=system),

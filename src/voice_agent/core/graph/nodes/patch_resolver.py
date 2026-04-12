@@ -180,6 +180,6 @@ async def node_patch_resolver(
     except Exception:
         logger.exception("Failed to sync appointment details to DB")
 
-    logger.warning("======\n patch_resolver: local state: %s \n ======", local_state)
-    logger.warning("======\n patch_resolver: state: %s \n ======", state)
+    # logger.warning("======\n patch_resolver: local state: %s \n ======", local_state)
+    # logger.warning("======\n patch_resolver: state: %s \n ======", state)
     return local_state
