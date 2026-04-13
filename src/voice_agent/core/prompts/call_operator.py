@@ -73,29 +73,32 @@ def _format_draft_summary(draft: dict) -> str:
     return str(summary)
 
 
-def build_operator_prompt(state: CallState, *, internal_call: bool = False):
+def build_operator_prompt(state, *, internal_call: bool = False):
     node_data = state.get("node_data") or {}
     directive_prompts = node_data.get("directive_prompt_builder", {}).get("rules", [])
     office_knowledge = node_data.get("office_info", {}).get("knowledge", {})
+
     appointment = state.get("appointment_draft") or {}
     user_text = (state.get("user_text") or "").strip()
     recent_messages = _get_recent_messages(state, limit=8)
 
     global_rules = GLOBAL_OPERATOR_RULES + _build_no_question_rules(state)
-
-    all_rules: list[str] = []
+    all_rules = []
     _extend_section(all_rules, "Global operator", global_rules)
     _extend_section(all_rules, "Office info", OFFICE_INFO_RULES)
     _extend_section(all_rules, "Directive prompt rules", directive_prompts)
 
     if internal_call:
+        output_schema = {
+            "end_call": False,
+        }
+
         internal_rules = [
             "This is an internal transition, not a new caller turn.",
-            "Generate only the spoken assistant reply.",
-            "Do not extract or classify intent, datetime, confirmation, or patch fields.",
-            "Do not use recent context to invent a new user request.",
-            "If no question is authorized by the directive rules, give a brief transition reply.",
-            "Do not output JSON.",
+            "Use context only to generate the spoken reply.",
+            "Do not extract or classify user intent, confirmation intent, datetime, or patch fields.",
+            "Do not invent new caller input.",
+            "Return exactly the internal output schema.",
         ]
         _extend_section(all_rules, "Internal call mode", internal_rules)
 
@@ -108,15 +111,20 @@ Rules:
 Office knowledge:
 {office_knowledge}
 
+Output schema:
+{output_schema}
+
 Format:
-Reply with spoken assistant text only.
+Reply text first.
+Then {JSON_SENTINEL}
+Then JSON.
 """.strip()
 
         human = f"""
 Recent message history:
 {_format_messages(recent_messages)}
 
-Current draft summary:
+Current draft:
 {_format_draft_summary(appointment)}
 
 Task:
@@ -148,10 +156,9 @@ This is an internal transition. There is no new caller message to interpret.
         _extend_section(all_rules, "JSON", JSON_RULES)
 
         turn_local_rules = [
-            "For JSON fields, Caller Now is the only source of truth.",
+            "For JSON extraction fields, Caller Now is the only source of truth.",
             "Do not use Recent message history or Current draft to set patch fields, datetime_detected, confirmation_intent, or user_intent.",
             f"If Caller Now is empty, set datetime_detected=false, confirmation_intent={NOT_SPECIFIED}, user_intent={NOT_SPECIFIED}, and keep patch fields as NOT_SPECIFIED/empty.",
-            "Never copy values from Current draft into patch unless explicitly stated in Caller Now.",
         ]
         _extend_section(all_rules, "Turn-local extraction", turn_local_rules)
 
@@ -183,15 +190,9 @@ Recent message history:
 Caller Now:
 {user_text or "none"}
 
-Current draft summary:
+Current draft:
 {_format_draft_summary(appointment)}
 """.strip()
-
-    logger.warning(
-        "====\nGenerated prompt for call operator (internal_call=%s):\n%s\n",
-        internal_call,
-        human,
-    )
 
     return [
         SystemMessage(content=system),
