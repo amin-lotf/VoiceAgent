@@ -21,6 +21,10 @@ def merge_node_data(
             out[node_name].update(payload or {})
     return out
 
+class OperationStatus(StrEnum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+
 
 class ChunkKind(StrEnum):
     TOKEN = "token"
@@ -62,6 +66,7 @@ class NextAction(StrEnum):
     HOLD_APPOINTMENT = 'hold_appointment'
     CALL_OPERATOR = 'call_operator'
     BOOK_APPOINTMENT = 'book_appointment'
+    TAKE_NOTE = 'take_note'
     OTHER = 'other'
 
 
@@ -101,6 +106,7 @@ class DirectiveSourceNode(StrEnum):
     TIME_SLOT = "time_slot"
     HELD_APPOINTMENT_INFO = "held_appointment_info"
     BOOK_APPOINTMENT = "book_appointment"
+    NOTE_INFO = "note_info"
 
 
 class AppointmentField(StrEnum):
@@ -121,6 +127,7 @@ class RequiredAppointmentField(StrEnum):
     REQUESTED_TIME_TEXT = "requested_time_text"
 
 class DirectiveKind(StrEnum):
+    REQUEST_CLARIFY_INFO = "request_clarify_info"
     REQUEST_USER_INTENT = "request_intent"
     REQUEST_MISSING_INFO = "request_missing_info"
     REQUEST_CONFIRMATION = "request_confirmation"
@@ -207,6 +214,7 @@ class CallState(TypedDict, total=False):
     messages: NotRequired[list[dict]]
     assistant_text: NotRequired[str]
     assistant_streamed: NotRequired[bool]
+    internal_call: NotRequired[bool]
 
     appointment_draft: NotRequired[AppointmentDraft]
     appointment_patch: NotRequired[AppointmentPatch]

@@ -6,6 +6,7 @@ async def node_reset_gate(state: CallState):
         "assistant_text": "",
         "assistant_streamed": False,
         "user_text": "", "meta": {},
-        "next_action": NextAction.OTHER
+        "next_action": NextAction.OTHER,
+        'internal_call': True,
     }
     return local_state

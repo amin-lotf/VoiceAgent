@@ -6,8 +6,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
-from voice_agent.core.graph.nodes.utils import set_node_data
-from voice_agent.core.types import CallState, AppointmentDraft
+from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data
+from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction
 
 logger = logging.getLogger(__name__)
 
@@ -213,9 +213,14 @@ def _resolve_from_broad_date_mode(
 async def node_schedule_patch_to_requested_time_iso(
     state: CallState,
 ) -> dict[str, Any]:
-    tz_info: ZoneInfo = DEFAULT_TZ
-    now = datetime.now(tz_info)
 
+    datetime_node_data= get_state_data(state,'datetime_extractor')
+    node_status = datetime_node_data.get('node_status')
+    if not node_status or node_status == OperationStatus.FAILURE:
+        return {}
+
+
+    now = datetime.now(DEFAULT_TZ)
     appointment: AppointmentDraft = dict(state.get("appointment_draft") or {})
     datetime_node = (state.get("node_data") or {}).get("datetime_extractor") or {}
     raw_patch = datetime_node.get("schedule_patch") or {}
@@ -248,7 +253,7 @@ async def node_schedule_patch_to_requested_time_iso(
                 date_key=date_key,
                 time_pref=time_pref,
                 exact_time_text=exact_time_text,
-                tz_info=tz_info,
+                tz_info=DEFAULT_TZ,
             )
 
         # 2) Relative-to-offered resolution
@@ -256,7 +261,7 @@ async def node_schedule_patch_to_requested_time_iso(
             requested_time_iso, resolution_reason = _resolve_from_relative_to_offered(
                 relative_to_offered=relative_to_offered,
                 last_offered_slot_start_at=last_offered_slot_start_at,
-                tz_info=tz_info,
+                tz_info=DEFAULT_TZ,
             )
 
         # 3) Broad requests like earliest / this week / next week
@@ -265,7 +270,7 @@ async def node_schedule_patch_to_requested_time_iso(
                 date_mode=date_mode,
                 time_pref=time_pref,
                 now=now,
-                tz_info=tz_info,
+                tz_info=DEFAULT_TZ,
             )
 
         else:
@@ -274,8 +279,11 @@ async def node_schedule_patch_to_requested_time_iso(
 
         if requested_time_iso:
             updated_appointment["requested_time_iso"] = requested_time_iso
+            node_status = OperationStatus.SUCCESS
         else:
             updated_appointment["requested_time_iso"] = str(NOT_SPECIFIED)
+            node_status = OperationStatus.FAILURE
+            local_state['next_action'] = NextAction.CALL_OPERATOR
 
         local_state["appointment_draft"] = updated_appointment
 
@@ -283,17 +291,10 @@ async def node_schedule_patch_to_requested_time_iso(
             local_state,
             "schedule_patch_to_requested_time_iso",
             {
-                "requested_time_iso": requested_time_iso or str(NOT_SPECIFIED),
-                "resolution_reason": resolution_reason,
-                "schedule_patch": {
-                    "date_mode": date_mode,
-                    "date_key": date_key,
-                    "time_pref": time_pref,
-                    "exact_time_text": exact_time_text,
-                    "relative_to_offered": relative_to_offered,
-                },
+                'node_status': node_status,
             },
         )
+
 
         logger.warning(
             "schedule_patch_to_requested_time_iso resolved requested_time_iso=%r reason=%s",
@@ -313,8 +314,7 @@ async def node_schedule_patch_to_requested_time_iso(
             local_state,
             "schedule_patch_to_requested_time_iso",
             {
-                "requested_time_iso": str(NOT_SPECIFIED),
-                "resolution_reason": "exception",
+                "node_status": OperationStatus.FAILURE
             },
         )
         return local_state

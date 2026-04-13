@@ -8,7 +8,7 @@ from typing import Any
 
 from langgraph.config import get_stream_writer
 
-from voice_agent.const import  JSON_SENTINEL, NOT_SPECIFIED
+from voice_agent.const import JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.llm.openai_llm import LLM
@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_user_intent(
-    previous_intent: UserIntent,
-    extracted_intent_raw: str | None,
+        previous_intent: UserIntent,
+        extracted_intent_raw: str | None,
 ) -> UserIntent:
     if extracted_intent_raw and extracted_intent_raw != NOT_SPECIFIED:
         try:
@@ -174,6 +174,22 @@ def _fallback_state(state: CallState) -> dict[str, Any]:
     return local_state
 
 
+def normalize_operator_result( result: dict, user_text: str) -> dict:
+    if user_text.strip():
+        return result
+
+    result["datetime_detected"] = False
+    result["confirmation_intent"] = NOT_SPECIFIED
+    result["user_intent"] = NOT_SPECIFIED
+    result["patch"] = {
+        "name": NOT_SPECIFIED,
+        "phone": NOT_SPECIFIED,
+        "reason_for_visit": NOT_SPECIFIED,
+        "notes": [],
+    }
+    return result
+
+
 async def node_call_operator(state: CallState) -> dict[str, Any]:
     """
     Simplified operator node:
@@ -183,8 +199,8 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     - keeps raw/parsed LLM output in node_data
     """
     local_state: dict[str, Any] = {}
-
-    prompt = build_operator_prompt(state)
+    internal_call = state.get("internal_call") or False
+    prompt = build_operator_prompt(state, internal_call=internal_call)
     logger.warning(
         "=====================\ncall_operator: prompt=%s\n=====================",
         prompt,
@@ -223,7 +239,6 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
                                     first_token_time = time.perf_counter()
                                     is_first_token = False
 
-
                                 streamed_text_parts.append(speakable)
                                 writer(("assistant_token", speakable))
                             tail_buffer = tail_buffer[safe_prefix_len:]
@@ -247,7 +262,8 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         logger.warning("call_operator failed; using fallback", exc_info=True)
         return _fallback_state(state)
     end_time = time.perf_counter()
-    logger.warning("call_operator: LLM request to first token took %.2fs, total time %.2fs", first_token_time - start_time, end_time - start_time)
+    logger.warning("call_operator: LLM request to first token took %.2fs, total time %.2fs",
+                   first_token_time - start_time, end_time - start_time)
 
     full_output = "".join(full_output_parts)
     logger.warning(
@@ -256,6 +272,7 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     )
 
     assistant_text, data = _parse_operator_output(full_output)
+    data = normalize_operator_result(data, state.get("user_text") or "")
 
     if not assistant_text:
         assistant_text = "".join(streamed_text_parts).strip()
@@ -266,8 +283,6 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     except Exception:
         logger.warning("call_operator: invalid clinic_intent=%s", clinic_intent_raw)
         clinic_intent = ClinicIntent.CONTINUE
-
-
 
     end_call = _coerce_bool(data.get("end_call"), default=False)
     datetime_detected = _coerce_bool(data.get("datetime_detected"), default=False)

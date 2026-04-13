@@ -56,7 +56,6 @@ def build_time_resolution_prompt(
     last_offered_slot_start_at = (appointment.get("last_offered_slot_start_at") or "").strip()
 
     next_14_days = build_next_14_days(now=now, tz_info=tz_info)
-    prev_user_text=state.get("prev_user_text") or 'none'
     prev_assistant_text=state.get("prev_assistant_text") or 'none'
 
     output_schema = {

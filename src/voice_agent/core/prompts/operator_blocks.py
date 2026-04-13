@@ -69,7 +69,7 @@ DATETIME_RULES = [
     'Use only the latest caller message.',
     'Count expressions like "today", "tomorrow", "next Monday", "April 12", "morning", "afternoon", "evening", "at 3", and "3 pm" as datetime mentions.',
     'Do not mark true for non-scheduling numbers such as phone numbers, addresses, or ages.',
-    'Do not infer missing time information from context or earlier turns.',
+    'Do not infer missing time information from context,  Recent message history,  or earlier turns.',
 ]
 
 OFFICE_INFO_RULES = [
@@ -143,6 +143,24 @@ EXISTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     ],
 }
 
+CLARIFYING_FIELD_RULES: dict[AppointmentField, list[str]] = {
+    AppointmentField.REQUESTED_TIME_TEXT: [
+        "The caller mentioned a date or time, but it is still too unclear to use.",
+        "Ask the caller to be a bit more specific about the requested day or time.",
+        "Ask exactly one short clarifying question.",
+        "Do not suggest a specific appointment slot.",
+        "Do not offer availability.",
+        "Do not confirm or imply that the requested time is available.",
+        "Prefer asking for whichever part is missing or unclear, such as the day, part of day, or exact time.",
+        "Accept natural clarifications like 'tomorrow morning', 'Friday afternoon', or 'around 3 PM'.",
+        "If the caller provides a clearer day or time expression, extract it and stop asking follow-up questions in the same turn.",
+        "After the caller provides a clearer time expression, respond neutrally, for example: 'One moment while I check that for you.'",
+        "Do not say phrases like 'that works', 'perfect', 'okay', or anything that sounds like the time is confirmed.",
+        "If the caller is still vague, ask for a narrower time naturally, such as 'morning or afternoon?' or 'which day works best?' depending on what is missing.",
+    ],
+}
+
+
 CONFIRMATION_RULES: dict[ConfirmationTopic, list[str]] = {
     ConfirmationTopic.HOLD_CONFIRMATION: [
         "Ask whether the offered date and time works for the caller.",
@@ -207,13 +225,13 @@ CAPABILITY_EXPLANATION_RULES = [
 
 PATCH_FIELD_RULES = {
     AppointmentField.NAME: [
-        f"patch.name: only update if explicitly provided, else {NOT_SPECIFIED}",
+        f"patch.name: only update if explicitly provided in Caller Now, else {NOT_SPECIFIED}",
     ],
     AppointmentField.PHONE: [
-        f"patch.phone: only update if explicitly provided, else {NOT_SPECIFIED}",
+        f"patch.phone: only update if explicitly provided in Caller Now, else {NOT_SPECIFIED}",
     ],
     AppointmentField.REASON_FOR_VISIT: [
-        f"patch.reason_for_visit: only update if explicitly provided, else {NOT_SPECIFIED}",
+        f"patch.reason_for_visit: only update if explicitly provided in Caller Now, else {NOT_SPECIFIED}",
     ],
     AppointmentField.NOTES: [
         "patch.notes must be a list of short strings.",

@@ -13,7 +13,7 @@ from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.datetime_extractor import build_time_resolution_prompt
-from voice_agent.core.types import CallState, AppointmentDraft
+from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +130,7 @@ async def node_datetime_extractor(
             "datetime_extractor",
             {
                 "total_seconds": None if end_time is None else end_time - start_time,
+                "node_status": OperationStatus.SUCCESS
             },
         )
 
@@ -137,18 +138,13 @@ async def node_datetime_extractor(
 
     except Exception:
         logger.exception("datetime_extractor failed")
-        schedule_patch = {
-            "date_mode": str(NOT_SPECIFIED),
-            "date_key": str(NOT_SPECIFIED),
-            "time_pref": str(NOT_SPECIFIED),
-            "exact_time_text": str(NOT_SPECIFIED),
-            "relative_to_offered": str(NOT_SPECIFIED),
-        }
         set_node_data(
             local_state,
             'datetime_extractor',
             {
-                "schedule_patch": schedule_patch
+                "total_seconds": None if end_time is None else end_time - start_time,
+                "node_status": OperationStatus.FAILURE
             }
         )
+        local_state['next_action']=NextAction.CALL_OPERATOR
         return local_state

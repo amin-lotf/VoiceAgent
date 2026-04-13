@@ -265,6 +265,7 @@ class InterviewEngine:
                 "end_call": False,
                 "prev_user_text": "",
                 "prev_assistant_text": "",
+                "internal_call": False,
             }
         else:
             state.setdefault("messages", [])
@@ -274,6 +275,7 @@ class InterviewEngine:
             state.setdefault("end_call", False)
             state.setdefault("prev_user_text", "")
             state.setdefault("prev_assistant_text", "")
+            state.setdefault('internal_call', False)
 
         return state
 
@@ -328,6 +330,7 @@ class InterviewEngine:
             state["user_text"] = user_text
             state["meta"] = meta or {}
             state["next_action"] = NextAction.OTHER
+            state["internal_call"] = False
 
             self._apply_turn_history_on_start(
                 state=state,

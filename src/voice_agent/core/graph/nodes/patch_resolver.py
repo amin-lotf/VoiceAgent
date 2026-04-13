@@ -11,7 +11,7 @@ from voice_agent.core.graph.nodes.utils import view_id, set_node_data
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.services.appointments import update_active_appointment_details
 from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch, AppointmentView, ConfirmationIntent, \
-    UserIntent
+    UserIntent, AssistantPhase
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,7 @@ def apply_appointment_patch(
     requested_time_text = patch.get("requested_time_text")
     if not _is_not_specified(requested_time_text):
         updated["requested_time_text"] = requested_time_text
+        updated['offered_time_confirmed'] = False
 
     patch_notes = patch.get("notes")
     if patch_notes:
@@ -153,9 +154,12 @@ async def node_patch_resolver(
     if user_intent and user_intent != UserIntent.UNDECIDED and user_intent != state.get("user_intent"):
         local_state["user_intent"] = user_intent
         intent_updated = True
+        local_state['assistant_phase'] = AssistantPhase.COLLECTING_INFO
     set_node_data(local_state, "patch_resolver", {"user_intent_updated": intent_updated})
 
     datetime_updated = not _is_missing(appointment_patch.get("requested_time_text"))
+
+
 
     set_node_data(local_state, "patch_resolver", {"datetime_updated": datetime_updated})
 

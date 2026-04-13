@@ -10,9 +10,9 @@ from voice_agent.core.graph.nodes.call_operator import node_call_operator
 from voice_agent.core.graph.nodes.directive_prompt_builder import node_directive_prompt_builder
 from voice_agent.core.graph.nodes.held_appointment_info import node_held_appointment_info
 from voice_agent.core.graph.nodes.hold_appointment import node_hold_appointment
-from voice_agent.core.graph.nodes.load_or_create_appointment import node_load_or_create_appointment
-from voice_agent.core.graph.nodes.monitor_appointment_confirmation import node_monitor_appointment_confirmation
+from voice_agent.core.graph.nodes.monitor_appointment_confirmation import node_monitor_appointment_status
 from voice_agent.core.graph.nodes.monitor_datetime import node_monitor_datetime
+from voice_agent.core.graph.nodes.note_info import node_note_info
 from voice_agent.core.graph.nodes.reset_gate import node_reset_gate
 from voice_agent.core.graph.nodes.schedule_patch_to_requested_time_iso import \
     node_schedule_patch_to_requested_time_iso
@@ -20,11 +20,13 @@ from voice_agent.core.graph.nodes.patch_resolver import node_patch_resolver
 from voice_agent.core.graph.nodes.office_info import node_office_info
 from voice_agent.core.graph.nodes.planner import node_planner
 from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
-from voice_agent.core.graph.nodes.datetime_extractor import  node_datetime_extractor
+from voice_agent.core.graph.nodes.datetime_extractor import node_datetime_extractor
 from voice_agent.core.graph.nodes.time_slot import node_time_slot
 from voice_agent.core.graph.nodes.user_intent import node_user_intent
+from voice_agent.core.graph.nodes.utils import get_state_data
 from voice_agent.core.graph.nodes.verify_appointment_info import node_verify_appointment_info
-from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase, NextAction
+from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase, NextAction, \
+    OperationStatus
 from voice_agent.core.graph.nodes.greeting import node_on_call_started
 from voice_agent.core.graph.nodes.handoff import node_handoff_fallback
 from voice_agent.core.graph.nodes.routing import (
@@ -58,10 +60,11 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_node("datetime_extractor", node_datetime_extractor)
     graph.add_node("schedule_patch_to_requested_time_iso", node_schedule_patch_to_requested_time_iso)
     graph.add_node("monitor_datetime", node_monitor_datetime)
-    graph.add_node("monitor_appointment_confirmation", node_monitor_appointment_confirmation)
+    graph.add_node("monitor_appointment_status", node_monitor_appointment_status)
     graph.add_node("hold_appointment", partial(node_hold_appointment, sessionmaker=sessionmaker))
     graph.add_node("held_appointment_info", node_held_appointment_info)
     graph.add_node("book_appointment", partial(node_book_appointment, sessionmaker=sessionmaker))
+    graph.add_node("note_info", node_note_info)
     graph.add_node("handoff_fallback", node_handoff_fallback)
     graph.add_node("handle_hangup", node_handle_hangup)
     graph.add_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
@@ -103,19 +106,19 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'handoff_fallback': 'handoff_fallback',
     }
                                 )
+
     def _after_patch_resolver(state: CallState):
         assistant_phase = state.get("assistant_phase")
         if assistant_phase == AssistantPhase.COLLECTING_INFO:
             return 'user_intent'
         return 'monitor_datetime'
 
-
     graph.add_conditional_edges('patch_resolver', _after_patch_resolver, {
         'monitor_datetime': 'monitor_datetime',
         'user_intent': 'user_intent',
     })
 
-    def _after_user_intent(state:CallState):
+    def _after_user_intent(state: CallState):
         next_action = state.get("next_action")
         if next_action == NextAction.ASK_USER:
             return 'finalize_response'
@@ -132,15 +135,13 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph.add_edge('basic_info', 'fields_output_gate')
     graph.add_edge('time_slot', 'fields_output_gate')
 
-
     graph.add_edge('fields_output_gate', 'verify_appointment_info')
 
     def _after_verify_appointment_info(state: CallState):
         next_action = state.get("next_action")
-        if next_action ==NextAction.HOLD_APPOINTMENT:
+        if next_action == NextAction.HOLD_APPOINTMENT:
             return 'datetime_extractor'
         return 'finalize_response'
-
 
     graph.add_conditional_edges('verify_appointment_info', _after_verify_appointment_info, {
         'datetime_extractor': 'datetime_extractor',
@@ -150,7 +151,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
 
     def _after_monitor_datetime(state: CallState):
         next_action = state.get("next_action")
-        if next_action==NextAction.EXTRACT_DATETIME:
+        if next_action == NextAction.EXTRACT_DATETIME:
             return 'datetime_extractor'
         return 'held_appointment_info'
 
@@ -159,32 +160,71 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'held_appointment_info': 'held_appointment_info',
     })
 
-    graph.add_edge('datetime_extractor', 'schedule_patch_to_requested_time_iso')
-    graph.add_edge('schedule_patch_to_requested_time_iso', 'hold_appointment')
+    def _node_status_checker(state: CallState, source_node_name: str, dest_node_name: str, fail_node_name: str):
+        node_data = get_state_data(state, source_node_name)
+        node_status = node_data.get('node_status')
+        if node_status == OperationStatus.FAILURE:
+            return fail_node_name
+        return dest_node_name
+
+    graph.add_conditional_edges(
+        'datetime_extractor',
+        partial(
+            _node_status_checker,
+            source_node_name='datetime_extractor',
+            dest_node_name='schedule_patch_to_requested_time_iso',
+            fail_node_name='held_appointment_info'
+        ),
+        {
+            'schedule_patch_to_requested_time_iso': 'schedule_patch_to_requested_time_iso',
+            'held_appointment_info': 'held_appointment_info',
+        }
+    )
+
+    graph.add_conditional_edges(
+        'schedule_patch_to_requested_time_iso',
+        partial(
+            _node_status_checker,
+            source_node_name='schedule_patch_to_requested_time_iso',
+            dest_node_name='hold_appointment',
+            fail_node_name='held_appointment_info'
+        ),
+        {
+            'hold_appointment': 'hold_appointment',
+            'held_appointment_info': 'held_appointment_info',
+        }
+    )
+
     graph.add_edge('hold_appointment', 'held_appointment_info')
 
     def _after_held_appointment_info(state: CallState):
         next_action = state.get("next_action")
-        if next_action==NextAction.CALL_OPERATOR:
+        if next_action == NextAction.CALL_OPERATOR:
             return 'finalize_response'
-        return 'monitor_appointment_confirmation'
+        return 'monitor_appointment_status'
+
     graph.add_conditional_edges('held_appointment_info', _after_held_appointment_info, {
-        'monitor_appointment_confirmation': 'monitor_appointment_confirmation',
+        'monitor_appointment_status': 'monitor_appointment_status',
         'finalize_response': 'finalize_response',
     })
 
-    def _after_monitor_appointment_confirmation(state: CallState):
+    def _after_monitor_appointment_status(state: CallState):
         next_action = state.get("next_action")
         if next_action == NextAction.BOOK_APPOINTMENT:
             return 'book_appointment'
+        elif next_action == NextAction.TAKE_NOTE:
+            return 'note_info'
         return 'finalize_response'
-    graph.add_conditional_edges('monitor_appointment_confirmation', _after_monitor_appointment_confirmation, {
+
+    graph.add_conditional_edges('monitor_appointment_status', _after_monitor_appointment_status, {
         'book_appointment': 'book_appointment',
+        'note_info': 'note_info',
         'finalize_response': 'finalize_response',
     })
 
     # graph.add_edge('held_appointment_info', 'book_appointment')
-    graph.add_edge('book_appointment', 'finalize_response')
+    graph.add_edge('book_appointment', 'note_info')
+    graph.add_edge('note_info', 'finalize_response')
 
     # graph.add_edge('finalize_response', 'monitor_call')
 
@@ -193,8 +233,6 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         if next_action == NextAction.CALL_OPERATOR:
             return 'reset_gate'
         return 'monitor_call'
-
-
 
     graph.add_conditional_edges('finalize_response', _after_finalize_response, {
         'reset_gate': 'reset_gate',
