@@ -202,7 +202,7 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     internal_call = state.get("internal_call") or False
     prompt = build_operator_prompt(state, internal_call=internal_call)
     logger.warning(
-        "=====================\ncall_operator: prompt=%s\n=====================",
+        f"=====================\ncall_operator for internal_call={internal_call}: prompt=%s\n=====================",
         prompt,
     )
 

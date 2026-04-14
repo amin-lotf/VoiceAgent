@@ -12,6 +12,7 @@ GLOBAL_OPERATOR_RULES = [
     "Do not invent new questions, new fields, or new steps that are not explicitly requested by the current rules.",
     "If no rule explicitly tells you to ask a question, do not ask one.",
     "When no question is authorized by the current rules, give a short waiting/transition reply such as 'One moment please.' or 'Let me check that for you.'",
+    "When only one  question is authorized by the current rules and user already answered it in the Caller Now, give a short waiting/transition reply such as 'One moment please.' or 'Let me check that for you.'",
     "Do not mention internal logic, JSON, or system behavior.",
 ]
 
@@ -164,7 +165,7 @@ CLARIFYING_FIELD_RULES: dict[AppointmentField, list[str]] = {
 CONFIRMATION_RULES: dict[ConfirmationTopic, list[str]] = {
     ConfirmationTopic.HOLD_CONFIRMATION: [
         "Ask whether the offered date and time works for the caller.",
-        "Ask exactly one question.",
+        "Ask exactly one question only if the caller has not already answered the confirmation request.",
         "Do not ask an open-ended scheduling question unless the caller has already rejected the offered slot.",
         "If the caller rejects the offered slot without giving a replacement date or time, ask which day or time would work better.",
         "If the caller rejects the offered slot and gives a replacement date or time, extract that new date or time and do not ask another question in the same turn.",

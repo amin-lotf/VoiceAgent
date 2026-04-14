@@ -85,22 +85,13 @@ def build_operator_prompt(state, *, internal_call: bool = False):
     global_rules = GLOBAL_OPERATOR_RULES + _build_no_question_rules(state)
     all_rules = []
     _extend_section(all_rules, "Global operator", global_rules)
-    _extend_section(all_rules, "Office info", OFFICE_INFO_RULES)
     _extend_section(all_rules, "Directive prompt rules", directive_prompts)
+    _extend_section(all_rules, "JSON", JSON_RULES)
 
     if internal_call:
         output_schema = {
             "end_call": False,
         }
-
-        internal_rules = [
-            "This is an internal transition, not a new caller turn.",
-            "Use context only to generate the spoken reply.",
-            "Do not extract or classify user intent, confirmation intent, datetime, or patch fields.",
-            "Do not invent new caller input.",
-            "Return exactly the internal output schema.",
-        ]
-        _extend_section(all_rules, "Internal call mode", internal_rules)
 
         system = f"""
 You are a clinic call assistant.
@@ -108,8 +99,6 @@ You are a clinic call assistant.
 Rules:
 {chr(10).join("- " + r for r in all_rules)}
 
-Office knowledge:
-{office_knowledge}
 
 Output schema:
 {output_schema}
@@ -121,8 +110,6 @@ Then JSON.
 """.strip()
 
         human = f"""
-Recent message history:
-{_format_messages(recent_messages)}
 
 Current draft:
 {_format_draft_summary(appointment)}
@@ -149,11 +136,12 @@ This is an internal transition. There is no new caller message to interpret.
 
         _extend_section(all_rules, "Clinic intent", CLINIC_INTENT_RULES)
         _extend_section(all_rules, "Datetime", DATETIME_RULES)
+        _extend_section(all_rules, "Office info", OFFICE_INFO_RULES)
         _extend_section(all_rules, "Confirmation intent", CONFIRMATION_INTENT_RULES)
         _extend_section(all_rules, "User intent", USER_INTENT_RULES)
         _extend_section(all_rules, "Out of scope", OUT_OF_SCOPE_RULES)
         _extend_section(all_rules, "Capability explanation", CAPABILITY_EXPLANATION_RULES)
-        _extend_section(all_rules, "JSON", JSON_RULES)
+
 
         turn_local_rules = [
             "For JSON extraction fields, Caller Now is the only source of truth.",
@@ -171,11 +159,14 @@ You are a clinic call assistant.
 Rules:
 {chr(10).join("- " + r for r in all_rules)}
 
-Office knowledge:
-{office_knowledge}
+
+
 
 Output schema:
 {output_schema}
+
+office_knowledge:
+{office_knowledge}
 
 Format:
 Reply text first.

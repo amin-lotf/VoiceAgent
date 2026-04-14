@@ -7,6 +7,7 @@ from typing import Any, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 from starlette.websockets import WebSocket, WebSocketDisconnect
+import logging
 
 from voice_agent.core.api.v1.schemas import RetellResponseRequiredIn, RetellUpdateOnlyIn, RetellPingPongIn, \
     RetellResponseOut, RetellConfigOut, RetellConfig, RetellInbound, RetellPingPongOut
@@ -85,11 +86,8 @@ async def stream_engine_to_retell(
     meta: dict[str, Any] | None,
     cancel_guard: asyncio.Event,
 ) -> None:
-    """
-    Stream EngineChunk(TOKEN) -> Retell response chunks under `response_id`,
-    then send content_complete=True once. Cancel if cancel_guard is set.
-    """
     end_call_flag = False
+    full_text_parts: list[str] = []
 
     async for chunk in engine.stream_event(
         call_id=call_id,
@@ -98,15 +96,30 @@ async def stream_engine_to_retell(
         meta=meta,
     ):
         if cancel_guard.is_set():
-            # Stop sending tokens if we were superseded (barge-in / new response_id).
+            logger.warning(
+                "RETELL STREAM CANCELLED | call_id=%s | response_id=%s | partial=%r",
+                call_id,
+                response_id,
+                "".join(full_text_parts),
+            )
             break
 
         if chunk.kind == ChunkKind.TOKEN:
+            token_text = str(chunk.data)
+            full_text_parts.append(token_text)
+
+            # logger.warning(
+            #     "RETELL TOKEN | call_id=%s | response_id=%s | token=%r",
+            #     call_id,
+            #     response_id,
+            #     token_text,
+            # )
+
             await ws_send(
                 websocket,
                 RetellResponseOut(
                     response_id=response_id,
-                    content=str(chunk.data),
+                    content=token_text,
                     content_complete=False,
                 ),
             )
@@ -115,7 +128,14 @@ async def stream_engine_to_retell(
             final_state = chunk.data or {}
             end_call_flag = bool(final_state.get("end_call", False))
 
-    # Always terminate the stream for this response_id
+    full_text = "".join(full_text_parts)
+    logger.warning(
+        "RETELL FULL ASSISTANT | call_id=%s | response_id=%s | text=%r",
+        call_id,
+        response_id,
+        full_text,
+    )
+
     await ws_send(
         websocket,
         RetellResponseOut(
