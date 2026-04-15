@@ -51,6 +51,28 @@ def handle_httpx_errors(func):
 class SessionView:
     status: str
 
+
+@dataclass(frozen=True)
+class CallTurnView:
+    role: str
+    content: str
+    created_at: str | None
+
+
+@dataclass(frozen=True)
+class CallSummaryView:
+    call_id: str
+    started_at: str
+    ended_at: str | None
+    duration_seconds: int | None
+    final_status: str | None
+
+
+@dataclass(frozen=True)
+class CallDetailView(CallSummaryView):
+    turns: list[CallTurnView]
+
+
 class ApiClient:
     def __init__(self, base_url: str, timeout_s: float = 120.0) -> None:
         """
@@ -108,4 +130,54 @@ class ApiClient:
     def _parse(j: dict) -> SessionView:
         return SessionView(
             status=j.get("status", "ok"),
+        )
+
+    @handle_httpx_errors
+    def list_calls(self, *, limit: int = 50) -> list[CallSummaryView]:
+        r = requests.get(
+            f"{self.base_url}/calls",
+            timeout=self.timeout_s,
+            params={"limit": limit},
+        )
+        r.raise_for_status()
+        payload = r.json()
+        return [self._parse_call_summary(item) for item in payload]
+
+    @handle_httpx_errors
+    def get_call(self, *, call_id: str) -> CallDetailView:
+        r = requests.get(
+            f"{self.base_url}/calls/{call_id}",
+            timeout=self.timeout_s,
+        )
+        r.raise_for_status()
+        return self._parse_call_detail(r.json())
+
+    @staticmethod
+    def _parse_call_summary(j: dict) -> CallSummaryView:
+        return CallSummaryView(
+            call_id=j.get("call_id", ""),
+            started_at=j.get("started_at", ""),
+            ended_at=j.get("ended_at"),
+            duration_seconds=j.get("duration_seconds"),
+            final_status=j.get("final_status"),
+        )
+
+    @staticmethod
+    def _parse_call_turn(j: dict) -> CallTurnView:
+        return CallTurnView(
+            role=j.get("role", ""),
+            content=j.get("content", ""),
+            created_at=j.get("created_at"),
+        )
+
+    @classmethod
+    def _parse_call_detail(cls, j: dict) -> CallDetailView:
+        summary = cls._parse_call_summary(j)
+        return CallDetailView(
+            call_id=summary.call_id,
+            started_at=summary.started_at,
+            ended_at=summary.ended_at,
+            duration_seconds=summary.duration_seconds,
+            final_status=summary.final_status,
+            turns=[cls._parse_call_turn(turn) for turn in j.get("turns", [])],
         )

@@ -195,6 +195,9 @@ st.title("Retell WS Tester (Streaming + Barge-in)")
 
 with st.sidebar:
     st.subheader("Connection")
+    if st.button("Open Calls Dashboard", use_container_width=True):
+        st.switch_page("pages/1_dashboard.py")
+
     default_call_id = st.session_state.get("call_id") or f"test-{uuid.uuid4().hex[:8]}"
     call_id = st.text_input("call_id", value=default_call_id)
     st.session_state["call_id"] = call_id
@@ -263,5 +266,4 @@ prompt = st.chat_input("Type a message — send again while it streams to barge-
 if prompt and not disabled:
     send_user_message(prompt)
     st.rerun()
-
 

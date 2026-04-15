@@ -2,21 +2,25 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Optional
+from typing import Any, Awaitable, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 from starlette.websockets import WebSocket, WebSocketDisconnect
-import logging
 
+from voice_agent.common import utcnow
 from voice_agent.core.api.v1.schemas import RetellResponseRequiredIn, RetellUpdateOnlyIn, RetellPingPongIn, \
     RetellResponseOut, RetellConfigOut, RetellConfig, RetellInbound, RetellPingPongOut
+from voice_agent.core.db.session import AsyncSessionLocal
 from voice_agent.core.graph.engine import InterviewEngine
+from voice_agent.core.services.call_history import CallHistoryRecorder
 from voice_agent.core.types import CallEvent, ChunkKind
 
 router = APIRouter(prefix="/retell", tags=["retell"])
 
 logger = logging.getLogger(__name__)
+
+
 def parse_retell_inbound(payload: dict[str, Any]) -> RetellInbound:
     t = payload.get("interaction_type")
     if t == "ping_pong":
@@ -39,6 +43,34 @@ def _last_user_text(transcript: list[dict[str, Any]]) -> str:
         if item.get("role") == "user":
             return item.get("content", "") or ""
     return ""
+
+
+def _derive_final_status(final_state: dict[str, Any]) -> str:
+    if final_state.get("scheduled_appointment_view"):
+        return "scheduled"
+    if final_state.get("held_appointment_view"):
+        return "held"
+
+    phase = final_state.get("phase")
+    if phase:
+        return str(phase)
+
+    assistant_phase = final_state.get("assistant_phase")
+    if assistant_phase:
+        return str(assistant_phase)
+
+    return "completed"
+
+
+async def _safe_record(
+    action: str,
+    call_id: str,
+    operation: Awaitable[None],
+) -> None:
+    try:
+        await operation
+    except Exception:
+        logger.exception("Call history write failed | action=%s | call_id=%s", action, call_id)
 
 async def run_engine_to_retell(
     *,
@@ -79,6 +111,7 @@ async def stream_engine_to_retell(
     *,
     websocket: WebSocket,
     engine: InterviewEngine,
+    recorder: CallHistoryRecorder,
     call_id: str,
     response_id: int,
     event: CallEvent,
@@ -88,6 +121,7 @@ async def stream_engine_to_retell(
 ) -> None:
     end_call_flag = False
     full_text_parts: list[str] = []
+    final_state: dict[str, Any] = {}
 
     async for chunk in engine.stream_event(
         call_id=call_id,
@@ -128,6 +162,9 @@ async def stream_engine_to_retell(
             final_state = chunk.data or {}
             end_call_flag = bool(final_state.get("end_call", False))
 
+    if cancel_guard.is_set():
+        return
+
     full_text = "".join(full_text_parts)
     logger.warning(
         "RETELL FULL ASSISTANT | call_id=%s | response_id=%s | text=%r",
@@ -135,6 +172,30 @@ async def stream_engine_to_retell(
         response_id,
         full_text,
     )
+
+    final_text = full_text.strip()
+    if final_text:
+        await _safe_record(
+            "assistant_turn",
+            call_id,
+            recorder.record_turn(
+                call_id=call_id,
+                role="assistant",
+                content=final_text,
+                created_at=utcnow(),
+            ),
+        )
+
+    if end_call_flag:
+        await _safe_record(
+            "finish_call",
+            call_id,
+            recorder.finish_call(
+                call_id=call_id,
+                final_status=_derive_final_status(final_state),
+                ended_at=utcnow(),
+            ),
+        )
 
     await ws_send(
         websocket,
@@ -151,6 +212,13 @@ async def stream_engine_to_retell(
 async def retell_llm_ws(websocket: WebSocket, call_id: str):
     await websocket.accept()
     engine: InterviewEngine = websocket.app.state.engine
+    recorder = CallHistoryRecorder(AsyncSessionLocal)
+
+    await _safe_record(
+        "ensure_call_started",
+        call_id,
+        recorder.ensure_call_started(call_id=call_id, started_at=utcnow()),
+    )
 
     # 1) Optional config on connect (Retell supports it)
     await ws_send(
@@ -205,6 +273,7 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
         stream_engine_to_retell(
             websocket=websocket,
             engine=engine,
+            recorder=recorder,
             call_id=call_id,
             response_id=0,
             event=CallEvent.CALL_STARTED,
@@ -250,6 +319,17 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
                 await engine.cancel_active(call_id=call_id)
 
                 user_text = _last_user_text(inbound.transcript)
+                if user_text.strip():
+                    await _safe_record(
+                        "user_turn",
+                        call_id,
+                        recorder.record_turn(
+                            call_id=call_id,
+                            role="user",
+                            content=user_text,
+                            created_at=utcnow(),
+                        ),
+                    )
 
                 # Start a fresh stream for THIS response_id
                 active_stream_cancel = asyncio.Event()
@@ -257,6 +337,7 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
                     stream_engine_to_retell(
                         websocket=websocket,
                         engine=engine,
+                        recorder=recorder,
                         call_id=call_id,
                         response_id=inbound.response_id,
                         event=CallEvent.USER_TURN,
@@ -281,3 +362,12 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
         if greeting_task is not None and not greeting_task.done():
             greeting_cancel.set()
             greeting_task.cancel()
+        await _safe_record(
+            "disconnect_call",
+            call_id,
+            recorder.finish_call(
+                call_id=call_id,
+                final_status="disconnected",
+                ended_at=utcnow(),
+            ),
+        )

@@ -1,12 +1,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from voice_agent.core.db.repository import SqlAlchemyAppointmentRepository
+from voice_agent.core.db.repository import SqlAlchemyAppointmentRepository, SqlAlchemyCallRepository
 
 
 class SqlAlchemyUnitOfWork:
     def __init__(self, session: AsyncSession):
         self._session = session
         self.appointments = SqlAlchemyAppointmentRepository(session)
+        self.calls = SqlAlchemyCallRepository(session)
 
     async def commit(self) -> None:
         await self._session.commit()
@@ -22,4 +23,3 @@ class SqlAlchemyUnitOfWork:
             await self.rollback()
         else:
             await self.commit()
-

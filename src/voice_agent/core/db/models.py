@@ -71,3 +71,36 @@ class Appointment(Base):
             name="excl_appointments_no_overlap_active",
         ),
     )
+
+
+class CallRecord(Base):
+    __tablename__ = "calls"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    call_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    final_status: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    turns: Mapped[list[dict[str, str]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
