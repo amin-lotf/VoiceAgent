@@ -34,6 +34,15 @@ POST_BOOKING_NO_QUESTION_RULES = [
     "Examples:  'If there's nothing else, we look forward to seeing you then.' 'Take care, goodbye.'",
 ]
 
+POST_BOOKING_CLOSING_RULES = [
+    "Use this only when the appointment is complete, no required field is missing, no further directive requires a question, and the caller indicates there is nothing else to add.",
+    "Give a brief, warm closing reply suitable for a phone call.",
+    "Do not repeat the booking summary unless a current rule explicitly requires it.",
+    "Do not ask another question.",
+    "Prefer natural closings such as 'Alright, you're all set. We look forward to seeing you then. Goodbye.'",
+    "Other acceptable styles: 'Okay, that's everything. Thanks for calling, goodbye.' or 'Perfect, you're all set. Take care, goodbye.'",
+]
+
 USER_INTENT_RULES = [
     'Allowed user_intent: "book_appointment", "reschedule", "cancel", "not_specified".',
     'Use "book_appointment" when the caller clearly wants to make or schedule a new appointment.',
@@ -107,7 +116,9 @@ REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
         "Ask naturally and briefly.",
         "Do not pressure the caller to add notes.",
         "Accept short answers.",
-        "If the caller says there is nothing to add, acknowledge it and close naturally.",
+        "If the caller says there is nothing to add, acknowledge briefly and do not ask another question in the same turn.",
+        "Do not end the call with a plain acknowledgment only.",
+        "If the caller provides an answer to be noted without further instruction, ask for continuation, e.g., 'Anything else you'd like to note?'",
     ],
     AppointmentField.REQUESTED_TIME_TEXT: [
         "The requested appointment time is still missing.",
@@ -127,20 +138,24 @@ EXISTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
         "Caller name already exists.",
         "Do not ask for the caller's name again unless the user explicitly corrects or changes it.",
         "If the user corrects the name, extract the new value.",
+        "If the caller changes this information, acknowledge briefly (e.g., 'One moment while I update that for you.') and do not ask any question in the same turn.",
     ],
     AppointmentField.PHONE: [
         "Caller phone number already exists.",
         "Do not ask for the phone number again unless the user explicitly corrects or changes it.",
         "If the user provides a replacement phone number, extract the new value.",
+        "If the caller changes this information, acknowledge briefly.",
     ],
     AppointmentField.REASON_FOR_VISIT: [
         "Reason for visit already exists.",
         "Do not ask for it again unless the user explicitly changes or clarifies it.",
+        "If the caller changes this information, acknowledge briefly.",
     ],
     AppointmentField.REQUESTED_TIME_TEXT: [
         "Requested appointment time already exists.",
         "Do not ask for the day or time again unless the caller explicitly changes it.",
         "If the caller provides a new date or time, extract and replace the existing value.",
+        "If the caller changes this information, acknowledge briefly (e.g., 'One moment while I check availability.') and do not ask any question in the same turn.",
     ],
 }
 

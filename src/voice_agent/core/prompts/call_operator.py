@@ -82,6 +82,9 @@ def build_operator_prompt(state, *, internal_call: bool = False):
     user_text = (state.get("user_text") or "").strip()
     recent_messages = _get_recent_messages(state, limit=8)
 
+    prev_assistant_text = state.get("assistant_text") or ""
+    prev_user_text = state.get("user_text") or ""
+
     global_rules = GLOBAL_OPERATOR_RULES + _build_no_question_rules(state)
     all_rules = []
     _extend_section(all_rules, "Global operator", global_rules)
@@ -141,6 +144,7 @@ This is an internal transition. There is no new caller message to interpret.
         _extend_section(all_rules, "User intent", USER_INTENT_RULES)
         _extend_section(all_rules, "Out of scope", OUT_OF_SCOPE_RULES)
         _extend_section(all_rules, "Capability explanation", CAPABILITY_EXPLANATION_RULES)
+        _extend_section(all_rules, "Post-booking closing", POST_BOOKING_CLOSING_RULES)
 
 
         turn_local_rules = [
@@ -177,6 +181,12 @@ Then JSON.
         human = f"""
 Recent message history:
 {_format_messages(recent_messages)}
+
+Previous Caller reply:
+{prev_user_text}
+
+Previous assistant text:
+{prev_assistant_text}
 
 Caller Now:
 {user_text or "none"}
