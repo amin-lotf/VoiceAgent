@@ -23,6 +23,7 @@ from voice_agent.core.graph.nodes.slot_filling import node_fill_appointment_slot
 from voice_agent.core.graph.nodes.datetime_extractor import node_datetime_extractor
 from voice_agent.core.graph.nodes.time_slot import node_time_slot
 from voice_agent.core.graph.nodes.user_intent import node_user_intent
+from voice_agent.core.graph.node_timing import with_node_timing
 from voice_agent.core.graph.nodes.utils import get_state_data
 from voice_agent.core.graph.nodes.verify_appointment_info import node_verify_appointment_info
 from voice_agent.core.types import CallEvent, CallPhase, CallState, ClinicIntent, AssistantPhase, NextAction, \
@@ -42,34 +43,37 @@ logger = logging.getLogger(__name__)
 def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     graph = StateGraph(state_schema=CallState)
 
+    def add_timed_node(node_name: str, node_fn) -> None:
+        graph.add_node(node_name, with_node_timing(node_name, node_fn))
+
     # Nodes
-    graph.add_node("route_event", node_route_event)
-    graph.add_node("on_call_started", node_on_call_started)
-    graph.add_node("get_office_info", node_office_info)
-    graph.add_node("reset_gate", node_reset_gate)
-    graph.add_node("planner", node_planner)
-    graph.add_node("directive_prompt_builder", node_directive_prompt_builder)
-    graph.add_node("call_operator", node_call_operator)
-    graph.add_node('patch_resolver', partial(node_patch_resolver, sessionmaker=sessionmaker))
-    graph.add_node('fields_input_gate', lambda state: state)
-    graph.add_node('fields_output_gate', lambda state: state)
-    graph.add_node("user_intent", node_user_intent)
-    graph.add_node("basic_info", node_basic_info)
-    graph.add_node("time_slot", node_time_slot)
-    graph.add_node("verify_appointment_info", node_verify_appointment_info)
-    graph.add_node("datetime_extractor", node_datetime_extractor)
-    graph.add_node("schedule_patch_to_requested_time_iso", node_schedule_patch_to_requested_time_iso)
-    graph.add_node("monitor_datetime", node_monitor_datetime)
-    graph.add_node("monitor_appointment_status", node_monitor_appointment_status)
-    graph.add_node("hold_appointment", partial(node_hold_appointment, sessionmaker=sessionmaker))
-    graph.add_node("held_appointment_info", node_held_appointment_info)
-    graph.add_node("book_appointment", partial(node_book_appointment, sessionmaker=sessionmaker))
-    graph.add_node("note_info", node_note_info)
-    graph.add_node("handoff_fallback", node_handoff_fallback)
-    graph.add_node("handle_hangup", node_handle_hangup)
-    graph.add_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
-    graph.add_node("finalize_response", node_finalize_response)
-    graph.add_node("monitor_call", lambda state: state)
+    add_timed_node("route_event", node_route_event)
+    add_timed_node("on_call_started", node_on_call_started)
+    add_timed_node("get_office_info", node_office_info)
+    add_timed_node("reset_gate", node_reset_gate)
+    add_timed_node("planner", node_planner)
+    add_timed_node("directive_prompt_builder", node_directive_prompt_builder)
+    add_timed_node("call_operator", node_call_operator)
+    add_timed_node('patch_resolver', partial(node_patch_resolver, sessionmaker=sessionmaker))
+    add_timed_node('fields_input_gate', lambda state: state)
+    add_timed_node('fields_output_gate', lambda state: state)
+    add_timed_node("user_intent", node_user_intent)
+    add_timed_node("basic_info", node_basic_info)
+    add_timed_node("time_slot", node_time_slot)
+    add_timed_node("verify_appointment_info", node_verify_appointment_info)
+    add_timed_node("datetime_extractor", node_datetime_extractor)
+    add_timed_node("schedule_patch_to_requested_time_iso", node_schedule_patch_to_requested_time_iso)
+    add_timed_node("monitor_datetime", node_monitor_datetime)
+    add_timed_node("monitor_appointment_status", node_monitor_appointment_status)
+    add_timed_node("hold_appointment", partial(node_hold_appointment, sessionmaker=sessionmaker))
+    add_timed_node("held_appointment_info", node_held_appointment_info)
+    add_timed_node("book_appointment", partial(node_book_appointment, sessionmaker=sessionmaker))
+    add_timed_node("note_info", node_note_info)
+    add_timed_node("handoff_fallback", node_handoff_fallback)
+    add_timed_node("handle_hangup", node_handle_hangup)
+    add_timed_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
+    add_timed_node("finalize_response", node_finalize_response)
+    add_timed_node("monitor_call", lambda state: state)
     graph.add_edge(START, "route_event")
     graph.add_conditional_edges(
         "route_event",

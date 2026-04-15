@@ -4,11 +4,17 @@ import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, AsyncIterator, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from voice_agent.core.graph.graph import build_call_graph
+from voice_agent.core.graph.node_timing import (
+    format_node_timing_summary,
+    format_turn_timing_summary,
+    reset_node_timing_data,
+)
 from voice_agent.core.graph.utils import RunControl
 from voice_agent.core.store.redis_store import RedisStateStore
 from voice_agent.core.types import (
@@ -285,6 +291,22 @@ class InterviewEngine:
         clean.pop("assistant_streamed", None)
         return clean
 
+    def _log_node_timing_summary(
+        self,
+        *,
+        call_id: str,
+        event: CallEvent,
+        state: CallState,
+        turn_total_delay_s: float,
+    ) -> None:
+        logger.warning(
+            "delay summary for call_id=%s event=%s:\n%s\n%s",
+            call_id,
+            event,
+            format_turn_timing_summary(state=state, total_delay_s=turn_total_delay_s),
+            format_node_timing_summary(state),
+        )
+
     async def _persist_or_delete(
             self,
             *,
@@ -314,6 +336,7 @@ class InterviewEngine:
         event: CallEvent,
         user_text: str | None,
         meta: dict[str, Any] | None,
+        reset_timings: bool = False,
     ) -> AsyncIterator[EngineChunk]:
         """
         Execute exactly one graph run and stream its chunks.
@@ -324,6 +347,8 @@ class InterviewEngine:
 
         async with lock:
             state = await self._load_state(call_id=call_id)
+            if reset_timings:
+                reset_node_timing_data(state)
             state["assistant_text"] = ""
             state["assistant_streamed"] = False
             state["event"] = event
@@ -476,6 +501,7 @@ class InterviewEngine:
         text has been drained.
         """
         logger.warning(f'user text: {user_text}')
+        turn_started_at = perf_counter()
         self._last_final_state: CallState | None = None
 
         can_start = await self.cancel_active(call_id=call_id)
@@ -489,6 +515,7 @@ class InterviewEngine:
         next_user_text = user_text
         next_meta = meta or {}
         last_safe_state: CallState | None = None
+        reset_timings = True
 
         while True:
             async for chunk in self._stream_single_run(
@@ -496,8 +523,10 @@ class InterviewEngine:
                 event=next_event,
                 user_text=next_user_text,
                 meta=next_meta,
+                reset_timings=reset_timings,
             ):
                 yield chunk
+            reset_timings = False
 
             if self._last_final_state is not None:
                 last_safe_state = self._last_final_state
@@ -516,6 +545,12 @@ class InterviewEngine:
                 state = await self._load_state(call_id=call_id)
                 last_safe_state = self._sanitize_state_for_persist(state)
 
+        self._log_node_timing_summary(
+            call_id=call_id,
+            event=event,
+            state=last_safe_state,
+            turn_total_delay_s=perf_counter() - turn_started_at,
+        )
         yield EngineChunk(ChunkKind.FINAL, last_safe_state)
 
     # ----------------------------
@@ -536,6 +571,7 @@ class InterviewEngine:
         - non-interruptible active run -> append text and return current state
         """
         lock = self._lock_for(call_id)
+        turn_started_at = perf_counter()
 
         can_start = await self.cancel_active(call_id=call_id)
 
@@ -554,10 +590,14 @@ class InterviewEngine:
         next_user_text = user_text
         next_meta = meta or {}
         final_state: CallState | None = None
+        reset_timings = True
 
         while True:
             async with lock:
                 state = await self._load_state(call_id=call_id)
+                if reset_timings:
+                    reset_node_timing_data(state)
+                    reset_timings = False
                 state["assistant_text"] = ""
                 state["assistant_streamed"] = False
                 state["event"] = next_event
@@ -615,4 +655,10 @@ class InterviewEngine:
 
         safe_state = self._sanitize_state_for_persist(final_state)
         assistant_text = (safe_state.get("assistant_text") or "").strip()
+        self._log_node_timing_summary(
+            call_id=call_id,
+            event=event,
+            state=safe_state,
+            turn_total_delay_s=perf_counter() - turn_started_at,
+        )
         return RunResult(assistant_text=assistant_text, state=safe_state)

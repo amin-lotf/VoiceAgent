@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from langgraph.config import get_stream_writer
 
 from voice_agent.const import DEFAULT_TZ
+from voice_agent.core.graph.node_timing import get_node_timing_fields
 from voice_agent.core.types import CallEvent, CallState
 
 
@@ -49,9 +50,19 @@ def set_node_data(state: dict, node: str,n_data:dict[str,Any]) -> None:
     state['node_data'].setdefault(node, {})
     state['node_data'][node].update(n_data)
 
-def reset_node_data(state: dict, node: str) -> None:
+def reset_node_data(
+    state: dict,
+    node: str,
+    *,
+    preserve_from: CallState | dict[str, Any] | None = None,
+) -> None:
     state.setdefault('node_data', {})
-    state['node_data'][node]={}
+    preserved_fields: dict[str, Any] = {}
+    if isinstance(preserve_from, dict):
+        preserved_fields = get_node_timing_fields(
+            (preserve_from.get("node_data") or {}).get(node)
+        )
+    state['node_data'][node] = preserved_fields
 
 def delete_node_value(state: dict, node: str, key: str) -> None:
     node_data = state.get("node_data")

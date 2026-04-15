@@ -11,9 +11,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def reset_directive_node_data(state: dict) -> None:
+def reset_directive_node_data(state: dict, previous_state: CallState) -> None:
     for node in DirectiveSourceNode:
-        reset_node_data(state, node.value)
+        reset_node_data(state, node.value, preserve_from=previous_state)
 
 def _should_skip_node_for_current_turn(state: CallState, node: DirectiveSourceNode) -> bool:
     user_text = (state.get("user_text") or "").strip()
@@ -67,6 +67,6 @@ def collect_directives(state: CallState) -> list[AssistantDirective]:
 async def node_planner(state: CallState) -> dict:
     directives = collect_directives(state)
     local_state = {'directives': directives}
-    reset_directive_node_data(local_state)
+    reset_directive_node_data(local_state, state)
     logger.warning(f"=====\nplanner:directives: {directives}\n=====")
     return local_state
