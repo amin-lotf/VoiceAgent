@@ -4,13 +4,13 @@ import logging
 from typing import Any
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
-from voice_agent.core.graph.nodes.utils import set_node_data
+from voice_agent.core.graph.nodes.utils import set_node_data, view_id
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.services.appointments import (
-    confirm_appointment,
-    cancel_appointment,
+    ScheduleAppointmentResult,
+    schedule_held_appointment,
 )
-from voice_agent.core.types import CallState, AppointmentView, AppointmentDraft, AppointmentStatus, DirectiveKind, \
+from voice_agent.core.types import CallState, AppointmentDraft, AppointmentStatus, DirectiveKind, \
     DirectiveSourceNode, AssistantPhase, AppointmentField, AssistantDirective, NextAction
 
 logger = logging.getLogger(__name__)
@@ -40,17 +40,53 @@ async def node_book_appointment(
         sessionmaker,
 ) -> dict[str, Any]:
     draft: AppointmentDraft = dict(state.get("appointment_draft") or {})
+    held_view = state.get("held_appointment_view") or {}
+    scheduled_view = state.get("scheduled_appointment_view") or {}
+
+    held_id = view_id(held_view)
+    scheduled_id = view_id(scheduled_view)
+    if held_id is None:
+        logger.warning("book_appointment: held_appointment_view missing")
+        return {}
+
+    async def _commit() -> ScheduleAppointmentResult:
+        async with sessionmaker() as session:
+            uow = SqlAlchemyUnitOfWork(session)
+            return await schedule_held_appointment(
+                uow,
+                held_appointment_id=held_id,
+                scheduled_appointment_id=scheduled_id,
+            )
+
+    try:
+        result = await run_non_interruptible(state, _commit)
+    except Exception:
+        logger.exception("book_appointment: failed to schedule held appointment")
+        return {}
+
+    persisted_scheduled_view = result.scheduled_view
+    for field in ("name", "phone", "reason_for_visit"):
+        value = persisted_scheduled_view.get(field)
+        if value not in (None, ""):
+            draft[field] = value
+
+    draft["notes"] = list(persisted_scheduled_view.get("notes") or draft.get("notes") or [])
     draft["status"] = AppointmentStatus.SCHEDULED
+    draft["last_offered_slot_start_at"] = persisted_scheduled_view.get("start_at")
+    draft["offered_time_confirmed"] = True
 
     directives = _build_book_appointment_directives(draft)
 
     local_state = {
-        'appointment_draft': draft,
-        'assistant_phase': AssistantPhase.POST_APPOINTMENT,
-        'next_action': NextAction.CALL_OPERATOR
+        "appointment_draft": draft,
+        "scheduled_appointment_view": persisted_scheduled_view,
+        "held_appointment_view": {},
+        "current_appointment_id": int(persisted_scheduled_view["id"]) if persisted_scheduled_view.get("id") else None,
+        "assistant_phase": AssistantPhase.POST_APPOINTMENT,
+        "next_action": NextAction.CALL_OPERATOR,
     }
-    set_node_data(local_state,'book_appointment',{'directives': directives})
-    set_node_data(local_state,'book_appointment',{"exclusive_directives": True})
+    set_node_data(local_state, "book_appointment", {"directives": directives})
+    set_node_data(local_state, "book_appointment", {"exclusive_directives": True})
 
-    logger.warning(f'local_state: {local_state}')
+    logger.warning("book_appointment: local_state=%s", local_state)
     return local_state

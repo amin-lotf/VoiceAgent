@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Sequence
 from sqlalchemy.exc import IntegrityError
 
+from voice_agent.const import DEFAULT_DAYS
 from .exceptions import InvalidSlot, NotFound, SlotNotAvailable
 from .utils import ceil_to_grid, iter_daily_slots
 from voice_agent.core.db.mappers import to_view
@@ -13,6 +15,18 @@ from voice_agent.core.settings import settings
 from voice_agent.core.types import AppointmentStatus, AppointmentView, TimeSlot
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class HoldAppointmentResult:
+    held_view: AppointmentView
+    scheduled_view: AppointmentView | None
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduleAppointmentResult:
+    scheduled_view: AppointmentView
+    deleted_scheduled_view: AppointmentView | None
 
 
 def _ensure_tz(dt: datetime) -> None:
@@ -38,6 +52,77 @@ def _validate_slot_start(slot_start: datetime) -> datetime:
     return normalized
 
 
+def _normalize_requested_start(slot_start: datetime) -> datetime:
+    _ensure_tz(slot_start)
+    return slot_start.replace(second=0, microsecond=0)
+
+
+def _normalize_notes(notes: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in notes or []:
+        text = str(item).strip()
+        if not text or text in seen:
+            continue
+        normalized.append(text)
+        seen.add(text)
+    return normalized
+
+
+def _notes_from_appointment(appointment: object | None) -> list[str]:
+    if appointment is None:
+        return []
+    return _normalize_notes(getattr(appointment, "notes", None))
+
+
+async def _find_first_available_slot(
+    uow: SqlAlchemyUnitOfWork,
+    *,
+    requested_start: datetime,
+    exclude_appointment_id: int | None = None,
+    search_days: int = DEFAULT_DAYS,
+) -> TimeSlot:
+    normalized_requested = _normalize_requested_start(requested_start)
+    now = datetime.now(tz=normalized_requested.tzinfo).replace(second=0, microsecond=0)
+    search_start = max(normalized_requested, now)
+    search_end = search_start + timedelta(days=search_days)
+
+    busy = await uow.appointments.list_busy_between(
+        start_range=search_start,
+        end_range=search_end,
+        active_statuses=(AppointmentStatus.HELD, AppointmentStatus.SCHEDULED),
+        exclude_appointment_id=exclude_appointment_id,
+    )
+
+    cur_day = search_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_day = search_end.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    while cur_day <= end_day:
+        for slot in iter_daily_slots(
+            cur_day,
+            settings.OPENING_TIME,
+            settings.CLOSING_TIME,
+            settings.APPOINTMENT_DURATION_MIN,
+        ):
+            if slot.start_at < search_start or slot.start_at >= search_end:
+                continue
+
+            is_blocked = any(
+                b.start_at is not None
+                and b.end_at is not None
+                and b.start_at < slot.end_at
+                and b.end_at > slot.start_at
+                for b in busy
+            )
+            if is_blocked:
+                continue
+
+            return slot
+        cur_day += timedelta(days=1)
+
+    raise SlotNotAvailable("No free appointment slots were found")
+
+
 async def list_future_appointments_by_phone(
         uow: SqlAlchemyUnitOfWork,
         *,
@@ -61,6 +146,7 @@ async def list_free_slots(
         *,
         start_range: datetime,
         end_range: datetime,
+        exclude_appointment_id: int | None = None,
 ) -> list[TimeSlot]:
     """
     Returns available fixed-grid slots between two datetimes.
@@ -76,6 +162,7 @@ async def list_free_slots(
             start_range=start_range,
             end_range=end_range,
             active_statuses=(AppointmentStatus.HELD, AppointmentStatus.SCHEDULED),
+            exclude_appointment_id=exclude_appointment_id,
         )
 
     # Convert busy appointments to a set of busy slot starts (grid assumption)
@@ -109,7 +196,7 @@ async def create_appointment(
         notes: list[str],
 ) -> AppointmentView:
     """
-    Creates HELD appointment at a fixed slot. If slot already taken, raises SlotNotAvailable.
+    Creates a PENDING appointment shell before a slot is chosen.
     """
 
     try:
@@ -123,7 +210,6 @@ async def create_appointment(
             )
             return to_view(appt)
     except Exception as e:
-        # Your ExcludeConstraint should raise an IntegrityError on overlap
         raise InvalidSlot("Failed to create appointment") from e
 
 
@@ -147,6 +233,110 @@ async def hold_appointment(
         )
         assert appt is not None
         return to_view(appt)
+
+
+async def hold_requested_appointment(
+    uow: SqlAlchemyUnitOfWork,
+    *,
+    name: str,
+    phone: str,
+    reason_for_visit: str,
+    notes: list[str],
+    requested_slot_start: datetime,
+) -> HoldAppointmentResult:
+    requested_slot_start = _normalize_requested_start(requested_slot_start)
+
+    try:
+        async with uow:
+            now = datetime.now(tz=requested_slot_start.tzinfo)
+            scheduled_rows = await uow.appointments.list_future_by_phone(
+                phone=phone,
+                now=now,
+                include_statuses=(AppointmentStatus.SCHEDULED,),
+                ascending=True,
+                limit=1,
+            )
+            held_rows = await uow.appointments.list_future_by_phone(
+                phone=phone,
+                now=now,
+                include_statuses=(AppointmentStatus.HELD,),
+                ascending=True,
+                limit=1,
+            )
+
+            scheduled_appt = scheduled_rows[0] if scheduled_rows else None
+            held_appt = held_rows[0] if held_rows else None
+
+            slot = await _find_first_available_slot(
+                uow,
+                requested_start=requested_slot_start,
+                exclude_appointment_id=held_appt.id if held_appt is not None else None,
+            )
+
+            effective_notes = _normalize_notes(notes)
+            if not effective_notes:
+                effective_notes = _notes_from_appointment(held_appt) or _notes_from_appointment(scheduled_appt)
+
+            if held_appt is None:
+                held_appt = await uow.appointments.create(
+                    name=name,
+                    phone=phone,
+                    reason_for_visit=reason_for_visit,
+                    start_at=slot.start_at,
+                    end_at=slot.end_at,
+                    notes=effective_notes,
+                    status=AppointmentStatus.HELD,
+                )
+            else:
+                held_appt = await uow.appointments.update_fields(
+                    held_appt.id,
+                    name=name,
+                    phone=phone,
+                    reason_for_visit=reason_for_visit,
+                    start_at=slot.start_at,
+                    end_at=slot.end_at,
+                    notes=effective_notes,
+                    status=AppointmentStatus.HELD,
+                )
+
+            assert held_appt is not None
+            return HoldAppointmentResult(
+                held_view=to_view(held_appt),
+                scheduled_view=to_view(scheduled_appt) if scheduled_appt is not None else None,
+            )
+    except IntegrityError as e:
+        raise SlotNotAvailable("That slot is already taken") from e
+
+
+async def schedule_held_appointment(
+    uow: SqlAlchemyUnitOfWork,
+    *,
+    held_appointment_id: int,
+    scheduled_appointment_id: int | None = None,
+) -> ScheduleAppointmentResult:
+    async with uow:
+        held_appt = await uow.appointments.get(held_appointment_id)
+        if held_appt is None:
+            raise NotFound("Appointment not found")
+        if held_appt.status != AppointmentStatus.HELD:
+            raise NotFound("Only HELD appointments can be scheduled")
+
+        deleted_scheduled_view: AppointmentView | None = None
+        if scheduled_appointment_id is not None and scheduled_appointment_id != held_appointment_id:
+            scheduled_appt = await uow.appointments.get(scheduled_appointment_id)
+            if scheduled_appt is not None and scheduled_appt.status == AppointmentStatus.SCHEDULED:
+                deleted_scheduled_view = to_view(scheduled_appt)
+                await uow.appointments.delete(scheduled_appointment_id)
+
+        held_appt = await uow.appointments.update_fields(
+            held_appointment_id,
+            status=AppointmentStatus.SCHEDULED,
+        )
+        assert held_appt is not None
+        return ScheduleAppointmentResult(
+            scheduled_view=to_view(held_appt),
+            deleted_scheduled_view=deleted_scheduled_view,
+        )
 
 
 async def confirm_appointment(
@@ -277,7 +467,7 @@ async def update_active_appointment_details(
     name: str,
     phone: str,
     reason_for_visit: str,
-    notes: list[str],
+    notes: list[str] | None = None,
 ) -> AppointmentView:
     async with uow:
         appt = await uow.appointments.get(appointment_id)
@@ -285,12 +475,16 @@ async def update_active_appointment_details(
             raise NotFound("Appointment not found")
         if appt.status not in (AppointmentStatus.HELD, AppointmentStatus.SCHEDULED):
             raise NotFound("Only active appointments can be updated")
+        fields = {
+            "name": name,
+            "phone": phone,
+            "reason_for_visit": reason_for_visit,
+        }
+        if notes is not None:
+            fields["notes"] = notes
         appt = await uow.appointments.update_fields(
             appointment_id,
-            name=name,
-            phone=phone,
-            reason_for_visit=reason_for_visit,
-            notes=notes,
+            **fields,
         )
         assert appt is not None
         return to_view(appt)

@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import logging
 
-from langgraph.config import get_stream_writer
-
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
-from voice_agent.core.graph.nodes.utils import stream_text_response, view_id
+from voice_agent.core.graph.nodes.utils import view_id
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.services.appointments import delete_held_appointment
 from voice_agent.core.types import CallState, CallPhase, AppointmentStatus
@@ -36,12 +34,12 @@ async def node_on_call_ended(state: CallState,
                        ) -> dict:
     """Cleanup node after hangups."""
 
-    cur_view = state.get("current_appointment_view") or {}
-    view_status= cur_view.get("appointment_status")
+    held_view = state.get("held_appointment_view") or {}
+    view_status = held_view.get("status")
     if view_status not in (AppointmentStatus.HELD, AppointmentStatus.PENDING):
         return {}
 
-    held_id = view_id(cur_view)
+    held_id = view_id(held_view)
     local_state = {}
     try:
         if held_id is not None:
@@ -51,7 +49,9 @@ async def node_on_call_ended(state: CallState,
                 appointment_id=held_id,
             )
             if view_deleted:
-                local_state["current_appointment_view"] =  {}
+                local_state["held_appointment_view"] = {}
+                if state.get("current_appointment_id") == held_id:
+                    local_state["current_appointment_id"] = None
 
     except Exception:
         logger.exception("Failed to delete held appointment")

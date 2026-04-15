@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, date, time, timedelta
-from zoneinfo import ZoneInfo
 import logging
 from typing import Any
 
-from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
+from voice_agent.const import NOT_SPECIFIED
+from voice_agent.core.db.mappers import to_view
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.nodes.utils import view_id, set_node_data
 from voice_agent.core.graph.utils import run_non_interruptible
-from voice_agent.core.services.appointments import update_active_appointment_details
 from voice_agent.core.types import CallState, AppointmentDraft, AppointmentPatch, AppointmentView, ConfirmationIntent, \
-    UserIntent, AssistantPhase
+    UserIntent, AssistantPhase, AppointmentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +33,6 @@ def _is_not_specified(value: object) -> bool:
 
 def _is_confirmed(intent: ConfirmationIntent) -> bool:
     return intent == ConfirmationIntent.ACCEPT
-
-
-def _combine_local(d: date, hour: int, minute: int, tz_info: ZoneInfo) -> datetime:
-    return datetime.combine(d, time(hour=hour, minute=minute), tzinfo=tz_info)
-
 
 def _merge_notes(
         current_notes: list[str] | None,
@@ -67,8 +60,6 @@ def apply_appointment_patch(
         *,
         appointment_draft: AppointmentDraft,
         appointment_patch: AppointmentPatch,
-        now: datetime,
-        tz_info: ZoneInfo = DEFAULT_TZ,
 ) -> AppointmentDraft:
     updated: AppointmentDraft = dict(appointment_draft or {})
     patch: AppointmentPatch = dict(appointment_patch or {})
@@ -106,24 +97,73 @@ def _has_updatable_core_fields(draft: AppointmentDraft) -> bool:
     )
 
 
-async def _sync_view_from_draft(
-        state: CallState,
-        *,
-        sessionmaker,
-        appointment_id: int,
-        appointment_draft: AppointmentDraft,
+def _build_sync_plan(
+    *,
+    appointment_status: AppointmentStatus | None,
+    held_id: int | None,
+    scheduled_id: int | None,
+) -> list[tuple[str, int, bool]]:
+    if appointment_status == AppointmentStatus.SCHEDULED:
+        if scheduled_id is not None:
+            return [("scheduled_appointment_view", scheduled_id, True)]
+        if held_id is not None:
+            return [("held_appointment_view", held_id, True)]
+        return []
+
+    plan: list[tuple[str, int, bool]] = []
+    if held_id is not None:
+        plan.append(("held_appointment_view", held_id, True))
+    if scheduled_id is not None and scheduled_id != held_id:
+        plan.append(("scheduled_appointment_view", scheduled_id, held_id is None))
+    return plan
+
+
+async def _update_active_view_from_draft(
+    uow: SqlAlchemyUnitOfWork,
+    *,
+    appointment_id: int,
+    appointment_draft: AppointmentDraft,
+    include_notes: bool,
 ) -> AppointmentView:
-    async def _commit() -> AppointmentView:
+    appt = await uow.appointments.get(appointment_id)
+    if appt is None:
+        raise ValueError(f"Appointment {appointment_id} not found")
+    if appt.status not in (AppointmentStatus.HELD, AppointmentStatus.SCHEDULED):
+        raise ValueError(f"Appointment {appointment_id} is not active")
+
+    fields = {
+        "name": str(appointment_draft["name"]),
+        "phone": str(appointment_draft["phone"]),
+        "reason_for_visit": str(appointment_draft["reason_for_visit"]),
+    }
+    if include_notes:
+        fields["notes"] = list(appointment_draft.get("notes") or [])
+
+    appt = await uow.appointments.update_fields(appointment_id, **fields)
+    assert appt is not None
+    return to_view(appt)
+
+
+async def _sync_views_from_draft(
+    state: CallState,
+    *,
+    sessionmaker,
+    sync_plan: list[tuple[str, int, bool]],
+    appointment_draft: AppointmentDraft,
+) -> dict[str, AppointmentView]:
+    async def _commit() -> dict[str, AppointmentView]:
         async with sessionmaker() as session:
             uow = SqlAlchemyUnitOfWork(session)
-            return await update_active_appointment_details(
-                uow,
-                appointment_id=appointment_id,
-                name=str(appointment_draft["name"]),
-                phone=str(appointment_draft["phone"]),
-                reason_for_visit=str(appointment_draft["reason_for_visit"]),
-                notes=list(appointment_draft.get("notes") or []),
-            )
+            async with uow:
+                updated_views: dict[str, AppointmentView] = {}
+                for state_key, appointment_id, include_notes in sync_plan:
+                    updated_views[state_key] = await _update_active_view_from_draft(
+                        uow,
+                        appointment_id=appointment_id,
+                        appointment_draft=appointment_draft,
+                        include_notes=include_notes,
+                    )
+                return updated_views
 
     return await run_non_interruptible(state, _commit)
 
@@ -136,13 +176,9 @@ async def node_patch_resolver(
     appointment_draft: AppointmentDraft = state.get("appointment_draft") or {}
     appointment_patch: AppointmentPatch = state.get("appointment_patch") or {}
 
-    now = datetime.now(DEFAULT_TZ)
-
     updated_appointment = apply_appointment_patch(
         appointment_draft=appointment_draft,
         appointment_patch=appointment_patch,
-        now=now,
-        tz_info=DEFAULT_TZ,
     )
 
 
@@ -167,19 +203,31 @@ async def node_patch_resolver(
         logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)
         return local_state
 
-    held_view = state.get("current_appointment_view") or {}
-
+    held_view = state.get("held_appointment_view") or {}
+    scheduled_view = state.get("scheduled_appointment_view") or {}
     held_id = view_id(held_view)
+    scheduled_id = view_id(scheduled_view)
+    sync_plan = _build_sync_plan(
+        appointment_status=updated_appointment.get("status"),
+        held_id=held_id,
+        scheduled_id=scheduled_id,
+    )
 
     try:
-        if held_id is not None:
-            updated_held = await _sync_view_from_draft(
+        if sync_plan:
+            updated_views = await _sync_views_from_draft(
                 state,
                 sessionmaker=sessionmaker,
-                appointment_id=held_id,
+                sync_plan=sync_plan,
                 appointment_draft=updated_appointment,
             )
-            local_state["current_appointment_view"] = updated_held
+            local_state.update(updated_views)
+
+            synced_held_id = view_id(local_state.get("held_appointment_view") or state.get("held_appointment_view") or {})
+            synced_scheduled_id = view_id(
+                local_state.get("scheduled_appointment_view") or state.get("scheduled_appointment_view") or {}
+            )
+            local_state["current_appointment_id"] = synced_held_id or synced_scheduled_id
 
     except Exception:
         logger.exception("Failed to sync appointment details to DB")

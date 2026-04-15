@@ -233,7 +233,7 @@ class CallState(TypedDict, total=False):
     clinic_intent: NotRequired[ClinicIntent | None]
     user_intent: NotRequired[UserIntent | None]
     scheduled_appointment_view: NotRequired[AppointmentView]
-    current_appointment_view: NotRequired[AppointmentView]
+    held_appointment_view: NotRequired[AppointmentView]
     current_appointment_id: NotRequired[int | None]
     prev_assistant_text: NotRequired[str]
     next_action: NotRequired[NextAction]

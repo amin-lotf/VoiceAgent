@@ -45,6 +45,8 @@ class SqlAlchemyAppointmentRepository:
         name: str | None,
         phone: str | None,
         reason_for_visit: str | None,
+        start_at: datetime | None = None,
+        end_at: datetime | None = None,
         notes: list[str] | None = None,
         status: AppointmentStatus = AppointmentStatus.HELD,
     ) -> Appointment:
@@ -52,6 +54,8 @@ class SqlAlchemyAppointmentRepository:
             name=name,
             phone=phone,
             reason_for_visit=reason_for_visit,
+            start_at=start_at,
+            end_at=end_at,
             notes=notes or [],
             status=status,
         )
@@ -122,6 +126,7 @@ class SqlAlchemyAppointmentRepository:
         start_range: datetime,
         end_range: datetime,
         active_statuses: Sequence[AppointmentStatus] = (AppointmentStatus.HELD, AppointmentStatus.SCHEDULED),
+        exclude_appointment_id: int | None = None,
     ) -> list[Appointment]:
         """
         Returns appointments that overlap [start_range, end_range)
@@ -138,6 +143,8 @@ class SqlAlchemyAppointmentRepository:
             )
             .order_by(Appointment.start_at.asc())
         )
+        if exclude_appointment_id is not None:
+            stmt = stmt.where(Appointment.id != exclude_appointment_id)
         res = await self._session.execute(stmt)
         return list(res.scalars().all())
 
