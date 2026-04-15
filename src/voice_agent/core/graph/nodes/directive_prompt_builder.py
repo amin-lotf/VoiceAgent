@@ -19,6 +19,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+QUESTION_DIRECTIVE_KINDS = {
+    DirectiveKind.REQUEST_MISSING_INFO,
+    DirectiveKind.REQUEST_CLARIFY_INFO,
+    DirectiveKind.REQUEST_CONFIRMATION,
+    DirectiveKind.REQUEST_USER_INTENT,
+}
+
+INFORMATIVE_DIRECTIVE_KINDS = {
+    DirectiveKind.INFORM_HELD,
+    DirectiveKind.INFORM_SCHEDULED,
+}
+
 
 def _has_value(v):
     return v not in (None, "", NOT_SPECIFIED)
@@ -29,6 +41,7 @@ def _build_field_rules(
     directives: list[AssistantDirective],
 ) -> list[str]:
     draft = state.get("appointment_draft") or {}
+    internal_call = bool(state.get("internal_call"))
     rules: list[str] = []
 
     active_fields = {
@@ -42,6 +55,9 @@ def _build_field_rules(
             rules.extend(REQUESTING_FIELD_RULES[field])
             continue
 
+        if internal_call:
+            continue
+
         if _has_value(draft.get(field.value)):
             if EXISTING_FIELD_RULES.get(field):
                 rules.extend(EXISTING_FIELD_RULES[field])
@@ -52,7 +68,6 @@ def _build_clarifying_field_rules(
     state: CallState,
     directives: list[AssistantDirective],
 ) -> list[str]:
-    draft = state.get("appointment_draft") or {}
     rules: list[str] = []
 
     active_fields = {
@@ -68,6 +83,59 @@ def _build_clarifying_field_rules(
 
 
     return rules
+
+
+def _build_turn_flow_rules(
+    state: CallState,
+    directives: list[AssistantDirective],
+) -> list[str]:
+    rules: list[str] = []
+    internal_call = bool(state.get("internal_call"))
+    active_question_directive = next(
+        (d for d in directives if d.get("kind") in QUESTION_DIRECTIVE_KINDS),
+        None,
+    )
+    has_informative = any(
+        d.get("kind") in INFORMATIVE_DIRECTIVE_KINDS
+        for d in directives
+    )
+
+    if active_question_directive:
+        rules.append(
+            "Use the first active request-style directive in priority order as the only question source for this turn."
+        )
+        if has_informative:
+            rules.append(
+                "Blend the turn smoothly: give the brief informative update first and then ask the single required question."
+            )
+        if internal_call:
+            rules.append(
+                "This is an internal follow-up turn, so continue directly without greeting, stalling, or restarting the conversation."
+            )
+
+        kind = active_question_directive.get("kind")
+        field = active_question_directive.get("field")
+        confirmation_topic = active_question_directive.get("confirmation_topic")
+        if field:
+            rules.append(
+                f'The active question directive is "{kind}" for field "{field}".'
+            )
+        elif confirmation_topic:
+            rules.append(
+                f'The active question directive is "{kind}" for confirmation topic "{confirmation_topic}".'
+            )
+        else:
+            rules.append(f'The active question directive is "{kind}".')
+    else:
+        rules.append("No current directive requires a caller-facing question in this turn.")
+        rules.append("Do not invent one.")
+        if has_informative:
+            rules.append(
+                "Keep the informative update brief and do not append an extra question."
+            )
+
+    return rules
+
 
 def _build_intent_rules(
     state: CallState,
@@ -145,12 +213,20 @@ def _build_informative_rules(
 async def node_directive_prompt_builder(state: CallState):
     directives = state.get("directives") or []
 
+    turn_flow_rules = _build_turn_flow_rules(state, directives)
     field_rules = _build_field_rules(state, directives)
     clarifying_field_rules = _build_clarifying_field_rules(state, directives)
     confirmation_rules = _build_confirmation_rules(state, directives)
     informative_rules = _build_informative_rules(state, directives)
     intent_rules = _build_intent_rules(state, directives)
-    rules = clarifying_field_rules+intent_rules+confirmation_rules + informative_rules + field_rules
+    rules = (
+        turn_flow_rules
+        + clarifying_field_rules
+        + intent_rules
+        + confirmation_rules
+        + informative_rules
+        + field_rules
+    )
 
 
     return {

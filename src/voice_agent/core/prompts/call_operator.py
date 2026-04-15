@@ -9,21 +9,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _build_no_question_rules(state: CallState) -> list[str]:
+QUESTION_DIRECTIVE_KINDS = {
+    DirectiveKind.REQUEST_MISSING_INFO,
+    DirectiveKind.REQUEST_CLARIFY_INFO,
+    DirectiveKind.REQUEST_CONFIRMATION,
+    DirectiveKind.REQUEST_USER_INTENT,
+}
+
+
+def _build_turn_scope_rules(state: CallState) -> list[str]:
     directives = state.get("directives") or []
     draft = state.get("appointment_draft") or {}
 
     has_open_question = any(
-        d.get("kind") in {
-            DirectiveKind.REQUEST_MISSING_INFO,
-            DirectiveKind.REQUEST_CONFIRMATION,
-        }
+        d.get("kind") in QUESTION_DIRECTIVE_KINDS
         for d in directives
     )
 
     appointment_complete = draft.get("status") == AppointmentStatus.SCHEDULED
 
-    if not has_open_question and appointment_complete:
+    if has_open_question:
+        return OPEN_QUESTION_RULES
+
+    if appointment_complete:
         return POST_BOOKING_NO_QUESTION_RULES
 
     return PRE_BOOKING_NO_QUESTION_RULES
@@ -73,28 +81,57 @@ def _format_draft_summary(draft: dict) -> str:
     return str(summary)
 
 
+def _format_directives(directives: list[dict]) -> str:
+    if not directives:
+        return "none"
+
+    lines: list[str] = []
+    for idx, directive in enumerate(directives, start=1):
+        parts = [f'kind="{directive.get("kind")}"']
+
+        field = directive.get("field")
+        if field:
+            parts.append(f'field="{field}"')
+
+        confirmation_topic = directive.get("confirmation_topic")
+        if confirmation_topic:
+            parts.append(f'confirmation_topic="{confirmation_topic}"')
+
+        priority = directive.get("priority")
+        if priority is not None:
+            parts.append(f"priority={priority}")
+
+        lines.append(f"{idx}. " + ", ".join(parts))
+
+    return "\n".join(lines)
+
+
 def build_operator_prompt(state, *, internal_call: bool = False):
     node_data = state.get("node_data") or {}
     directive_prompts = node_data.get("directive_prompt_builder", {}).get("rules", [])
     office_knowledge = node_data.get("office_info", {}).get("knowledge", {})
 
     appointment = state.get("appointment_draft") or {}
+    appointment_status = appointment.get("status")
+    directives = state.get("directives") or []
     user_text = (state.get("user_text") or "").strip()
     recent_messages = _get_recent_messages(state, limit=8)
 
-    prev_assistant_text = state.get("assistant_text") or ""
-    prev_user_text = state.get("user_text") or ""
+    prev_assistant_text = (state.get("prev_assistant_text") or state.get("assistant_text") or "").strip()
+    prev_user_text = (state.get("prev_user_text") or "").strip()
 
-    global_rules = GLOBAL_OPERATOR_RULES + _build_no_question_rules(state)
+    global_rules = GLOBAL_OPERATOR_RULES + _build_turn_scope_rules(state)
     all_rules = []
     _extend_section(all_rules, "Global operator", global_rules)
+    if internal_call:
+        _extend_section(all_rules, "Internal follow-up", INTERNAL_CALL_RULES)
     _extend_section(all_rules, "Directive prompt rules", directive_prompts)
-    _extend_section(all_rules, "JSON", JSON_RULES)
 
     if internal_call:
         output_schema = {
             "end_call": False,
         }
+        _extend_section(all_rules, "JSON", JSON_RULES)
 
         system = f"""
 You are a clinic call assistant.
@@ -119,7 +156,22 @@ Current draft:
 
 Task:
 Generate the next assistant reply for the current directives.
-This is an internal transition. There is no new caller message to interpret.
+Continue from the ongoing conversation.
+There is no new caller message to interpret in this turn.
+If a directive still requires one question, ask it directly now.
+Do not greet, thank, or restart the conversation.
+
+Recent message history:
+{_format_messages(recent_messages)}
+
+Previous caller text:
+{prev_user_text or "none"}
+
+Previous assistant text:
+{prev_assistant_text or "none"}
+
+Current directives:
+{_format_directives(directives)}
 """.strip()
 
     else:
@@ -140,11 +192,13 @@ This is an internal transition. There is no new caller message to interpret.
         _extend_section(all_rules, "Clinic intent", CLINIC_INTENT_RULES)
         _extend_section(all_rules, "Datetime", DATETIME_RULES)
         _extend_section(all_rules, "Office info", OFFICE_INFO_RULES)
-        _extend_section(all_rules, "Confirmation intent", CONFIRMATION_INTENT_RULES)
+        if appointment_status == AppointmentStatus.HELD:
+            _extend_section(all_rules, "Confirmation intent", CONFIRMATION_INTENT_RULES)
         _extend_section(all_rules, "User intent", USER_INTENT_RULES)
         _extend_section(all_rules, "Out of scope", OUT_OF_SCOPE_RULES)
         _extend_section(all_rules, "Capability explanation", CAPABILITY_EXPLANATION_RULES)
-        _extend_section(all_rules, "Post-booking closing", POST_BOOKING_CLOSING_RULES)
+        if appointment_status == AppointmentStatus.SCHEDULED:
+            _extend_section(all_rules, "Post-booking closing", POST_BOOKING_CLOSING_RULES)
 
 
         turn_local_rules = [
@@ -154,8 +208,11 @@ This is an internal transition. There is no new caller message to interpret.
         ]
         _extend_section(all_rules, "Turn-local extraction", turn_local_rules)
 
+        patch_rules: list[str] = []
         for field_rules in PATCH_FIELD_RULES.values():
-            all_rules.extend(field_rules)
+            patch_rules.extend(field_rules)
+        _extend_section(all_rules, "Patch extraction", patch_rules)
+        _extend_section(all_rules, "JSON", JSON_RULES)
 
         system = f"""
 You are a clinic call assistant.
@@ -182,14 +239,14 @@ Then JSON.
 Recent message history:
 {_format_messages(recent_messages)}
 
-Previous Caller reply:
-{prev_user_text}
-
 Previous assistant text:
-{prev_assistant_text}
+{prev_assistant_text or "none"}
 
 Caller Now:
 {user_text or "none"}
+
+Current directives:
+{_format_directives(directives)}
 
 Current draft:
 {_format_draft_summary(appointment)}

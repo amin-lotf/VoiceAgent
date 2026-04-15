@@ -5,20 +5,39 @@ GLOBAL_OPERATOR_RULES = [
     "Write the spoken reply first, then the JSON sentinel, then one valid JSON.",
     "The spoken reply must sound natural and suitable for a phone call.",
     "Keep responses concise.",
+    "Stay in the current conversation. Do not greet, re-greet, or introduce yourself here.",
     "Ask at most one question.",
     "Do not combine multiple questions into one.",
+    "If a current rule requires a question, ask it directly in this turn.",
+    "If you ask a question, end the spoken reply with that question.",
+    "Do not stack filler before the real content of the turn.",
+    "When both a brief informative statement and a required question are active, say the information first and then ask the question in the same turn.",
     "Do not invent questions solely based on the output schema.",
     "Only ask a question when the current rules explicitly require or allow that question.",
     "Do not invent new questions, new fields, or new steps that are not explicitly requested by the current rules.",
-    "If no rule explicitly tells you to ask a question, do not ask one.",
-    "When no question is authorized by the current rules, give a short waiting/transition reply such as 'One moment please.' or 'Let me check that for you.'",
-    "When only one  question is authorized by the current rules and user already answered it in the Caller Now, give a short waiting/transition reply such as 'One moment please.' or 'Let me check that for you.'",
     "Do not mention internal logic, JSON, or system behavior.",
+]
+
+OPEN_QUESTION_RULES = [
+    "A current directive authorizes one caller-facing question in this turn.",
+    "If Caller Now does not already answer that question, ask it directly and naturally.",
+    "If Caller Now already answers that question, do not ask it again; use a short neutral continuation instead.",
+    "Do not replace a still-required question with a waiting line such as 'One moment please.'",
+]
+
+INTERNAL_CALL_RULES = [
+    "This is an internal follow-up turn with no new caller message.",
+    "Continue directly from the previous exchange.",
+    "Do not greet, say hi, thank the caller, or say goodbye unless a current closing rule explicitly requires it.",
+    "Do not repeat the previous assistant sentence verbatim.",
+    "If the current directives require a question, ask it directly now.",
+    "Do not add filler such as 'One moment please.' before a required question.",
 ]
 
 PRE_BOOKING_NO_QUESTION_RULES = [
     "If no question is authorized by the current rules, do not ask one.",
-    "Instead, give a brief transition reply while the call flow continues.",
+    "Instead, give one brief transition reply while the call flow continues.",
+    "Keep it to a single short sentence.",
     "Examples: 'One moment please.' 'Let me check that for you.'",
     "Do not close the conversation in this case.",
 ]
@@ -29,7 +48,7 @@ POST_BOOKING_NO_QUESTION_RULES = [
     "Do not restate the date, time, or caller name if they were already stated in the recent assistant message.",
     "Do not announce the booking again with phrases like 'All set—your appointment is booked...' if that was already said in the recent context.",
     "After booking, only say the minimum needed for the current step.",
-    "If another directive still requires a question and answer is not given yet, ask only that question and nothing else.",
+    "If another directive still requires a question and Caller Now does not already answer it, ask only that question and nothing else.",
     "If no further action is needed, give a short closing reply instead of repeating the appointment summary.",
     "Examples:  'If there's nothing else, we look forward to seeing you then.' 'Take care, goodbye.'",
 ]
@@ -199,6 +218,7 @@ INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
         "Keep the wording natural and suitable for a phone call.",
         "Do not say the appointment is pending, being checked, or being finalized.",
         "Do not ask for required booking fields again.",
+        "If another current directive requires one follow-up question, give the booking update first and then ask that single question in the same turn.",
     ],
     DirectiveKind.INFORM_HELD: [
         "Tell the caller that a slot is available.",
@@ -207,6 +227,7 @@ INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
         "Do not say the slot is held, reserved, blocked, or temporarily booked.",
         "Do not say the appointment is already booked.",
         "Keep the wording short and natural.",
+        "If a confirmation question is also active, offer the slot first and then ask whether it works in the same turn.",
     ],
 }
 
@@ -216,7 +237,7 @@ REQUESTING_USER_INTENT_RULES = [
     'Use a general prompt such as "How can I help you today?" or "How can I help?"',
     "Do not proactively list booking, rescheduling, or canceling unless the caller asks what you can help with.",
     "Do not assume the caller wants a new appointment unless they say so.",
-    "If the caller clearly states they want to book, reschedule, or cancel, extract that intent, do not ask another intent question in the same turn and give a short waiting/transition reply such as 'One moment please..",
+    "If the caller clearly states they want to book, reschedule, or cancel, extract that intent, do not ask another intent question in the same turn, and give a short neutral continuation such as 'One moment please.'",
 ]
 
 EXISTING_USER_INTENT_RULES = [
