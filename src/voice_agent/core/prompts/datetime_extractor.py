@@ -14,6 +14,42 @@ def _pretty_json(data: object) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+def _normalize_context_value(value: object) -> str:
+    if value is None:
+        return str(NOT_SPECIFIED)
+
+    text = str(value).strip()
+    if not text:
+        return str(NOT_SPECIFIED)
+
+    if text.lower() in {
+        "none",
+        "null",
+        "not specified",
+        "not_specified",
+        str(NOT_SPECIFIED).lower(),
+    }:
+        return str(NOT_SPECIFIED)
+
+    return text
+
+
+def _date_key_from_iso_datetime(value: object, tz_info: ZoneInfo = DEFAULT_TZ) -> str:
+    raw = _normalize_context_value(value)
+    if raw == str(NOT_SPECIFIED):
+        return str(NOT_SPECIFIED)
+
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return str(NOT_SPECIFIED)
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=tz_info)
+
+    return dt.astimezone(tz_info).date().isoformat()
+
+
 def build_next_14_days(now: datetime, tz_info: ZoneInfo = DEFAULT_TZ) -> list[dict]:
     local_now = now.astimezone(tz_info)
     today = local_now.date()
@@ -53,10 +89,29 @@ def build_time_resolution_prompt(
 ) -> list:
     appointment: AppointmentDraft = dict(state.get("appointment_draft") or {})
     requested_time_text = (appointment.get("requested_time_text") or "").strip()
-    last_offered_slot_start_at = (appointment.get("last_offered_slot_start_at") or "").strip()
+    last_offered_slot_start_at = _normalize_context_value(
+        appointment.get("last_offered_slot_start_at")
+    )
+    existing_requested_time_iso = _normalize_context_value(
+        appointment.get("requested_time_iso")
+    )
 
     next_14_days = build_next_14_days(now=now, tz_info=tz_info)
-    prev_assistant_text=state.get("prev_assistant_text") or 'none'
+    prev_assistant_text = _normalize_context_value(state.get("prev_assistant_text"))
+    prev_user_text = _normalize_context_value(state.get("prev_user_text"))
+    existing_requested_date_key = _date_key_from_iso_datetime(
+        existing_requested_time_iso,
+        tz_info=tz_info,
+    )
+    offered_slot_date_key = _date_key_from_iso_datetime(
+        last_offered_slot_start_at,
+        tz_info=tz_info,
+    )
+    established_context_date_key = (
+        existing_requested_date_key
+        if existing_requested_date_key != str(NOT_SPECIFIED)
+        else offered_slot_date_key
+    )
 
     output_schema = {
         "schedule_patch": {
@@ -93,6 +148,18 @@ General:
 - Do NOT detect whether datetime exists; assume this node was called because time parsing is needed.
 - If the text is too unclear to map safely, keep fields as "{NOT_SPECIFIED}".
 - Prefer conservative output over guessing.
+
+Context carry-forward:
+- requested_time_text is still the primary source text.
+- If requested_time_text clearly names a new day, use that day and ignore inherited day anchors.
+- If requested_time_text only changes the time or time-of-day and does NOT name a new day, inherit the already-established day from context when one is clearly available.
+- Use inherited day anchors in this order:
+  1. existing_requested_date_key
+  2. offered_slot_date_key
+  3. prev_user_text / prev_assistant_text only if they clearly establish one day and do not conflict
+- When inheriting a day, set date_mode="specific_day" and date_key to that inherited date_key.
+- Do NOT leave date_mode/date_key unresolved just because the latest phrase omits the day when the day is already established by context.
+- If the context conflicts or no clear day is established, leave unresolved fields as "{NOT_SPECIFIED}".
 
 Allowed values:
 
@@ -169,6 +236,7 @@ Relative-to-offered behavior:
 
 Important:
 - If requested_time_text already specifies an absolute day/time, prefer absolute extraction into date_key/time_pref/exact_time_text.
+- If requested_time_text gives only a time like "1 pm" or a bucket like "afternoon", but the day is already established by context, output an absolute specific_day patch using that inherited date_key.
 - Only use relative_to_offered when the wording is truly relative.
 
 Day mapping rules:
@@ -223,6 +291,21 @@ Output:
   }}
 }}
 
+Context:
+- existing_requested_time_iso: "<established tomorrow morning ISO>"
+- existing_requested_date_key: "<tomorrow date_key>"
+- requested_time_text: "at 1 pm"
+Output:
+{{
+  "schedule_patch": {{
+    "date_mode": "specific_day",
+    "date_key": "<tomorrow date_key>",
+    "time_pref": "exact_time",
+    "exact_time_text": "13:00",
+    "relative_to_offered": "{NOT_SPECIFIED}"
+  }}
+}}
+
 Input: "earliest available"
 Output:
 {{
@@ -252,9 +335,14 @@ Output:
         [
             f"Current clinic local time: {now.astimezone(tz_info).isoformat()}",
             "",
-            f'Assistant text already produced this turn: "{prev_assistant_text}"\n'
-            f"requested_time_text: {requested_time_text or 'none'}",
-            f"last_offered_slot_start_at: {last_offered_slot_start_at or 'none'}",
+            f"prev_user_text: {prev_user_text}",
+            f"prev_assistant_text: {prev_assistant_text}",
+            f"requested_time_text: {requested_time_text or str(NOT_SPECIFIED)}",
+            f"existing_requested_time_iso: {existing_requested_time_iso}",
+            f"existing_requested_date_key: {existing_requested_date_key}",
+            f"last_offered_slot_start_at: {last_offered_slot_start_at}",
+            f"offered_slot_date_key: {offered_slot_date_key}",
+            f"established_context_date_key: {established_context_date_key}",
             "",
             "Return the JSON object only.",
         ]
