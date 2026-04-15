@@ -3,7 +3,8 @@ from __future__ import annotations
 from langchain_core.messages import SystemMessage, HumanMessage
 from voice_agent.const import JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.prompts.operator_blocks import *
-from voice_agent.core.types import CallState, AppointmentStatus
+from voice_agent.core.turn_signals import looks_like_acceptance, looks_like_schedule_change
+from voice_agent.core.types import CallState, AppointmentStatus, DirectiveKind
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,59 @@ def _build_turn_scope_rules(state: CallState) -> list[str]:
         return POST_BOOKING_NO_QUESTION_RULES
 
     return PRE_BOOKING_NO_QUESTION_RULES
+
+
+def _build_contextual_turn_rules(state: CallState, *, internal_call: bool) -> list[str]:
+    directives = state.get("directives") or []
+    user_text = (state.get("user_text") or "").strip()
+    prev_user_text = (state.get("prev_user_text") or "").strip()
+
+    has_clarify_directive = any(
+        d.get("kind") == DirectiveKind.REQUEST_CLARIFY_INFO
+        for d in directives
+    )
+    has_inform_scheduled = any(
+        d.get("kind") == DirectiveKind.INFORM_SCHEDULED
+        for d in directives
+    )
+    has_follow_up_question = any(
+        d.get("kind") in QUESTION_DIRECTIVE_KINDS
+        for d in directives
+    )
+
+    rules: list[str] = []
+
+    if not internal_call and looks_like_schedule_change(user_text):
+        rules.extend(
+            [
+                "Caller Now is changing the appointment date or time.",
+                "Do not continue any earlier notes or post-booking follow-up question in this turn.",
+            ]
+        )
+        if has_clarify_directive:
+            rules.append("Ask only the single clarification required by the current directive.")
+        else:
+            rules.extend(
+                [
+                    "Reply with one short neutral scheduling acknowledgment only, such as 'Let me check that for you.'",
+                    "Do not confirm availability yet and do not ask another question in this turn.",
+                ]
+            )
+
+    if internal_call and has_inform_scheduled and looks_like_acceptance(prev_user_text):
+        rules.extend(
+            [
+                "The previous caller turn already accepted the offered slot.",
+                "Do not say that a slot is available again.",
+                "Start with a short booking-progress acknowledgment, such as 'Perfect, I'll book that for you now.'",
+            ]
+        )
+        if has_follow_up_question:
+            rules.append(
+                "If one follow-up question is still required, ask it only after the booking-progress acknowledgment."
+            )
+
+    return rules
 
 
 def _format_messages(messages: list[dict]) -> str:
@@ -121,8 +175,10 @@ def build_operator_prompt(state, *, internal_call: bool = False):
     prev_user_text = (state.get("prev_user_text") or "").strip()
 
     global_rules = GLOBAL_OPERATOR_RULES + _build_turn_scope_rules(state)
+    contextual_rules = _build_contextual_turn_rules(state, internal_call=internal_call)
     all_rules = []
     _extend_section(all_rules, "Global operator", global_rules)
+    _extend_section(all_rules, "Current turn context", contextual_rules)
     if internal_call:
         _extend_section(all_rules, "Internal follow-up", INTERNAL_CALL_RULES)
     _extend_section(all_rules, "Directive prompt rules", directive_prompts)

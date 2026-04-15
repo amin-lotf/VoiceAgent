@@ -16,6 +16,8 @@ GLOBAL_OPERATOR_RULES = [
     "Only ask a question when the current rules explicitly require or allow that question.",
     "Do not invent new questions, new fields, or new steps that are not explicitly requested by the current rules.",
     "Do not mention internal logic, JSON, or system behavior.",
+    "If Caller Now changes the appointment date or time, that scheduling change takes priority over any earlier follow-up topic.",
+    "When Caller Now changes the appointment date or time, do not continue an older notes or post-booking follow-up question in the same turn.",
 ]
 
 OPEN_QUESTION_RULES = [
@@ -138,6 +140,8 @@ REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
         "If the caller says there is nothing to add, acknowledge briefly and do not ask another question in the same turn.",
         "Do not end the call with a plain acknowledgment only.",
         "If the caller provides an answer to be noted without further instruction, ask for continuation, e.g., 'Anything else you'd like to note?'",
+        "If Caller Now changes the appointment date or time instead of giving a note, stop note collection for this turn.",
+        "In that case, do not ask any note question or note follow-up question; switch back to scheduling with a short neutral reply such as 'Let me check that for you.'",
     ],
     AppointmentField.REQUESTED_TIME_TEXT: [
         "The requested appointment time is still missing.",
@@ -175,6 +179,7 @@ EXISTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
         "Do not ask for the day or time again unless the caller explicitly changes it.",
         "If the caller provides a new date or time, extract and replace the existing value.",
         "If the caller changes this information, acknowledge briefly (e.g., 'One moment while I check availability.') and do not ask any question in the same turn.",
+        "When the caller changes the appointment time, do not continue any earlier notes question or other post-booking follow-up in that same turn.",
     ],
 }
 
@@ -199,7 +204,7 @@ CLARIFYING_FIELD_RULES: dict[AppointmentField, list[str]] = {
 CONFIRMATION_RULES: dict[ConfirmationTopic, list[str]] = {
     ConfirmationTopic.HOLD_CONFIRMATION: [
         "Ask whether the offered date and time works for the caller.",
-        "Ask exactly one question only if the caller has not already answered the confirmation request.",
+        "Ask exactly one question only if the caller has not already answered the confirmation request in the current turn.",
         "Do not ask an open-ended scheduling question unless the caller has already rejected the offered slot.",
         "If the caller rejects the offered slot without giving a replacement date or time, ask which day or time would work better.",
         "If the caller rejects the offered slot and gives a replacement date or time, extract that new date or time and do not ask another question in the same turn.",
@@ -207,6 +212,7 @@ CONFIRMATION_RULES: dict[ConfirmationTopic, list[str]] = {
         "Do not propose a new slot in the same turn unless availability has already been explicitly provided by the system for that exact slot.",
         "After a replacement date or time is provided, respond with a neutral transition such as 'Got it—one moment while I check that for you.'",
         "Do not say phrases like 'that is available', 'that works', 'I can do that time', or 'does that work for you' before availability is checked.",
+        "If the caller accepts the offered slot, do not restate later that a slot is available again.",
         "Do not mention that the slot is held or reserved.",
     ]
 }
@@ -217,6 +223,10 @@ INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
         "If the caller's name is available, say it is booked under that name.",
         "Keep the wording natural and suitable for a phone call.",
         "Do not say the appointment is pending, being checked, or being finalized.",
+        "Do not reopen with availability language such as 'There's a slot available' once the caller has already accepted a slot.",
+        "If the latest caller turn was a simple acceptance of the offered slot, prefer a brief booking-progress acknowledgment such as 'Perfect, I'll book that for you now.'",
+        "If another current directive requires one follow-up question, ask it only after the booking-progress line or brief booking update.",
+        "Do not repeat the same date and time twice in one turn unless a current rule explicitly requires it.",
         "Do not ask for required booking fields again.",
         "If another current directive requires one follow-up question, give the booking update first and then ask that single question in the same turn.",
     ],
