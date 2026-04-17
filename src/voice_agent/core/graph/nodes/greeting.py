@@ -30,7 +30,6 @@ async def node_on_call_started(state: CallState) -> dict[str, Any]:
     start_time = time.perf_counter()
     first_token_time: float | None = None
     end_time: float | None = None
-
     try:
         async for chunk in LLM.astream(prompt):
             token = chunk.content or ""

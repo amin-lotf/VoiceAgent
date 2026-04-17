@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data
-from voice_agent.core.llm.openai_llm import LLM
+from voice_agent.core.llm.openai_llm import LLM, LLM_Non_stream
 from voice_agent.core.prompts.datetime_extractor import build_time_resolution_prompt
 from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction
 
@@ -106,7 +106,7 @@ async def node_datetime_extractor(
     local_state = {}
     try:
         # Preferred: model configured for JSON object output
-        llm_result: AIMessage = await LLM.ainvoke(messages)
+        llm_result: AIMessage = await LLM_Non_stream.ainvoke(messages)
         end_time = time.perf_counter()
         raw_text = _extract_json_text(llm_result.content)
         parsed = _parse_json_object(raw_text)
