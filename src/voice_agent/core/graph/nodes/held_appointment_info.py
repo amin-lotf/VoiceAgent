@@ -61,9 +61,8 @@ async def node_held_appointment_info(
 
     directives = _build_held_appointment_directives(state)
     local_state = {}
-    if directives:
-        set_node_data(local_state, 'held_appointment_info', {'directives': directives})
-        set_node_data(local_state, 'held_appointment_info', {"exclusive_directives": True})
+    set_node_data(local_state, 'held_appointment_info', {'directives': directives})
+    set_node_data(local_state, 'held_appointment_info', {"exclusive_directives": bool(directives)})
 
     logger.warning(f'=======\nlocal state: {local_state}\n=======')
     return local_state

@@ -13,6 +13,7 @@ from voice_agent.core.api.v1.schemas import RetellResponseRequiredIn, RetellUpda
     RetellResponseOut, RetellConfigOut, RetellConfig, RetellInbound, RetellPingPongOut
 from voice_agent.core.db.session import AsyncSessionLocal
 from voice_agent.core.graph.engine import InterviewEngine
+from voice_agent.core.graph.utils import SpokenTextStreamNormalizer, sanitize_spoken_text
 from voice_agent.core.services.call_history import CallHistoryRecorder
 from voice_agent.core.types import CallEvent, ChunkKind
 
@@ -94,12 +95,13 @@ async def run_engine_to_retell(
 
     final_state = result.state or {}
     end_call_flag = bool(final_state.get("end_call", False))
+    assistant_text = sanitize_spoken_text(result.assistant_text or "")
 
     await ws_send(
         websocket,
         RetellResponseOut(
             response_id=response_id,
-            content=result.assistant_text or "",
+            content=assistant_text,
             content_complete=True,
             end_call=True if end_call_flag else None,
         ),
@@ -122,6 +124,7 @@ async def stream_engine_to_retell(
     end_call_flag = False
     full_text_parts: list[str] = []
     final_state: dict[str, Any] = {}
+    stream_normalizer = SpokenTextStreamNormalizer()
 
     async for chunk in engine.stream_event(
         call_id=call_id,
@@ -139,7 +142,10 @@ async def stream_engine_to_retell(
             break
 
         if chunk.kind == ChunkKind.TOKEN:
-            token_text = str(chunk.data)
+            token_text = stream_normalizer.push(str(chunk.data))
+            if not token_text:
+                continue
+
             full_text_parts.append(token_text)
 
             # logger.warning(
@@ -165,7 +171,19 @@ async def stream_engine_to_retell(
     if cancel_guard.is_set():
         return
 
-    full_text = "".join(full_text_parts)
+    trailing_text = stream_normalizer.flush()
+    if trailing_text:
+        full_text_parts.append(trailing_text)
+        await ws_send(
+            websocket,
+            RetellResponseOut(
+                response_id=response_id,
+                content=trailing_text,
+                content_complete=False,
+            ),
+        )
+
+    full_text = sanitize_spoken_text("".join(full_text_parts))
     logger.warning(
         "RETELL FULL ASSISTANT | call_id=%s | response_id=%s | text=%r",
         call_id,

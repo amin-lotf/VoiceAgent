@@ -50,7 +50,9 @@ async def node_user_intent(state: CallState) -> dict[str, Any]:
         patch_resolver = get_state_data(state, 'patch_resolver')
         user_intent_updated = patch_resolver.get('user_intent_updated') or False
         if user_intent_updated:
-            local_state = {'next_action': NextAction.CALL_OPERATOR}
+            if user_intent != UserIntent.RESCHEDULE:
+                #currently rescheduling is not supported
+                local_state = {'next_action': NextAction.CALL_OPERATOR}
 
     set_node_data(
         local_state,

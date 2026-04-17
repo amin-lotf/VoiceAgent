@@ -187,7 +187,7 @@ async def node_patch_resolver(
     }
     user_intent = appointment_patch.get("user_intent")
     intent_updated = False
-    if user_intent and user_intent != UserIntent.UNDECIDED and user_intent != state.get("user_intent"):
+    if user_intent and user_intent == UserIntent.BOOK_APPOINTMENT and user_intent != state.get("user_intent"):
         local_state["user_intent"] = user_intent
         intent_updated = True
         local_state['assistant_phase'] = AssistantPhase.COLLECTING_INFO

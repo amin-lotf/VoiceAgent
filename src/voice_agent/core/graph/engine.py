@@ -15,7 +15,7 @@ from voice_agent.core.graph.node_timing import (
     format_turn_timing_summary,
     reset_node_timing_data,
 )
-from voice_agent.core.graph.utils import RunControl
+from voice_agent.core.graph.utils import RunControl, sanitize_spoken_text
 from voice_agent.core.store.redis_store import RedisStateStore
 from voice_agent.core.types import (
     CallEvent,
@@ -141,8 +141,9 @@ class InterviewEngine:
             *,
             state: CallState,
     ) -> None:
-        assistant_text = (state.get("assistant_text") or "").strip()
+        assistant_text = sanitize_spoken_text((state.get("assistant_text") or "").strip())
         if assistant_text:
+            state["assistant_text"] = assistant_text
             state["messages"] = self._append_message(
                 state.get("messages"),
                 role="assistant",
@@ -289,6 +290,10 @@ class InterviewEngine:
         clean = dict(state)
         clean.pop("_run_control", None)
         clean.pop("assistant_streamed", None)
+        if clean.get("assistant_text"):
+            clean["assistant_text"] = sanitize_spoken_text(str(clean["assistant_text"]))
+        if clean.get("prev_assistant_text"):
+            clean["prev_assistant_text"] = sanitize_spoken_text(str(clean["prev_assistant_text"]))
         return clean
 
     def _log_node_timing_summary(

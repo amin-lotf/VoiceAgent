@@ -1,3 +1,6 @@
+import pytest
+
+from voice_agent.core.graph.nodes.held_appointment_info import node_held_appointment_info
 from voice_agent.core.graph.nodes.planner import collect_directives
 from voice_agent.core.types import (
     AssistantPhase,
@@ -51,3 +54,18 @@ def test_collect_directives_skips_stale_held_confirmation_on_schedule_change():
             "priority": 70,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_held_appointment_info_clears_stale_directives_after_acceptance():
+    state = {
+        "appointment_draft": {
+            "status": AppointmentStatus.HELD,
+            "offered_time_confirmed": True,
+        },
+    }
+
+    local_state = await node_held_appointment_info(state)
+
+    assert local_state["node_data"]["held_appointment_info"]["directives"] == []
+    assert local_state["node_data"]["held_appointment_info"]["exclusive_directives"] is False
