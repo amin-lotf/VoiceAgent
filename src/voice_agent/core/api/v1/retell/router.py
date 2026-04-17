@@ -46,21 +46,33 @@ def _last_user_text(transcript: list[dict[str, Any]]) -> str:
     return ""
 
 
-def _derive_final_status(final_state: dict[str, Any]) -> str:
-    if final_state.get("scheduled_appointment_view"):
+def _phase_is_done(value: Any) -> bool:
+    return bool(value) and str(value) == "done"
+
+
+def _derive_call_status(final_state: dict[str, Any] | None) -> str | None:
+    state = final_state or {}
+    if state.get("scheduled_appointment_view"):
         return "scheduled"
-    if final_state.get("held_appointment_view"):
+    if state.get("held_appointment_view"):
         return "held"
+    if _phase_is_done(state.get("phase")) or _phase_is_done(state.get("assistant_phase")):
+        return "completed"
+    return None
 
-    phase = final_state.get("phase")
-    if phase:
-        return str(phase)
 
-    assistant_phase = final_state.get("assistant_phase")
-    if assistant_phase:
-        return str(assistant_phase)
-
+def _derive_final_status(final_state: dict[str, Any]) -> str:
+    status = _derive_call_status(final_state)
+    if status:
+        return status
     return "completed"
+
+
+def _derive_disconnect_status(final_state: dict[str, Any] | None) -> str:
+    status = _derive_call_status(final_state)
+    if status:
+        return status
+    return "disconnected"
 
 
 async def _safe_record(
@@ -204,6 +216,18 @@ async def stream_engine_to_retell(
             ),
         )
 
+    derived_status = _derive_call_status(final_state)
+    if derived_status:
+        await _safe_record(
+            "call_status",
+            call_id,
+            recorder.record_status(
+                call_id=call_id,
+                final_status=derived_status,
+                overwrite_existing=True,
+            ),
+        )
+
     if end_call_flag:
         await _safe_record(
             "finish_call",
@@ -212,6 +236,7 @@ async def stream_engine_to_retell(
                 call_id=call_id,
                 final_status=_derive_final_status(final_state),
                 ended_at=utcnow(),
+                overwrite_existing=True,
             ),
         )
 
@@ -380,12 +405,19 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
         if greeting_task is not None and not greeting_task.done():
             greeting_cancel.set()
             greeting_task.cancel()
+        latest_state: dict[str, Any] | None = None
+        store = getattr(websocket.app.state, "store", None)
+        if store is not None:
+            try:
+                latest_state = await store.get(call_id)
+            except Exception:
+                logger.exception("Call state read failed | action=disconnect_status | call_id=%s", call_id)
         await _safe_record(
             "disconnect_call",
             call_id,
             recorder.finish_call(
                 call_id=call_id,
-                final_status="disconnected",
+                final_status=_derive_disconnect_status(latest_state),
                 ended_at=utcnow(),
             ),
         )

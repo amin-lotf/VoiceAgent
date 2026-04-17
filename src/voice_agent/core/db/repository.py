@@ -307,3 +307,22 @@ class SqlAlchemyCallRepository:
         await self._session.flush()
         await self._session.refresh(call)
         return call
+
+    async def update_status(
+        self,
+        *,
+        call_id: str,
+        final_status: str | None,
+        overwrite_existing: bool = False,
+    ) -> CallRecord:
+        call = await self.create_or_get(call_id=call_id)
+        status = (final_status or "").strip()
+        if not status:
+            return call
+
+        if overwrite_existing or not call.final_status:
+            call.final_status = status
+            await self._session.flush()
+            await self._session.refresh(call)
+
+        return call

@@ -3,7 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from voice_agent.core.api.v1.retell.router import (
+    _derive_call_status,
+    _derive_disconnect_status,
+    _derive_final_status,
+)
 from voice_agent.core.api.v1.calls.router import _to_detail_out, _to_summary_out
+from voice_agent.frontend.dashboard_state import get_call_status, normalize_selected_call_id
 from voice_agent.frontend.api_clinet import ApiClient
 
 
@@ -61,3 +67,20 @@ def test_api_client_parses_call_detail_payload() -> None:
     assert detail.final_status == "scheduled"
     assert len(detail.turns) == 1
     assert detail.turns[0].role == "user"
+
+
+def test_dashboard_state_helpers_compute_status_and_selection() -> None:
+    assert get_call_status(final_status="scheduled", ended_at=None) == "scheduled"
+    assert get_call_status(final_status=None, ended_at="2026-04-15T10:01:00+00:00") == "completed"
+    assert get_call_status(final_status=None, ended_at=None) == "active"
+
+    assert normalize_selected_call_id(["call-1", "call-2"], None) == "call-1"
+    assert normalize_selected_call_id(["call-1", "call-2"], "call-2") == "call-2"
+
+
+def test_retell_status_derivation_prefers_appointment_outcomes() -> None:
+    assert _derive_call_status({"held_appointment_view": {"id": 1}}) == "held"
+    assert _derive_call_status({"scheduled_appointment_view": {"id": 2}}) == "scheduled"
+    assert _derive_final_status({"phase": "done"}) == "completed"
+    assert _derive_disconnect_status({"assistant_phase": "collecting_info"}) == "disconnected"
+    assert _derive_disconnect_status({"scheduled_appointment_view": {"id": 3}}) == "scheduled"

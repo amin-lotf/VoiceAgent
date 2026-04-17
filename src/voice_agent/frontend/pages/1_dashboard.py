@@ -7,6 +7,10 @@ from typing import TYPE_CHECKING
 import streamlit as st
 
 import voice_agent.frontend.api_clinet as api_client_module
+from voice_agent.frontend.dashboard_state import (
+    get_call_status,
+    normalize_selected_call_id,
+)
 from voice_agent.frontend.settings import BASE_URL
 
 api_client_module = importlib.reload(api_client_module)
@@ -45,7 +49,7 @@ def _format_duration(value: int | None) -> str:
 
 
 def _call_label(call: CallSummaryView) -> str:
-    status = call.final_status or "active"
+    status = get_call_status(final_status=call.final_status, ended_at=call.ended_at)
     return f"{call.call_id} | {_format_timestamp(call.started_at)} | {status}"
 
 
@@ -64,8 +68,8 @@ def _render_detail(call: CallDetailView) -> None:
     with cols[1]:
         st.caption("Duration")
         st.write(_format_duration(call.duration_seconds))
-        st.caption("Final Status")
-        st.write(call.final_status or "-")
+        st.caption("Status")
+        st.write(get_call_status(final_status=call.final_status, ended_at=call.ended_at))
         st.caption("Turn Count")
         st.write(len(call.turns))
 
@@ -112,19 +116,20 @@ def main() -> None:
     call_ids = [call.call_id for call in calls]
     labels = {call.call_id: _call_label(call) for call in calls}
 
-    default_call_id = st.session_state.get("dashboard_selected_call_id")
-    if default_call_id not in call_ids:
-        default_call_id = call_ids[0]
+    st.session_state["dashboard_selected_call_id"] = normalize_selected_call_id(
+        call_ids,
+        st.session_state.get("dashboard_selected_call_id"),
+    )
 
     with st.sidebar:
-        selected_call_id = st.radio(
+        st.radio(
             "Call List",
             options=call_ids,
-            index=call_ids.index(default_call_id),
+            key="dashboard_selected_call_id",
             format_func=lambda call_id: labels[call_id],
         )
 
-    st.session_state["dashboard_selected_call_id"] = selected_call_id
+    selected_call_id = st.session_state["dashboard_selected_call_id"]
 
     try:
         selected_call = api.get_call(call_id=selected_call_id)
