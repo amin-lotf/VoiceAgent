@@ -13,7 +13,13 @@ from voice_agent.core.api.v1.schemas import RetellResponseRequiredIn, RetellUpda
     RetellResponseOut, RetellConfigOut, RetellConfig, RetellInbound, RetellPingPongOut
 from voice_agent.core.db.session import AsyncSessionLocal
 from voice_agent.core.graph.engine import InterviewEngine
-from voice_agent.core.graph.utils import SpokenTextStreamNormalizer, sanitize_spoken_text
+from voice_agent.core.graph.node_timing import (
+    FIRST_TOKEN_DELAY_KEY,
+    TOTAL_DELAY_KEY,
+    TOTAL_TOKENS_KEY,
+    build_recorded_turn_metrics,
+)
+from voice_agent.core.graph.utils import sanitize_spoken_text
 from voice_agent.core.services.call_history import CallHistoryRecorder
 from voice_agent.core.types import CallEvent, ChunkKind
 
@@ -85,6 +91,7 @@ async def _safe_record(
     except Exception:
         logger.exception("Call history write failed | action=%s | call_id=%s", action, call_id)
 
+
 async def run_engine_to_retell(
     *,
     websocket: WebSocket,
@@ -136,7 +143,8 @@ async def stream_engine_to_retell(
     end_call_flag = False
     full_text_parts: list[str] = []
     final_state: dict[str, Any] = {}
-    stream_normalizer = SpokenTextStreamNormalizer()
+    turn_started_at = time.perf_counter()
+    first_token_delay_s: float | None = None
 
     async for chunk in engine.stream_event(
         call_id=call_id,
@@ -154,10 +162,12 @@ async def stream_engine_to_retell(
             break
 
         if chunk.kind == ChunkKind.TOKEN:
-            token_text = stream_normalizer.push(str(chunk.data))
+            token_text = str(chunk.data or "")
             if not token_text:
                 continue
 
+            if first_token_delay_s is None:
+                first_token_delay_s = time.perf_counter() - turn_started_at
             full_text_parts.append(token_text)
 
             # logger.warning(
@@ -183,19 +193,12 @@ async def stream_engine_to_retell(
     if cancel_guard.is_set():
         return
 
-    trailing_text = stream_normalizer.flush()
-    if trailing_text:
-        full_text_parts.append(trailing_text)
-        await ws_send(
-            websocket,
-            RetellResponseOut(
-                response_id=response_id,
-                content=trailing_text,
-                content_complete=False,
-            ),
-        )
-
-    full_text = sanitize_spoken_text("".join(full_text_parts))
+    full_text = "".join(full_text_parts)
+    assistant_turn_metrics = build_recorded_turn_metrics(
+        state=final_state,
+        total_delay_s=time.perf_counter() - turn_started_at,
+        first_token_delay_s=first_token_delay_s,
+    )
     logger.warning(
         "RETELL FULL ASSISTANT | call_id=%s | response_id=%s | text=%r",
         call_id,
@@ -213,6 +216,9 @@ async def stream_engine_to_retell(
                 role="assistant",
                 content=final_text,
                 created_at=utcnow(),
+                total_tokens=assistant_turn_metrics[TOTAL_TOKENS_KEY],
+                total_delay_s=assistant_turn_metrics[TOTAL_DELAY_KEY],
+                first_token_delay_s=assistant_turn_metrics[FIRST_TOKEN_DELAY_KEY],
             ),
         )
 

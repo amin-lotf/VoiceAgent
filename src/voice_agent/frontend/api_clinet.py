@@ -57,6 +57,9 @@ class CallTurnView:
     role: str
     content: str
     created_at: str | None
+    total_tokens: int | None
+    total_delay_s: float | None
+    first_token_delay_s: float | None
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,9 @@ class CallSummaryView:
     ended_at: str | None
     duration_seconds: int | None
     final_status: str | None
+    total_tokens: int
+    avg_total_delay_s: float | None
+    avg_first_token_delay_s: float | None
 
 
 @dataclass(frozen=True)
@@ -160,6 +166,9 @@ class ApiClient:
             ended_at=j.get("ended_at"),
             duration_seconds=j.get("duration_seconds"),
             final_status=j.get("final_status"),
+            total_tokens=j.get("total_tokens") or 0,
+            avg_total_delay_s=j.get("avg_total_delay_s"),
+            avg_first_token_delay_s=j.get("avg_first_token_delay_s"),
         )
 
     @staticmethod
@@ -168,6 +177,9 @@ class ApiClient:
             role=j.get("role", ""),
             content=j.get("content", ""),
             created_at=j.get("created_at"),
+            total_tokens=j.get("total_tokens"),
+            total_delay_s=j.get("total_delay_s"),
+            first_token_delay_s=j.get("first_token_delay_s"),
         )
 
     @classmethod
@@ -179,5 +191,8 @@ class ApiClient:
             ended_at=summary.ended_at,
             duration_seconds=summary.duration_seconds,
             final_status=summary.final_status,
+            total_tokens=summary.total_tokens,
+            avg_total_delay_s=summary.avg_total_delay_s,
+            avg_first_token_delay_s=summary.avg_first_token_delay_s,
             turns=[cls._parse_call_turn(turn) for turn in j.get("turns", [])],
         )

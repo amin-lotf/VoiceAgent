@@ -264,6 +264,9 @@ class SqlAlchemyCallRepository:
         role: str,
         content: str,
         created_at: datetime | None = None,
+        total_tokens: int | None = None,
+        total_delay_s: float | None = None,
+        first_token_delay_s: float | None = None,
     ) -> CallRecord:
         text = (content or "").strip()
         call = await self.create_or_get(call_id=call_id)
@@ -281,6 +284,9 @@ class SqlAlchemyCallRepository:
                 "role": role,
                 "content": text,
                 "created_at": (created_at or utcnow()).isoformat(),
+                "total_tokens": total_tokens,
+                "total_delay_s": total_delay_s,
+                "first_token_delay_s": first_token_delay_s,
             }
         )
         call.turns = turns

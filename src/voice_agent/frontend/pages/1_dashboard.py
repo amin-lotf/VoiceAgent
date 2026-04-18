@@ -48,6 +48,18 @@ def _format_duration(value: int | None) -> str:
     return f"{seconds}s"
 
 
+def _format_delay(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value:.3f}s"
+
+
+def _format_tokens(value: int | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value:,}"
+
+
 def _call_label(call: CallSummaryView) -> str:
     status = get_call_status(final_status=call.final_status, ended_at=call.ended_at)
     return f"{call.call_id} | {_format_timestamp(call.started_at)} | {status}"
@@ -56,7 +68,7 @@ def _call_label(call: CallSummaryView) -> str:
 def _render_detail(call: CallDetailView) -> None:
     st.title("Calls Dashboard")
 
-    cols = st.columns(2)
+    cols = st.columns(3)
     with cols[0]:
         st.caption("Call ID")
         st.code(call.call_id)
@@ -73,6 +85,14 @@ def _render_detail(call: CallDetailView) -> None:
         st.caption("Turn Count")
         st.write(len(call.turns))
 
+    with cols[2]:
+        st.caption("Total Tokens")
+        st.write(_format_tokens(call.total_tokens))
+        st.caption("Avg Total Delay")
+        st.write(_format_delay(call.avg_total_delay_s))
+        st.caption("Avg First Token Delay")
+        st.write(_format_delay(call.avg_first_token_delay_s))
+
     st.divider()
     st.subheader("Conversation")
 
@@ -83,9 +103,14 @@ def _render_detail(call: CallDetailView) -> None:
     for turn in call.turns:
         message_role = "assistant" if turn.role == "assistant" else "user"
         with st.chat_message(message_role):
-            st.markdown(turn.content)
-            if turn.created_at:
-                st.caption(_format_timestamp(turn.created_at))
+            content_col, meta_col = st.columns([5, 2])
+            with content_col:
+                st.markdown(turn.content)
+            with meta_col:
+                st.caption(f"Time: {_format_timestamp(turn.created_at)}")
+                st.caption(f"Tokens: {_format_tokens(turn.total_tokens)}")
+                st.caption(f"Delay: {_format_delay(turn.total_delay_s)}")
+                st.caption(f"1st token: {_format_delay(turn.first_token_delay_s)}")
 
 
 def main() -> None:

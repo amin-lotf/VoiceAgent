@@ -45,7 +45,6 @@ class CallPhase(StrEnum):
 
 class UserIntent(StrEnum):
     BOOK_APPOINTMENT = "book_appointment"
-    RESCHEDULE = "reschedule"
     CANCEL = "cancel"
     UNDECIDED = "undecided"
 
@@ -71,9 +70,9 @@ class NextAction(StrEnum):
 
 
 class AssistantPhase(StrEnum):
+    COLLECTING_USER_INTENT = "collecting_user_intent"
     COLLECTING_INFO = "collecting_info"
     HOLDING_APPOINTMENT = "holding_appointment"
-    FINALIZING_APPOINTMENT = "finalizing_appointment"
     POST_APPOINTMENT = "post_appointment"
     DONE = "done"
 
@@ -118,7 +117,6 @@ class AppointmentField(StrEnum):
 
 class ConfirmationTopic(StrEnum):
     HOLD_CONFIRMATION = "hold_confirmation"
-    SCHEDULE_CONFIRMATION = "schedule_confirmation"
 
 class RequiredAppointmentField(StrEnum):
     NAME = "name"

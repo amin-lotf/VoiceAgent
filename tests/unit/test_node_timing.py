@@ -4,13 +4,16 @@ import pytest
 
 from voice_agent.core.graph.node_timing import (
     AI_DELAY_KEY,
+    FIRST_TOKEN_DELAY_KEY,
     INPUT_TOKENS_KEY,
     NON_AI_DELAY_KEY,
     OUTPUT_TOKENS_KEY,
     TOTAL_DELAY_KEY,
     TOTAL_TOKENS_KEY,
+    build_recorded_turn_metrics,
     build_turn_timing_payload,
     format_turn_timing_summary,
+    summarize_recorded_turn_metrics,
     record_node_ai_delay,
     record_node_token_usage,
     reset_node_timing_data,
@@ -132,6 +135,61 @@ def test_build_turn_timing_payload_aggregates_ai_delay_from_nodes():
         INPUT_TOKENS_KEY: 104,
         OUTPUT_TOKENS_KEY: 35,
         TOTAL_TOKENS_KEY: 139,
+    }
+
+
+def test_build_recorded_turn_metrics_includes_first_token_delay():
+    payload = build_recorded_turn_metrics(
+        state={
+            "node_data": {
+                "call_operator": {
+                    TOTAL_DELAY_KEY: 1.1,
+                    AI_DELAY_KEY: 0.8,
+                    NON_AI_DELAY_KEY: 0.3,
+                    INPUT_TOKENS_KEY: 74,
+                    OUTPUT_TOKENS_KEY: 25,
+                    TOTAL_TOKENS_KEY: 99,
+                }
+            }
+        },
+        total_delay_s=1.4,
+        first_token_delay_s=0.6,
+    )
+
+    assert payload == {
+        TOTAL_TOKENS_KEY: 99,
+        TOTAL_DELAY_KEY: 1.4,
+        FIRST_TOKEN_DELAY_KEY: 0.6,
+    }
+
+
+def test_summarize_recorded_turn_metrics_aggregates_saved_turns():
+    payload = summarize_recorded_turn_metrics(
+        [
+            {
+                TOTAL_TOKENS_KEY: 99,
+                TOTAL_DELAY_KEY: 1.4,
+                FIRST_TOKEN_DELAY_KEY: 0.8,
+            },
+            {
+                TOTAL_TOKENS_KEY: 17,
+                TOTAL_DELAY_KEY: 1.2,
+                FIRST_TOKEN_DELAY_KEY: 0.4,
+            },
+            {
+                "role": "user",
+                "content": "hello",
+                TOTAL_TOKENS_KEY: None,
+                TOTAL_DELAY_KEY: None,
+                FIRST_TOKEN_DELAY_KEY: None,
+            },
+        ]
+    )
+
+    assert payload == {
+        TOTAL_TOKENS_KEY: 116,
+        "avg_total_delay_s": 1.3,
+        "avg_first_token_delay_s": 0.6,
     }
 
 

@@ -8,6 +8,13 @@ from pydantic import BaseModel
 
 from voice_agent.core.db.session import AsyncSessionLocal
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
+from voice_agent.core.graph.node_timing import (
+    FIRST_TOKEN_DELAY_KEY,
+    TOTAL_DELAY_KEY,
+    TOTAL_TOKENS_KEY,
+    get_recorded_turn_metrics,
+    summarize_recorded_turn_metrics,
+)
 
 router = APIRouter(prefix="/calls", tags=["calls"])
 
@@ -16,6 +23,9 @@ class CallTurnOut(BaseModel):
     role: str
     content: str
     created_at: str | None = None
+    total_tokens: int | None = None
+    total_delay_s: float | None = None
+    first_token_delay_s: float | None = None
 
 
 class CallSummaryOut(BaseModel):
@@ -24,6 +34,9 @@ class CallSummaryOut(BaseModel):
     ended_at: str | None = None
     duration_seconds: int | None = None
     final_status: str | None = None
+    total_tokens: int = 0
+    avg_total_delay_s: float | None = None
+    avg_first_token_delay_s: float | None = None
 
 
 class CallDetailOut(CallSummaryOut):
@@ -41,20 +54,28 @@ def _duration_seconds(started_at: datetime, ended_at: datetime | None) -> int | 
 
 
 def _to_turn_out(turn: dict[str, Any]) -> CallTurnOut:
+    metrics = get_recorded_turn_metrics(turn)
     return CallTurnOut(
         role=str(turn.get("role") or ""),
         content=str(turn.get("content") or ""),
         created_at=turn.get("created_at"),
+        total_tokens=metrics[TOTAL_TOKENS_KEY],
+        total_delay_s=metrics[TOTAL_DELAY_KEY],
+        first_token_delay_s=metrics[FIRST_TOKEN_DELAY_KEY],
     )
 
 
 def _to_summary_out(call: Any) -> CallSummaryOut:
+    metrics = summarize_recorded_turn_metrics(call.turns or [])
     return CallSummaryOut(
         call_id=call.call_id,
         started_at=_to_iso(call.started_at) or "",
         ended_at=_to_iso(call.ended_at),
         duration_seconds=_duration_seconds(call.started_at, call.ended_at),
         final_status=call.final_status,
+        total_tokens=int(metrics[TOTAL_TOKENS_KEY] or 0),
+        avg_total_delay_s=metrics["avg_total_delay_s"],
+        avg_first_token_delay_s=metrics["avg_first_token_delay_s"],
     )
 
 

@@ -3,27 +3,19 @@ from voice_agent.core.types import AppointmentField, DirectiveKind, Confirmation
 
 GLOBAL_OPERATOR_RULES = [
     "Write the spoken reply first, then the JSON sentinel, then one valid JSON.",
-    "The spoken reply must sound natural, polite, patient, and suitable for a phone call.",
-    "Keep responses concise.",
-    "Use normal sentence case.",
-    "Do not capitalize every word.",
-    "Use plain ASCII punctuation only.",
-    "Do not use symbols such as em dashes, en dashes, smart quotes, bullets, or ellipses in the spoken reply.",
-    "Prefer simple periods and commas over stylized punctuation.",
-    "Stay in the current conversation. Do not greet, re-greet, or introduce yourself here.",
-    "Ask at most one question.",
-    "Do not combine multiple questions into one.",
-    "If a current rule requires a question, ask it directly in this turn only if the caller now does not contain the answer for that question.",
-    "If you ask a question, end the spoken reply with that question.",
-    "Do not stack filler before the real content of the turn.",
-    "Avoid abrupt or dismissive wording.",
-    "When both a brief informative statement and a required question are active, say the information first and then ask the question in the same turn.",
-    "Do not invent questions solely based on the output schema.",
-    "Only ask a question when the current rules explicitly require or allow that question.",
-    "Do not invent new questions, new fields, or new steps that are not explicitly requested by the current rules.",
+    "The spoken reply must be natural, polite, concise, and suitable for a phone call.",
+    "Use normal sentence case and plain ASCII punctuation only.",
+    "Do not use stylized punctuation or symbols.",
+    "Stay in the current conversation. Do not greet or reintroduce yourself.",
+    "Ask at most one question, only when explicitly required by current rules.",
+    "Do not combine or invent questions, fields, or steps.",
+    "Ask a question only if the caller has not already provided the answer.",
+    "If asking a question, end the reply with it.",
+    "If both info and a required question exist, give info first, then ask.",
+    "Do not stack filler or use abrupt wording.",
     "Do not mention internal logic, JSON, or system behavior.",
-    "If Caller Now changes the appointment date or time, that scheduling change takes priority over any earlier follow-up topic.",
-    "When Caller Now changes the appointment date or time, do not continue an older notes or post-booking follow-up question in the same turn.",
+    "If the caller requests or changes date/time, do not ask questions or provide scheduling details in this turn.",
+    "Date/time changes override any previous follow-up; do not continue older topics in the same turn.",
 ]
 
 OPEN_QUESTION_RULES = [
@@ -102,6 +94,7 @@ CLINIC_INTENT_RULES = [
 DATETIME_RULES = [
     'Set "datetime_detected" to true only if the caller explicitly mentions a date or time expression for scheduling in Caller Now.',
     'Set "datetime_detected" to false otherwise.',
+    'Set "datetime_detected" to false if the current assistant response is a question asking about the date or time.',
     'Use only the latest caller message.',
     'Count expressions like "today", "tomorrow", "next Monday", "April 12", "morning", "afternoon", "evening", "at 3", and "3 pm" as datetime mentions.',
     'Do not mark true for non-scheduling numbers such as phone numbers, addresses, or ages.',
@@ -150,15 +143,13 @@ REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     ],
     AppointmentField.REQUESTED_TIME_TEXT: [
         "The requested appointment time is still missing.",
-        "Ask which day the caller wants to schedule the appointment only if the caller has not provided any day or time expression in the current text.",
-        "Do not suggest specific times or options.",
-        "Do not ask for an exact clock time unless the caller already provides one.",
-        "Accept natural phrases like 'tomorrow', 'next Monday', 'this weekend', or 'morning'.",
-        "If the caller provides any day or time expression, extract it and stop asking for the requested time.",
-        "Do not confirm, approve, validate, or restate the requested time as available.",
-        "Do not say phrases like 'that works', 'perfect', 'okay for', or anything that sounds like the appointment time is confirmed.",
+        "Ask which day the caller wants only if the current text includes no day or time expression.",
+        "Do not suggest specific times or ask for an exact clock time unless the caller already gives one.",
+        "Accept natural time phrases like 'tomorrow', 'next Monday', 'this weekend', or 'morning'.",
+        "If the caller provides any day or time expression, extract it and stop asking for requested time.",
+        "Do not confirm, validate, or imply availability of the requested time.",
         "After the caller provides a time expression, respond neutrally, for example by saying you will check availability.",
-    ],
+    ]
 }
 
 EXISTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
@@ -208,19 +199,17 @@ CLARIFYING_FIELD_RULES: dict[AppointmentField, list[str]] = {
 
 CONFIRMATION_RULES: dict[ConfirmationTopic, list[str]] = {
     ConfirmationTopic.HOLD_CONFIRMATION: [
-        "Ask whether the offered date and time works for the caller, only if the caller has not already confirmed the request, has not  requested to change the date/time, or has not rejected the offered slot    in the current turn.",
-        "Do not ask an open-ended scheduling question unless the caller has already rejected the offered slot.",
-        "If the caller rejects  the offered slot  without giving a replacement date, you must ask what date  would work better.",
-        "If the caller prefers or ask to change the date or time  without giving a replacement date or time, you must ask what date  would work better.",
-        "If the caller rejects the offered slot  and gives a replacement date or time, extract that new date or time and do not ask another question in the same turn.",
-        "If the caller offers or gives replacement date or time, extract that new date or time and do not ask another question in the same turn.",
-        "If the caller rejects the offered slot  or requested another slot and gives a replacement date or time, do not confirm, validate, or imply that the new time is available.",
-        "Do not propose a new slot in the same turn unless availability has already been explicitly provided by the system for that exact slot.",
-        "Only  if   a replacement date  is provided, respond with a neutral transition such as 'Got it. One moment while I check that for you.'",
-        "Do not say phrases like 'that is available', 'that works', 'I can do that time', or 'does that work for you' before availability is checked.",
-        "If the caller accepts the offered slot, do not restate later that a slot is available again.",
-        "Do not mention that the slot is held or reserved.",
-    ]
+    "Ask whether the offered date and time works only if the caller has not confirmed, rejected, or requested a change in this turn.",
+    "Do not ask open-ended scheduling questions unless the caller has rejected the offered slot.",
+    "If the caller rejects or requests a change without giving a new date or time, ask what would work better and set datetime_detected to false.",
+    "If the caller provides a replacement date or time, extract it and do not ask another question in the same turn.",
+    "If a replacement date or time is provided, do not confirm, validate, or imply availability.",
+    "Do not propose or suggest a new slot unless that exact slot has already been confirmed available by the system.",
+    "If a replacement date is provided, respond with a neutral transition such as 'Got it. One moment while I check that for you.'",
+    "Do not say phrases implying availability before it is verified.",
+    "If the caller accepts the offered slot, do not restate availability.",
+    "Do not mention that the slot is held or reserved.",
+]
 }
 
 INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {

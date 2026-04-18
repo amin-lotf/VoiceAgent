@@ -4,7 +4,7 @@ import inspect
 from contextvars import ContextVar
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from voice_agent.core.types import CallState
 
@@ -14,6 +14,7 @@ NON_AI_DELAY_KEY = "non_ai_delay_s"
 INPUT_TOKENS_KEY = "input_tokens"
 OUTPUT_TOKENS_KEY = "output_tokens"
 TOTAL_TOKENS_KEY = "total_tokens"
+FIRST_TOKEN_DELAY_KEY = "first_token_delay_s"
 DELAY_KEYS = (TOTAL_DELAY_KEY, AI_DELAY_KEY, NON_AI_DELAY_KEY)
 TOKEN_KEYS = (INPUT_TOKENS_KEY, OUTPUT_TOKENS_KEY, TOTAL_TOKENS_KEY)
 NODE_TIMING_KEYS = DELAY_KEYS + TOKEN_KEYS
@@ -173,6 +174,97 @@ def build_turn_timing_payload(
         INPUT_TOKENS_KEY: input_tokens,
         OUTPUT_TOKENS_KEY: output_tokens,
         TOTAL_TOKENS_KEY: total_tokens,
+    }
+
+
+def build_recorded_turn_metrics(
+    *,
+    state: CallState,
+    total_delay_s: float,
+    first_token_delay_s: float | None = None,
+) -> dict[str, float | int | None]:
+    payload = build_turn_timing_payload(state=state, total_delay_s=total_delay_s)
+    total_delay = _coerce_delay(payload.get(TOTAL_DELAY_KEY))
+    first_token_delay: float | None = None
+
+    if first_token_delay_s is not None:
+        first_token_delay = round(min(_coerce_delay(first_token_delay_s), total_delay), 6)
+
+    return {
+        TOTAL_TOKENS_KEY: _coerce_token_count(payload.get(TOTAL_TOKENS_KEY)),
+        TOTAL_DELAY_KEY: round(total_delay, 6),
+        FIRST_TOKEN_DELAY_KEY: first_token_delay,
+    }
+
+
+def get_recorded_turn_metrics(turn: Mapping[str, Any] | None) -> dict[str, float | int | None]:
+    if not isinstance(turn, Mapping):
+        return {
+            TOTAL_TOKENS_KEY: None,
+            TOTAL_DELAY_KEY: None,
+            FIRST_TOKEN_DELAY_KEY: None,
+        }
+
+    total_tokens_raw = turn.get(TOTAL_TOKENS_KEY)
+    total_delay_raw = turn.get(TOTAL_DELAY_KEY)
+    first_token_delay_raw = turn.get(FIRST_TOKEN_DELAY_KEY)
+
+    total_tokens = (
+        _coerce_token_count(total_tokens_raw)
+        if total_tokens_raw is not None
+        else None
+    )
+    total_delay = round(_coerce_delay(total_delay_raw), 6) if total_delay_raw is not None else None
+    first_token_delay = (
+        round(_coerce_delay(first_token_delay_raw), 6)
+        if first_token_delay_raw is not None
+        else None
+    )
+
+    if total_delay is not None and first_token_delay is not None:
+        first_token_delay = round(min(first_token_delay, total_delay), 6)
+
+    return {
+        TOTAL_TOKENS_KEY: total_tokens,
+        TOTAL_DELAY_KEY: total_delay,
+        FIRST_TOKEN_DELAY_KEY: first_token_delay,
+    }
+
+
+def summarize_recorded_turn_metrics(
+    turns: Sequence[Mapping[str, Any] | dict[str, Any]] | None,
+) -> dict[str, float | int | None]:
+    total_tokens = 0
+    total_delays: list[float] = []
+    first_token_delays: list[float] = []
+
+    for turn in turns or []:
+        metrics = get_recorded_turn_metrics(turn if isinstance(turn, Mapping) else None)
+
+        if metrics[TOTAL_TOKENS_KEY] is not None:
+            total_tokens += _coerce_token_count(metrics[TOTAL_TOKENS_KEY])
+
+        if metrics[TOTAL_DELAY_KEY] is not None:
+            total_delays.append(_coerce_delay(metrics[TOTAL_DELAY_KEY]))
+
+        if metrics[FIRST_TOKEN_DELAY_KEY] is not None:
+            first_token_delays.append(_coerce_delay(metrics[FIRST_TOKEN_DELAY_KEY]))
+
+    avg_total_delay = (
+        round(sum(total_delays) / len(total_delays), 6)
+        if total_delays
+        else None
+    )
+    avg_first_token_delay = (
+        round(sum(first_token_delays) / len(first_token_delays), 6)
+        if first_token_delays
+        else None
+    )
+
+    return {
+        TOTAL_TOKENS_KEY: total_tokens,
+        "avg_total_delay_s": avg_total_delay,
+        "avg_first_token_delay_s": avg_first_token_delay,
     }
 
 
