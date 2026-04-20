@@ -262,7 +262,7 @@ class InterviewEngine:
             state = {
                 "call_id": call_id,
                 "phase": CallPhase.GREETING,
-                "assistant_phase":AssistantPhase.COLLECTING_INFO,
+                "assistant_phase":AssistantPhase.COLLECTING_USER_INTENT,
                 "messages": [],
                 "assistant_text": "",
                 "assistant_streamed": False,

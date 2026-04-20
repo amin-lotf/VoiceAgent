@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from langgraph.config import get_stream_writer
 
-from voice_agent.core.types import CallPhase, CallState, ClinicIntent
+from voice_agent.core.types import CallPhase, CallState, AssistantIntent
 from .utils import ensure_spoken_on_user_turn
 
 EMERGENCY_FALLBACK_MESSAGE = (

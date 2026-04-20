@@ -1,28 +1,10 @@
 from voice_agent.const import NOT_SPECIFIED
-from voice_agent.core.types import AppointmentField, DirectiveKind, ConfirmationTopic, ConfirmationIntent
+from voice_agent.core.types import AppointmentField,  ConfirmationTopic, ConfirmationIntent
 
-GLOBAL_OPERATOR_RULES = [
-    "Write the spoken reply first, then the JSON sentinel, then one valid JSON.",
-    "The spoken reply must be natural, polite, concise, and suitable for a phone call.",
-    "Use normal sentence case and plain ASCII punctuation only.",
-    "Do not use stylized punctuation or symbols.",
-    "Stay in the current conversation. Do not greet or reintroduce yourself.",
-    "Ask at most one question, only when explicitly required by current rules.",
-    "Do not combine or invent questions, fields, or steps.",
-    "Ask a question only if the caller has not already provided the answer.",
-    "If asking a question, end the reply with it.",
-    "If both info and a required question exist, give info first, then ask.",
-    "Do not stack filler or use abrupt wording.",
-    "Do not mention internal logic, JSON, or system behavior.",
-    "If the caller requests or changes date/time, do not ask questions or provide scheduling details in this turn.",
-    "Date/time changes override any previous follow-up; do not continue older topics in the same turn.",
-]
 
-OPEN_QUESTION_RULES = [
-    "A current directive authorizes one caller-facing question in this turn.",
-    "If Caller Now does not already answer that question, ask it directly and naturally.",
-    "If Caller Now already answers that question, do not ask it again; use a short neutral continuation instead.",
-]
+
+
+
 
 INTERNAL_CALL_RULES = [
     "This is an internal follow-up turn with no new caller message.",
@@ -61,15 +43,6 @@ POST_BOOKING_CLOSING_RULES = [
     "Other acceptable styles: 'Okay, that's everything. Thanks for calling, goodbye.' or 'Perfect, you're all set. Take care, goodbye.'",
 ]
 
-USER_INTENT_RULES = [
-    'Allowed user_intent: "book_appointment", "reschedule", "cancel", "not_specified".',
-    'Use "book_appointment" when the caller clearly wants to make or schedule a new appointment.',
-    'Use "reschedule" when the caller clearly wants to move or change an existing appointment.',
-    'Use "cancel" when the caller clearly wants to cancel an existing appointment.',
-    'Use "not_specified" when the caller does not clearly state one of those intentions in the current text.',
-    "Do not guess.",
-    "Do not infer a new intent just because the conversation is ongoing.",
-]
 
 CONFIRMATION_INTENT_RULES = [
     f'Allowed confirmation_intent: "{ConfirmationIntent.ACCEPT}", "{ConfirmationIntent.REJECT}", "{ConfirmationIntent.UNCLEAR}", "{ConfirmationIntent.NOT_SPECIFIED}".',
@@ -82,14 +55,7 @@ CONFIRMATION_INTENT_RULES = [
     "If the caller rejects and also provides a replacement date or time, still set confirmation_intent to reject.",
 ]
 
-CLINIC_INTENT_RULES = [
-    'Allowed clinic_intent: "continue", "hangup", "human_handoff".',
-    f"user_intent: only update if explicitly provided, else {NOT_SPECIFIED}",
-    'Use "hangup" if the caller clearly ends the call.',
-    'Use "human_handoff" for human requests or urgent situations.',
-    'Use "continue" otherwise.',
-    "Set end_call=true only when the call should end.",
-]
+
 
 DATETIME_RULES = [
     'Set "datetime_detected" to true only if the caller explicitly mentions a date or time expression for scheduling in Caller Now.',
@@ -101,10 +67,7 @@ DATETIME_RULES = [
     'Do not infer missing time information from context,  Recent message history,  or earlier turns.',
 ]
 
-OFFICE_INFO_RULES = [
-    "If the user asks about office information, answer directly from office knowledge.",
-    "Do not force the booking flow before answering office questions.",
-]
+
 
 REQUESTING_FIELD_RULES: dict[AppointmentField, list[str]] = {
     AppointmentField.NAME: [
@@ -212,57 +175,33 @@ CONFIRMATION_RULES: dict[ConfirmationTopic, list[str]] = {
 ]
 }
 
-INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
-    DirectiveKind.INFORM_SCHEDULED: [
-        "Tell the caller that the appointment is successfully booked.",
-        "If the caller's name is available, say it is booked under that name.",
-        "Keep the wording natural and suitable for a phone call.",
-        "Do not say the appointment is pending, being checked, or being finalized.",
-        "Do not reopen with availability language such as 'There's a slot available' once the caller has already accepted a slot.",
-        "If the latest caller turn was a simple acceptance of the offered slot, prefer a brief booking-progress acknowledgment such as 'Perfect, I'll book that for you now.'",
-        "Do not say lines like '<date and time> works.' after the caller accepts a slot.",
-        "If you mention the booked slot, phrase it as 'You're booked for ...' or 'I have you booked for ...'.",
-        "If another current directive requires one follow-up question, ask it only after the booking-progress line or brief booking update.",
-        "If another current directive requires one follow-up question, use exactly one short booking sentence before that question.",
-        "Do not repeat the same date and time twice in one turn unless a current rule explicitly requires it.",
-        "Do not ask for required booking fields again.",
-        "If another current directive requires one follow-up question, give the booking update first and then ask that single question in the same turn.",
-    ],
-    DirectiveKind.INFORM_HELD: [
-        "Do not say the slot is held, reserved, blocked, or temporarily booked.",
-        "Do not say the appointment is already booked.",
-        "Keep the wording short and natural.",
-    ],
-}
+# INFORMATIVE_DIRECTIVE_RULES: dict[DirectiveKind, list[str]] = {
+#     DirectiveKind.INFORM_SCHEDULED: [
+#         "Tell the caller that the appointment is successfully booked.",
+#         "If the caller's name is available, say it is booked under that name.",
+#         "Keep the wording natural and suitable for a phone call.",
+#         "Do not say the appointment is pending, being checked, or being finalized.",
+#         "Do not reopen with availability language such as 'There's a slot available' once the caller has already accepted a slot.",
+#         "If the latest caller turn was a simple acceptance of the offered slot, prefer a brief booking-progress acknowledgment such as 'Perfect, I'll book that for you now.'",
+#         "Do not say lines like '<date and time> works.' after the caller accepts a slot.",
+#         "If you mention the booked slot, phrase it as 'You're booked for ...' or 'I have you booked for ...'.",
+#         "If another current directive requires one follow-up question, ask it only after the booking-progress line or brief booking update.",
+#         "If another current directive requires one follow-up question, use exactly one short booking sentence before that question.",
+#         "Do not repeat the same date and time twice in one turn unless a current rule explicitly requires it.",
+#         "Do not ask for required booking fields again.",
+#         "If another current directive requires one follow-up question, give the booking update first and then ask that single question in the same turn.",
+#     ],
+#     DirectiveKind.INFORM_HELD: [
+#         "Do not say the slot is held, reserved, blocked, or temporarily booked.",
+#         "Do not say the appointment is already booked.",
+#         "Keep the wording short and natural.",
+#     ],
+# }
 
-REQUESTING_USER_INTENT_RULES = [
-    "The caller's appointment intent is still missing.",
-    "If the caller has not stated whether they want to book, reschedule, or cancel in the current text, ask a neutral help question.",
-    'Use a general prompt such as "How can I help you today?" or "How can I help?"',
-    "Do not proactively list booking, rescheduling, or canceling unless the caller asks what you can help with.",
-    "Do not assume the caller wants a new appointment unless they say so.",
-    "If the caller clearly states they want to book, reschedule, or cancel, extract that intent, do not ask another intent question in the same turn, and give a short neutral continuation such as 'One moment please.'",
-]
 
-EXISTING_USER_INTENT_RULES = [
-    "The caller's appointment intent is already known.",
-    "Do not ask how you can help again once the caller's intent is clear.",
-    "Keep the current intent unless the caller explicitly changes it.",
-    "If the caller clearly changes from booking to rescheduling or canceling, extract and replace the existing intent.",
-]
 
-OUT_OF_SCOPE_RULES = [
-    "If the caller asks for something unrelated to booking, rescheduling, or canceling an appointment, respond briefly and politely.",
-    "Say that you can only help with appointment-related requests.",
-    "Do not list all supported actions unless the caller asks what you can help with.",
-    'Example style: "Sorry, I can only help with appointments."',
-]
 
-CAPABILITY_EXPLANATION_RULES = [
-    "Only explain supported actions when the caller explicitly asks what you can help with or what you do.",
-    "In that case, say briefly that you can help book, reschedule, or cancel appointments.",
-    "Keep it short and natural.",
-]
+
 
 PATCH_FIELD_RULES = {
     AppointmentField.NAME: [
@@ -282,7 +221,4 @@ PATCH_FIELD_RULES = {
     ]
 }
 
-JSON_RULES = [
-    "Return exactly one valid JSON.",
-    "No markdown or extra text.",
-]
+

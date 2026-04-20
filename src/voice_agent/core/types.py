@@ -45,7 +45,6 @@ class CallPhase(StrEnum):
 
 class UserIntent(StrEnum):
     BOOK_APPOINTMENT = "book_appointment"
-    CANCEL = "cancel"
     UNDECIDED = "undecided"
 
 class ConfirmationIntent(StrEnum):
@@ -54,7 +53,7 @@ class ConfirmationIntent(StrEnum):
     UNCLEAR = "unclear"
     NOT_SPECIFIED = 'not_specified'
 
-class ClinicIntent(StrEnum):
+class AssistantIntent(StrEnum):
     HUMAN_HANDOFF = "human_handoff"
     HANGUP = "hangup"
     CONTINUE = "continue"
@@ -72,16 +71,13 @@ class NextAction(StrEnum):
 class AssistantPhase(StrEnum):
     COLLECTING_USER_INTENT = "collecting_user_intent"
     COLLECTING_INFO = "collecting_info"
-    HOLDING_APPOINTMENT = "holding_appointment"
-    POST_APPOINTMENT = "post_appointment"
+    VERIFYING_INFO = "verifying_info"
+    CONFIRMING_SLOT = "confirming_slot"
+    COLLECTING_NOTES = "collecting_notes"
     DONE = "done"
 
 
-class OfficeTopic(StrEnum):
-    HOURS = "hours"
-    ADDRESS = "address"
-    LOCATION = "location"
-    PARKING = "parking"
+
 
 class PatientType(StrEnum):
     NEW = "new"
@@ -99,13 +95,7 @@ class TimeSlot:
     start_at: datetime
     end_at: datetime
 
-class DirectiveSourceNode(StrEnum):
-    USER_INTENT = "user_intent"
-    BASIC_INFO = "basic_info"
-    TIME_SLOT = "time_slot"
-    HELD_APPOINTMENT_INFO = "held_appointment_info"
-    BOOK_APPOINTMENT = "book_appointment"
-    NOTE_INFO = "note_info"
+
 
 
 class AppointmentField(StrEnum):
@@ -124,20 +114,9 @@ class RequiredAppointmentField(StrEnum):
     REASON_FOR_VISIT = "reason_for_visit"
     REQUESTED_TIME_TEXT = "requested_time_text"
 
-class DirectiveKind(StrEnum):
-    REQUEST_CLARIFY_INFO = "request_clarify_info"
-    REQUEST_USER_INTENT = "request_intent"
-    REQUEST_MISSING_INFO = "request_missing_info"
-    REQUEST_CONFIRMATION = "request_confirmation"
-    INFORM_HELD = "inform_held"
-    INFORM_SCHEDULED = "inform_scheduled"
 
-class AssistantDirective(TypedDict, total=False):
-    field: AppointmentField | None
-    confirmation_topic: ConfirmationTopic | None
-    kind: DirectiveKind
-    priority: int
-    source: DirectiveSourceNode
+
+
 
 
 
@@ -228,14 +207,13 @@ class CallState(TypedDict, total=False):
     pending_question: NotRequired[str | None]
     is_pending_question: NotRequired[bool]
     assistant_phase: NotRequired[AssistantPhase | None]
-    clinic_intent: NotRequired[ClinicIntent | None]
+    assistant_intent: NotRequired[AssistantIntent | None]
     user_intent: NotRequired[UserIntent | None]
     scheduled_appointment_view: NotRequired[AppointmentView]
     held_appointment_view: NotRequired[AppointmentView]
     current_appointment_id: NotRequired[int | None]
     prev_assistant_text: NotRequired[str]
     next_action: NotRequired[NextAction]
-    directives: NotRequired[list[AssistantDirective]]
 
 
 

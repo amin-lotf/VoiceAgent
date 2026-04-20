@@ -36,23 +36,6 @@ def _resolve_user_intent(
         return previous_intent
     return UserIntent.UNDECIDED
 
-def _normalize_value(value: Any) -> str:
-    if value is None:
-        return NOT_SPECIFIED
-
-    if not isinstance(value, str):
-        value = str(value)
-
-    value = value.strip()
-    if not value:
-        return NOT_SPECIFIED
-
-    if value.lower() in {"none", "null", "not specified", "not_specified"}:
-        return NOT_SPECIFIED
-
-    return value
-
-
 
 def _coerce_bool(value: Any, default: bool = False) -> bool:
     if isinstance(value, bool):
@@ -68,7 +51,21 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def _normalize_patch_value(value: Any) -> str:
+    if value is None:
+        return NOT_SPECIFIED
 
+    if not isinstance(value, str):
+        value = str(value)
+
+    value = value.strip()
+    if not value:
+        return NOT_SPECIFIED
+
+    if value.lower() in {"none", "null", "not specified", "not_specified"}:
+        return NOT_SPECIFIED
+
+    return value
 
 
 def _normalize_notes(value: Any) -> list[str]:
@@ -127,15 +124,44 @@ def _parse_operator_output(full_text: str) -> tuple[str, dict[str, Any]]:
 
     return assistant_text, {}
 
+
+def _normalize_patch(data: dict[str, Any]) -> dict[str, Any]:
+    patch = data.get("patch") or {}
+    if not isinstance(patch, dict):
+        patch = {}
+
+    return {
+        AppointmentField.NAME.value: _normalize_patch_value(
+            patch.get(AppointmentField.NAME.value)
+        ),
+        AppointmentField.PHONE.value: _normalize_patch_value(
+            patch.get(AppointmentField.PHONE.value)
+        ),
+        AppointmentField.REASON_FOR_VISIT.value: _normalize_patch_value(
+            patch.get(AppointmentField.REASON_FOR_VISIT.value)
+        ),
+        AppointmentField.NOTES.value: _normalize_notes(
+            patch.get(AppointmentField.NOTES.value)
+        ),
+    }
+
+
 def _fallback_state(state: CallState) -> dict[str, Any]:
-    fallback = "Sorry, there was an error. Please Wait for the operator to connect you."
+    fallback = "Sorry, could you repeat that?"
 
     local_state: dict[str, Any] = {
         "assistant_text": fallback,
         "assistant_streamed": False,
-        "clinic_intent": AssistantIntent.HUMAN_HANDOFF,
-
+        "clinic_intent": AssistantIntent.CONTINUE,
+        "end_call": False,
+        "appointment_patch": {
+            AppointmentField.NAME.value: NOT_SPECIFIED,
+            AppointmentField.PHONE.value: NOT_SPECIFIED,
+            AppointmentField.REASON_FOR_VISIT.value: NOT_SPECIFIED,
+            AppointmentField.NOTES.value: [],
+        },
     }
+
     set_node_data(
         local_state,
         "call_operator",
@@ -258,15 +284,31 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         logger.warning("call_operator: invalid clinic_intent=%s", clinic_intent_raw)
         clinic_intent = AssistantIntent.CONTINUE
 
+    end_call = _coerce_bool(data.get("end_call"), default=False)
+    datetime_detected = _coerce_bool(data.get("datetime_detected"), default=False)
+    normalized_patch = _normalize_patch(data)
+    user_text = (state.get("user_text") or "").strip()
+    confirmation_intent_raw = _normalize_patch_value(data.get("confirmation_intent"))
+    try:
+        confirmation_intent = ConfirmationIntent(confirmation_intent_raw)
+    except Exception:
+        logger.warning("call_operator: invalid confirmation_intent=%s", confirmation_intent_raw)
+        confirmation_intent = ConfirmationIntent.UNCLEAR
+    if datetime_detected and user_text:
+        normalized_patch["requested_time_text"] = user_text
 
-    user_intent_raw = _normalize_value(data.get("user_intent"))
+    normalized_patch["confirmation_intent"] = confirmation_intent
+
+    user_intent_raw = _normalize_patch_value(data.get("user_intent"))
     previous_intent = state.get("user_intent") or UserIntent.UNDECIDED
     user_intent = _resolve_user_intent(previous_intent, user_intent_raw)
 
-    local_state["user_intent"] = user_intent
+    normalized_patch["user_intent"] = user_intent
 
     local_state["assistant_text"] = assistant_text
     local_state["clinic_intent"] = clinic_intent
+    local_state["end_call"] = end_call
+    local_state["appointment_patch"] = normalized_patch
 
     set_node_data(
         local_state,
@@ -281,6 +323,9 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     )
 
     logger.warning(
-        f"call_operator: clinic_intent={clinic_intent}",
+        "call_operator: clinic_intent=%s end_call=%s appointment_patch=%s",
+        clinic_intent,
+        end_call,
+        normalized_patch,
     )
     return local_state
