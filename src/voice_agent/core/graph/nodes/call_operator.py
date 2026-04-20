@@ -36,21 +36,7 @@ def _resolve_user_intent(
         return previous_intent
     return UserIntent.UNDECIDED
 
-def _normalize_value(value: Any) -> str:
-    if value is None:
-        return NOT_SPECIFIED
 
-    if not isinstance(value, str):
-        value = str(value)
-
-    value = value.strip()
-    if not value:
-        return NOT_SPECIFIED
-
-    if value.lower() in {"none", "null", "not specified", "not_specified"}:
-        return NOT_SPECIFIED
-
-    return value
 
 
 
@@ -148,20 +134,6 @@ def _fallback_state(state: CallState) -> dict[str, Any]:
     return local_state
 
 
-def normalize_operator_result( result: dict, user_text: str) -> dict:
-    if user_text.strip():
-        return result
-
-    result["datetime_detected"] = False
-    result["confirmation_intent"] = NOT_SPECIFIED
-    result["user_intent"] = NOT_SPECIFIED
-    result["patch"] = {
-        "name": NOT_SPECIFIED,
-        "phone": NOT_SPECIFIED,
-        "reason_for_visit": NOT_SPECIFIED,
-        "notes": [],
-    }
-    return result
 
 
 async def node_call_operator(state: CallState) -> dict[str, Any]:
@@ -246,7 +218,6 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     )
 
     assistant_text, data = _parse_operator_output(full_output)
-    data = normalize_operator_result(data, state.get("user_text") or "")
 
     if not assistant_text:
         assistant_text = "".join(streamed_text_parts).strip()
@@ -259,11 +230,7 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         clinic_intent = AssistantIntent.CONTINUE
 
 
-    user_intent_raw = _normalize_value(data.get("user_intent"))
-    previous_intent = state.get("user_intent") or UserIntent.UNDECIDED
-    user_intent = _resolve_user_intent(previous_intent, user_intent_raw)
 
-    local_state["user_intent"] = user_intent
 
     local_state["assistant_text"] = assistant_text
     local_state["clinic_intent"] = clinic_intent
@@ -274,13 +241,13 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         {
             "llm_failed": False,
             "raw_output": full_output,
-            "parsed": data,
+            "operator_output": data,
             "ttft_seconds": None if first_token_time is None else first_token_time - start_time,
             "total_seconds": None if end_time is None else end_time - start_time,
         },
     )
 
     logger.warning(
-        f"call_operator: clinic_intent={clinic_intent}",
+        f"call_operator: output={data}",
     )
     return local_state

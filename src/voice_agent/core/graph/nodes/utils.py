@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from langgraph.config import get_stream_writer
 
-from voice_agent.const import DEFAULT_TZ
+from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
 from voice_agent.core.graph.node_timing import get_node_timing_fields
 from voice_agent.core.types import CallEvent, CallState
 
@@ -27,6 +27,22 @@ def view_id(view: object) -> int | None:
         return int(raw)
     except (TypeError, ValueError):
         return None
+
+def normalize_value(value: Any) -> str:
+    if value is None:
+        return NOT_SPECIFIED
+
+    if not isinstance(value, str):
+        value = str(value)
+
+    value = value.strip()
+    if not value:
+        return NOT_SPECIFIED
+
+    if value.lower() in {"none", "null", "not specified", "not_specified"}:
+        return NOT_SPECIFIED
+
+    return value
 
 
 
