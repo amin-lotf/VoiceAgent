@@ -5,8 +5,9 @@ import json
 from langchain_core.messages import SystemMessage, HumanMessage
 from voice_agent.const import JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, OUT_OF_SCOPE_RULES, \
-    CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO
+    CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
+from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
 from voice_agent.core.prompts.utils import extend_prompt_section
 from voice_agent.core.types import CallState, AppointmentStatus, AssistantPhase
@@ -38,7 +39,7 @@ def _format_messages(messages: list[dict]) -> str:
     return "\n".join(lines) if lines else "none"
 
 
-def _get_recent_messages(state: CallState, limit: int = 8) -> list[dict]:
+def _get_recent_messages(state: CallState, limit: int = 20) -> list[dict]:
     messages = state.get("messages") or []
     if not isinstance(messages, list):
         return []
@@ -53,11 +54,13 @@ def _get_recent_messages(state: CallState, limit: int = 8) -> list[dict]:
 def build_operator_prompt(state, *, internal_call: bool = False):
 
     user_text = (state.get("user_text") or "").strip()
-    recent_messages = _get_recent_messages(state, limit=8)
+    recent_messages = _get_recent_messages(state, limit=20)
 
     all_rules = []
     extend_prompt_section(all_rules, "Global operator", GLOBAL_OPERATOR_RULES)
     extend_prompt_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
+    extend_prompt_section(all_rules, "Office info rules", build_assistant_intent_rules())
+
 
     if internal_call:
        pass
@@ -66,14 +69,18 @@ def build_operator_prompt(state, *, internal_call: bool = False):
         if not assistant_phase:
             raise ValueError("No assistant phase in state")
 
-        output_schema = OPERATOR_OUTPUT_SCHEMA[assistant_phase]
+        output_schema = OPERATOR_OUTPUT_SCHEMA.get(assistant_phase, {})
+        if not output_schema:
+            raise ValueError(f"Undefined output schema for current phase: {assistant_phase}")
 
         output_schema_text = json.dumps(output_schema, ensure_ascii=True, indent=2)
 
         match assistant_phase:
             case AssistantPhase.COLLECTING_USER_INTENT:
-
                 all_rules.extend(get_user_intent_rules())
+            case AssistantPhase.COLLECTING_INFO:
+                all_rules.extend(get_collecting_info_rules())
+
 
         extend_prompt_section(all_rules, "Out of scope rules", OUT_OF_SCOPE_RULES)
         extend_prompt_section(all_rules, "Capability explanation rules", CAPABILITY_EXPLANATION_RULES)

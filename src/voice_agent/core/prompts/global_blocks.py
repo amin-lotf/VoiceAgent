@@ -1,4 +1,5 @@
 from voice_agent.const import NOT_SPECIFIED
+from voice_agent.core.types import AssistantIntent
 
 GLOBAL_OPERATOR_RULES = [
     "Write the spoken reply first, then the JSON sentinel, then one valid JSON.",
@@ -16,15 +17,7 @@ GLOBAL_OPERATOR_RULES = [
     "Do not mention internal logic, JSON, or system behavior.",
 ]
 
-CLINIC_INTENT_RULES = [
-    'Allowed clinic_intent: "continue", "hangup", "human_handoff".',
-    f"user_intent: only update if explicitly provided, else {NOT_SPECIFIED}",
-    'Use "hangup" only if the caller clearly ends the call (e.g., says goodbye, thanks and ends, or explicitly asks to end the call).'
-    "Do not use hangup just because the conversation pauses or intent is unclear."
-    'Use "human_handoff" for human requests or urgent situations.',
-    'Use "continue" otherwise.',
-    "Set end_call=true only when the call should end.",
-]
+
 
 OFFICE_INFO_RULES = [
     "If the user asks about office information, answer directly from office knowledge.",
@@ -54,3 +47,16 @@ OFFICE_INFO = {
     "address": "123 Main Street",
     "parking": "Available next to building",
 }
+
+
+def build_assistant_intent_rules() -> list[str]:
+    allowed_values = ", ".join(f'"{i.value}"' for i in AssistantIntent)
+
+    return [
+        f'Allowed assistant_intent values: {allowed_values}.',
+        f"user_intent: only update if explicitly provided, else {NOT_SPECIFIED}.",
+        f'Use "{AssistantIntent.HANGUP.value}" only when the caller clearly ends the call (e.g., goodbye, thanks and ends, or explicitly asks to end).',
+        f'Do not use "{AssistantIntent.HANGUP.value}" just because the conversation pauses or intent is unclear.',
+        f'Use "{AssistantIntent.HUMAN_HANDOFF.value}" for human requests or urgent situations.',
+        f'Use "{AssistantIntent.CONTINUE.value}" otherwise.',
+    ]

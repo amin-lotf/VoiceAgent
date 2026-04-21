@@ -60,12 +60,14 @@ class AssistantIntent(StrEnum):
 
 class NextAction(StrEnum):
     ASK_USER= 'ask_user'
+    EXTRACT_INFO = 'extract_info'
     EXTRACT_DATETIME = 'extract_datetime'
     HOLD_APPOINTMENT = 'hold_appointment'
     CALL_OPERATOR = 'call_operator'
     BOOK_APPOINTMENT = 'book_appointment'
     TAKE_NOTE = 'take_note'
     OTHER = 'other'
+    REPORT_ERROR = 'report_error'
 
 
 class AssistantPhase(StrEnum):

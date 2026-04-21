@@ -74,7 +74,7 @@ class InterviewEngine:
             *,
             role: str,
             content: str | None,
-            limit: int = 10,
+            limit: int = 20,
             replace_if_prefix: bool = False,
     ) -> list[dict[str, str]]:
         text = (content or "").strip()
@@ -102,7 +102,7 @@ class InterviewEngine:
             *,
             role: str,
             content: str | None,
-            limit: int = 10,
+            limit: int = 20,
     ) -> list[dict[str, str]]:
         text = (content or "").strip()
         if not text:

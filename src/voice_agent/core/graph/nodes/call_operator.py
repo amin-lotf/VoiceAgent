@@ -10,77 +10,20 @@ from langgraph.config import get_stream_writer
 
 from voice_agent.const import JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data
-from voice_agent.core.graph.utils import run_non_interruptible
+from voice_agent.core.graph.utils import run_non_interruptible, commit_assistant_message
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.call_operator import build_operator_prompt
 from voice_agent.core.types import (
     AppointmentField,
     CallState,
-    AssistantIntent, ConfirmationIntent, UserIntent,
+    AssistantIntent, ConfirmationIntent, UserIntent, NextAction,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_user_intent(
-        previous_intent: UserIntent,
-        extracted_intent_raw: str | None,
-) -> UserIntent:
-    if extracted_intent_raw and extracted_intent_raw != NOT_SPECIFIED:
-        try:
-            return UserIntent(extracted_intent_raw)
-        except Exception:
-            logger.warning("Invalid extracted_intent=%s", extracted_intent_raw)
-            return UserIntent.UNDECIDED
-    if previous_intent and previous_intent != NOT_SPECIFIED:
-        return previous_intent
-    return UserIntent.UNDECIDED
 
 
-
-
-
-def _coerce_bool(value: Any, default: bool = False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    if isinstance(value, str):
-        v = value.strip().lower()
-        if v in {"true", "1", "yes"}:
-            return True
-        if v in {"false", "0", "no"}:
-            return False
-    return default
-
-
-
-
-
-def _normalize_notes(value: Any) -> list[str]:
-    if value is None:
-        return []
-
-    if isinstance(value, str):
-        text = value.strip()
-        return [text] if text else []
-
-    if not isinstance(value, list):
-        return []
-
-    notes: list[str] = []
-    seen: set[str] = set()
-
-    for item in value:
-        text = str(item).strip()
-        if not text:
-            continue
-        if text in seen:
-            continue
-        notes.append(text)
-        seen.add(text)
-
-    return notes
 
 
 def _parse_operator_output(full_text: str) -> tuple[str, dict[str, Any]]:
@@ -119,7 +62,7 @@ def _fallback_state(state: CallState) -> dict[str, Any]:
     local_state: dict[str, Any] = {
         "assistant_text": fallback,
         "assistant_streamed": False,
-        "clinic_intent": AssistantIntent.HUMAN_HANDOFF,
+        "assistant_intent": AssistantIntent.HUMAN_HANDOFF,
 
     }
     set_node_data(
@@ -141,11 +84,13 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     Simplified operator node:
     - streams spoken assistant text first
     - parses JSON after sentinel
-    - returns clinic_intent, end_call, appointment_patch, assistant_text
+    - returns assistant_intent, end_call, appointment_patch, assistant_text
     - keeps raw/parsed LLM output in node_data
     """
     local_state: dict[str, Any] = {}
     internal_call = state.get("internal_call") or False
+    if internal_call:
+        local_state= commit_assistant_message(state)
     prompt = build_operator_prompt(state, internal_call=internal_call)
     logger.warning(
         f"=====================\ncall_operator for internal_call={internal_call}: prompt=%s\n=====================",
@@ -222,18 +167,26 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     if not assistant_text:
         assistant_text = "".join(streamed_text_parts).strip()
 
-    clinic_intent_raw = data.get("clinic_intent")
+    assistant_intent_raw = data.get("assistant_intent")
     try:
-        clinic_intent = AssistantIntent(clinic_intent_raw)
+        assistant_intent = AssistantIntent(assistant_intent_raw)
     except Exception:
-        logger.warning("call_operator: invalid clinic_intent=%s", clinic_intent_raw)
-        clinic_intent = AssistantIntent.CONTINUE
+        logger.warning("call_operator: invalid assistant_intent=%s", assistant_intent_raw)
+        assistant_intent = AssistantIntent.CONTINUE
+
+    next_action_raw = data.get("next_action")
+    try:
+        next_action = NextAction(next_action_raw)
+    except Exception:
+        logger.warning("call_operator: invalid next_action=%s", next_action_raw)
+        next_action = NextAction.REPORT_ERROR
 
 
 
 
     local_state["assistant_text"] = assistant_text
-    local_state["clinic_intent"] = clinic_intent
+    local_state["assistant_intent"] = assistant_intent
+    local_state["next_action"] = next_action
 
     set_node_data(
         local_state,

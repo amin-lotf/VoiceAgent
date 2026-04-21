@@ -1,13 +1,6 @@
+from voice_agent.core.graph.const import NOT_SPECIFIED
 from voice_agent.core.prompts.utils import extend_prompt_section
-
-USER_INTENT_RULES = [
-    'Allowed user_intent: "book_appointment", "not_specified".',
-    'Use "book_appointment" only when the caller clearly says they want to make, schedule, or book a new appointment.',
-    'Use "not_specified" when the caller has not clearly stated that intent in the active conversation context.',
-    "Do not guess.",
-    "Do not infer a booking intent just because the conversation is ongoing.",
-    "If the caller asks only about office information, answer it directly and keep user_intent as not_specified unless they also clearly ask to book.",
-]
+from voice_agent.core.types import UserIntent
 
 INTENT_PHASE_BOUNDARY_RULES = [
     "This phase only identifies the caller's intent.",
@@ -26,10 +19,22 @@ REQUESTING_USER_INTENT_RULES = [
     'After extracting a clear booking intent, give a short natural transition reply such as "One moment please." or "Okay, one moment please."',
 ]
 
+def _build_user_intent_rules() -> list[str]:
+    allowed_values = ", ".join(f'"{i.value}"' for i in UserIntent)
+
+    return [
+        f'Allowed user_intent values: {allowed_values}.',
+        f'Use "{UserIntent.BOOK_APPOINTMENT.value}" only when the caller clearly says they want to make, schedule, or book a new appointment.',
+        f'Use "{NOT_SPECIFIED}" when the caller has not clearly stated that intent in the active conversation context.',
+        "Do not guess.",
+        "Do not infer a booking intent just because the conversation is ongoing.",
+        f'If the caller asks only about office information, answer directly and keep user_intent as "{NOT_SPECIFIED}" unless they explicitly request booking.',
+    ]
+
 
 def get_user_intent_rules():
     all_user_intent_rules = []
-    extend_prompt_section(all_user_intent_rules, "User intent", USER_INTENT_RULES)
+    extend_prompt_section(all_user_intent_rules, "User intent", _build_user_intent_rules())
     extend_prompt_section(all_user_intent_rules, "Requesting user intent", REQUESTING_USER_INTENT_RULES)
     extend_prompt_section(all_user_intent_rules, "Intent phase boundary rules", INTENT_PHASE_BOUNDARY_RULES)
     return all_user_intent_rules

@@ -106,6 +106,20 @@ def sanitize_spoken_text(text: str) -> str:
     )
     return text
 
+def commit_assistant_message(state: dict,  limit: int = 20) -> dict:
+    clean= dict(state)
+    text= clean.get("assistant_text")
+    text = sanitize_spoken_text((text or "").strip())
+    if not text:
+        return {}
+
+    messages = list(state.get("messages") or [])
+    messages.append({"role": "assistant", "content": text})
+    clean["messages"] = messages[-limit:]
+    clean["prev_assistant_text"] = text
+    clean["assistant_text"] = ""
+    return clean
+
 
 class SpokenTextStreamNormalizer:
     def __init__(self, *, tail_chars: int = 48) -> None:

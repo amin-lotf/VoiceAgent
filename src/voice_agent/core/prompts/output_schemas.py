@@ -2,11 +2,15 @@ from enum import StrEnum
 from typing import TypedDict
 
 from voice_agent.const import NOT_SPECIFIED
-from voice_agent.core.types import AssistantPhase
+from voice_agent.core.types import AssistantPhase, NextAction, AssistantIntent
 
 OPERATOR_OUTPUT_SCHEMA={
     AssistantPhase.COLLECTING_USER_INTENT:{
-            "clinic_intent": "continue",
+            "assistant_intent": AssistantIntent.CONTINUE,
             "user_intent": NOT_SPECIFIED,
-        }
+        },
+    AssistantPhase.COLLECTING_INFO:{
+        "assistant_intent": AssistantIntent.CONTINUE,
+        "next_action" : NextAction.ASK_USER
+    }
 }
