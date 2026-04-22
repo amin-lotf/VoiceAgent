@@ -3,9 +3,18 @@ from voice_agent.core.prompts.utils import extend_prompt_section
 VERIFICATION_PHASE_RULES = [
     "This phase is for verifying the appointment information with the caller.",
     "The information to verify is: caller name, phone number, reason for visit, and requested day or time.",
-    "Use the injected appointment information as the source of what should be verified.",
+    "Use the latest injected appointment information as the current record to verify.",
     "Briefly restate the appointment information in a natural confirmation question.",
     "Ask whether the information is correct.",
+]
+
+VERIFICATION_UPDATED_INFO_RULES = [
+    "Updated information is internal context only.",
+    "Treat any injected updated information as already applied to the appointment record before this turn begins.",
+    "Do not acknowledge the update itself.",
+    "Do not mention that anything was updated unless the caller explicitly talks about the correction in the current turn.",
+    "Do not act as if the injected update was newly said by the caller in this turn.",
+    "If updated information is present, simply verify using the latest values.",
 ]
 
 VERIFICATION_NEXT_ACTION_RULES = [
@@ -17,7 +26,7 @@ VERIFICATION_NEXT_ACTION_RULES = [
 
 VERIFICATION_REPLY_STYLE_RULES = [
     "The spoken verification reply should sound natural and short.",
-    "Use a confirmation style such as: so you want to book an appointment for [name], phone number [phone], for [reason], on [requested time]. Is that correct?",
+    'Use a natural style such as: "So I have your name as [name], your phone number as [phone], and the visit is for [reason] on [requested time]. Is that correct?"'
     "Do not sound robotic or overly formal.",
     "Do not repeat the same field labels mechanically unless needed for clarity.",
 ]
@@ -66,6 +75,7 @@ VERIFICATION_ANTI_HALLUCINATION_RULES = [
 def get_verification_rules() -> list[str]:
     all_verification_rules: list[str] = []
     extend_prompt_section(all_verification_rules, "Verification phase", VERIFICATION_PHASE_RULES)
+    extend_prompt_section(all_verification_rules, "Verification updated info", VERIFICATION_UPDATED_INFO_RULES)
     extend_prompt_section(all_verification_rules, "Verification next action", VERIFICATION_NEXT_ACTION_RULES)
     extend_prompt_section(all_verification_rules, "Verification reply style", VERIFICATION_REPLY_STYLE_RULES)
     extend_prompt_section(all_verification_rules, "Verification confirm", VERIFICATION_CONFIRM_RULES)

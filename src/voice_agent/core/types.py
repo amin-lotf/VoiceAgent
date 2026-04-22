@@ -119,7 +119,12 @@ class RequiredAppointmentField(StrEnum):
     REQUESTED_TIME_TEXT = "requested_time_text"
 
 
-
+class FieldChange(TypedDict, total=False):
+    field: str
+    old_value: str | None
+    new_value: str | None
+    action: str  # "added", "updated"
+    source_node: str
 
 
 

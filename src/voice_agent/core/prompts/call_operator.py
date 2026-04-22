@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-
 from langchain_core.messages import SystemMessage, HumanMessage
 from voice_agent.const import JSON_SENTINEL, NOT_SPECIFIED
+from voice_agent.core.graph.nodes.utils import get_state_data
 from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, OUT_OF_SCOPE_RULES, \
     CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
@@ -11,16 +11,35 @@ from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
 from voice_agent.core.prompts.utils import extend_prompt_section
 from voice_agent.core.prompts.verify_info_blocks import get_verification_rules
-from voice_agent.core.types import CallState, AppointmentStatus, AssistantPhase
+from voice_agent.core.types import CallState, AppointmentStatus, AssistantPhase, FieldChange
 import logging
+from typing import Optional
+from voice_agent.core.types import AppointmentDraft
 
 logger = logging.getLogger(__name__)
 
 
 
 
-from typing import Optional
-from voice_agent.core.types import AppointmentDraft
+
+def build_field_changes_prompt(changes: list[FieldChange]) -> str:
+    if not changes:
+        return ""
+
+    lines: list[str] = ["Recent updates:"]
+
+    for change in changes:
+        field = change.get("field")
+        old = change.get("old_value")
+        new = change.get("new_value")
+        action = change.get("action")
+
+        if action == "added":
+            lines.append(f'- {field}: "{new}"')
+        elif action == "updated":
+            lines.append(f'- {field}: "{old}" → "{new}"')
+
+    return "\n".join(lines)
 
 
 def format_appointment_info(draft: Optional[AppointmentDraft]) -> str:
@@ -82,7 +101,7 @@ def build_operator_prompt(state, *, internal_call: bool = False):
     user_text = (state.get("user_text") or "").strip()
     recent_messages = _get_recent_messages(state)
     appointment_info = format_appointment_info(state.get("appointment_draft"))
-
+    recent_changes = ""
     all_rules = []
     extend_prompt_section(all_rules, "Global operator", GLOBAL_OPERATOR_RULES)
     extend_prompt_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
@@ -108,6 +127,10 @@ def build_operator_prompt(state, *, internal_call: bool = False):
             case AssistantPhase.COLLECTING_INFO:
                 all_rules.extend(get_collecting_info_rules())
             case AssistantPhase.VERIFYING_INFO:
+                basic_info_node= get_state_data(state, "basic_info")
+                field_changes= basic_info_node.get("field_changes") or []
+                recent_changes = build_field_changes_prompt(field_changes)
+
                 all_rules.extend(get_verification_rules())
 
 
@@ -143,6 +166,9 @@ Then JSON.
         human = f"""
 Active Conversation:
 {_format_messages(recent_messages)}
+
+Updated information:
+{recent_changes or "none"}
 
 
 Caller Now:

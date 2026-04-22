@@ -5,10 +5,10 @@ from typing import Any
 from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.db.mappers import to_view
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
-from voice_agent.core.graph.nodes.utils import get_state_data, view_id
+from voice_agent.core.graph.nodes.utils import get_state_data, view_id, set_node_data
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.types import CallState, NextAction, AppointmentDraft, AppointmentPatch, AppointmentStatus, \
-    AppointmentView, OperationStatus, AssistantPhase
+    AppointmentView, OperationStatus, AssistantPhase, FieldChange, RequiredAppointmentField
 import logging
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,58 @@ def _merge_notes(
             seen.add(text)
 
     return merged
+def _normalize_change_value(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if text.lower() in {"not_specified", str(NOT_SPECIFIED).lower()}:
+            return None
+        return text
+    return str(value).strip() or None
 
+
+def build_field_changes(
+    *,
+    before: AppointmentDraft,
+    after: AppointmentDraft,
+    source_node: str,
+) -> list[FieldChange]:
+    changes: list[FieldChange] = []
+
+    for field in RequiredAppointmentField:
+        old_value = _normalize_change_value(before.get(field.value,))
+        new_value = _normalize_change_value(after.get(field.value))
+
+        if new_value is None:
+            continue
+
+        if old_value is None:
+            changes.append(
+                {
+                    "field": field.value,
+                    "old_value": None,
+                    "new_value": new_value,
+                    "action": "added",
+                    "source_node": source_node,
+                }
+            )
+            continue
+
+        if old_value != new_value:
+            changes.append(
+                {
+                    "field": field,
+                    "old_value": old_value,
+                    "new_value": new_value,
+                    "action": "updated",
+                    "source_node": source_node,
+                }
+            )
+
+    return changes
 
 def apply_appointment_patch(
         *,
@@ -157,6 +208,14 @@ async def node_basic_info(
         appointment_draft=appointment_draft,
         appointment_patch=appointment_patch,
     )
+
+    field_changes = build_field_changes(
+        before=appointment_draft,
+        after=updated_appointment,
+        source_node="basic_info",
+    )
+
+
     if not _has_updatable_core_fields(updated_appointment):
         logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)
         raise Exception('basic_info: incomplete info')
@@ -165,6 +224,14 @@ async def node_basic_info(
         "next_action": NextAction.CALL_OPERATOR,
         "assistant_phase" : AssistantPhase.VERIFYING_INFO
     }
+    set_node_data(
+        local_state,
+        "basic_info",
+        {
+            "field_changes": field_changes,
+        },
+    )
+
     logger.warning("======\n basic_info: local state: %s \n ======", local_state)
     # logger.warning("======\n patch_resolver: state: %s \n ======", state)
     return local_state
