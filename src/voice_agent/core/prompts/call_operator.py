@@ -9,6 +9,7 @@ from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
+from voice_agent.core.prompts.confirm_slot_blocks  import get_slot_confirmation_rules
 from voice_agent.core.prompts.utils import extend_prompt_section
 from voice_agent.core.prompts.verify_info_blocks import get_verification_rules
 from voice_agent.core.types import CallState, AppointmentStatus, AssistantPhase, FieldChange
@@ -131,11 +132,13 @@ def build_operator_prompt(state, *, internal_call: bool = False):
         case AssistantPhase.COLLECTING_INFO:
             all_rules.extend(get_collecting_info_rules())
         case AssistantPhase.VERIFYING_INFO:
+            all_rules.extend(get_verification_rules())
             basic_info_node= get_state_data(state, "basic_info")
             field_changes= basic_info_node.get("field_changes") or []
             recent_changes = build_field_changes_prompt(field_changes)
+        case AssistantPhase.CONFIRMING_SLOT:
+            all_rules.extend(get_slot_confirmation_rules())
 
-            all_rules.extend(get_verification_rules())
 
     extend_prompt_section(all_rules, "JSON rules", JSON_RULES)
 

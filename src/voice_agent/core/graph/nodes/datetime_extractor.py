@@ -13,7 +13,7 @@ from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data
 from voice_agent.core.llm.openai_llm import LLM, LLM_Non_stream
 from voice_agent.core.prompts.datetime_extractor import build_time_resolution_prompt
-from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction
+from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction, AssistantPhase
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,14 @@ def _normalize_schedule_patch(raw: dict[str, Any]) -> dict[str, str]:
 async def node_datetime_extractor(
         state: CallState,
 ) -> dict[str, Any]:
+
+    next_action = state.get('next_action')
+    if next_action!=NextAction.EXTRACT_DATETIME:
+        if next_action==NextAction.BOOK_APPOINTMENT:
+            local_state = {'assistant_phase': AssistantPhase.BOOKING_APPOINTMENT}
+            logger.warning(f'datetime_extractor: next_action: {next_action}, local_state: {local_state}')
+            return local_state
+
     appointment: AppointmentDraft = dict(state.get("appointment_draft") or {})
     requested_time_text = (appointment.get("requested_time_text") or "").strip()
     tz_info: ZoneInfo = DEFAULT_TZ
@@ -133,7 +141,7 @@ async def node_datetime_extractor(
                 "node_status": OperationStatus.SUCCESS
             },
         )
-
+        local_state['next_action'] = NextAction.HOLD_APPOINTMENT
         return local_state
 
     except Exception:
@@ -147,4 +155,5 @@ async def node_datetime_extractor(
             }
         )
         local_state['next_action']=NextAction.CALL_OPERATOR
+        local_state['internal_call']=True
         return local_state

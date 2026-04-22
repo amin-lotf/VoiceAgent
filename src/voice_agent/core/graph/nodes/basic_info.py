@@ -211,6 +211,14 @@ async def node_basic_info(
         *,
         sessionmaker,
        ) -> dict[str, Any]:
+    local_state = {}
+    set_node_data(
+        local_state,
+        "basic_info",
+        {
+            "field_changes": [],
+        },
+    )
     next_action = state.get('next_action')
     if next_action!=NextAction.CHECK_INFO:
         logger.warning(f'basic_info:next_action: {next_action}')

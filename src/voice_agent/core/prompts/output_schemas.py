@@ -16,6 +16,10 @@ OPERATOR_OUTPUT_SCHEMA={
     AssistantPhase.VERIFYING_INFO:{
         "assistant_intent": AssistantIntent.CONTINUE,
         "next_action" : NextAction.ASK_USER,
+    },
+    AssistantPhase.CONFIRMING_SLOT:{
+        "assistant_intent": AssistantIntent.CONTINUE,
+        "next_action" : NextAction.ASK_USER,
     }
 }
 
@@ -26,4 +30,14 @@ INFO_EXTRACTOR_OUTPUT_SCHEMA={
     "reason_for_visit": NOT_SPECIFIED,
     "requested_time_text": NOT_SPECIFIED,
     "notes": [],
+}
+
+DATETIME_EXTRACTOR_OUTPUT_SCHEMA = {
+    "schedule_patch": {
+        "date_mode": NOT_SPECIFIED,
+        "date_key": NOT_SPECIFIED,
+        "time_pref": NOT_SPECIFIED,
+        "exact_time_text": NOT_SPECIFIED,
+        "relative_to_offered": NOT_SPECIFIED,
+    }
 }

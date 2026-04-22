@@ -77,6 +77,7 @@ class AssistantPhase(StrEnum):
     COLLECTING_INFO = "collecting_info"
     VERIFYING_INFO = "verifying_info"
     CONFIRMING_SLOT = "confirming_slot"
+    BOOKING_APPOINTMENT = "booking_appointment"
     COLLECTING_NOTES = "collecting_notes"
     DONE = "done"
 

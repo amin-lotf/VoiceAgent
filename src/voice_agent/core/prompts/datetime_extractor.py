@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
+from voice_agent.core.prompts.output_schemas import DATETIME_EXTRACTOR_OUTPUT_SCHEMA
 from voice_agent.core.types import AppointmentDraft, CallState
 
 
@@ -113,15 +114,7 @@ def build_time_resolution_prompt(
         else offered_slot_date_key
     )
 
-    output_schema = {
-        "schedule_patch": {
-            "date_mode": NOT_SPECIFIED,
-            "date_key": NOT_SPECIFIED,
-            "time_pref": NOT_SPECIFIED,
-            "exact_time_text": NOT_SPECIFIED,
-            "relative_to_offered": NOT_SPECIFIED,
-        }
-    }
+
 
     system_content = f"""
 You are a scheduling-time parser for a medical clinic voice agent.
@@ -137,7 +130,7 @@ No explanation.
 No extra text.
 
 Output schema:
-{_pretty_json(output_schema)}
+{_pretty_json(DATETIME_EXTRACTOR_OUTPUT_SCHEMA)}
 
 Rules:
 

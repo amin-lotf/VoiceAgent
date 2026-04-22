@@ -70,6 +70,7 @@ async def node_hold_appointment(
         "scheduled_appointment_view": scheduled_view,
         "current_appointment_id": int(held_view["id"]) if held_view.get("id") else None,
         "next_action": NextAction.CALL_OPERATOR,
+        "internal_call" : True
     }
     logger.warning("hold_appointment: local_state=%s", local_state)
     return local_state

@@ -19,10 +19,9 @@ async def node_verify_info(
 ) -> dict[str, Any]:
     next_action = state.get('next_action')
     # if next_action!=NextAction.CHECK_INFO:
-    local_state ={
-        'assistant_phase': AssistantPhase.CONFIRMING_SLOT
-    }
-    if next_action!=NextAction.MARK_VERIFIED:
+    local_state = {}
+    if next_action==NextAction.MARK_VERIFIED:
+        local_state['assistant_phase'] =AssistantPhase.CONFIRMING_SLOT
         local_state['next_action'] = NextAction.EXTRACT_DATETIME
     logger.warning(f'verify_info:next_action: {next_action}')
     return local_state
