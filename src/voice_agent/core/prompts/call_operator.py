@@ -10,6 +10,7 @@ from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
 from voice_agent.core.prompts.utils import extend_prompt_section
+from voice_agent.core.prompts.verify_info_blocks import get_verification_rules
 from voice_agent.core.types import CallState, AppointmentStatus, AssistantPhase
 import logging
 
@@ -18,7 +19,32 @@ logger = logging.getLogger(__name__)
 
 
 
+from typing import Optional
+from voice_agent.core.types import AppointmentDraft
 
+
+def format_appointment_info(draft: Optional[AppointmentDraft]) -> str:
+    if not draft:
+        return "Current appointment information:\nnone"
+
+    name = draft.get("name") or "not provided"
+    phone = draft.get("phone") or "not provided"
+    reason = draft.get("reason_for_visit") or "not provided"
+
+    # Prefer natural user text over ISO
+    requested_time = draft.get("requested_time_text")
+    if not requested_time:
+        requested_time = draft.get("requested_time_iso")
+
+    requested_time = requested_time or "not provided"
+
+    return (
+        "Current appointment information:\n"
+        f"- Name: {name}\n"
+        f"- Phone: {phone}\n"
+        f"- Reason for visit: {reason}\n"
+        f"- Requested time: {requested_time}"
+    )
 
 
 
@@ -55,6 +81,7 @@ def build_operator_prompt(state, *, internal_call: bool = False):
 
     user_text = (state.get("user_text") or "").strip()
     recent_messages = _get_recent_messages(state)
+    appointment_info = format_appointment_info(state.get("appointment_draft"))
 
     all_rules = []
     extend_prompt_section(all_rules, "Global operator", GLOBAL_OPERATOR_RULES)
@@ -80,6 +107,8 @@ def build_operator_prompt(state, *, internal_call: bool = False):
                 all_rules.extend(get_user_intent_rules())
             case AssistantPhase.COLLECTING_INFO:
                 all_rules.extend(get_collecting_info_rules())
+            case AssistantPhase.VERIFYING_INFO:
+                all_rules.extend(get_verification_rules())
 
 
         extend_prompt_section(all_rules, "Out of scope rules", OUT_OF_SCOPE_RULES)
@@ -119,7 +148,7 @@ Active Conversation:
 Caller Now:
 {user_text or "none"}
 
-
+{appointment_info}
 
 """.strip()
 

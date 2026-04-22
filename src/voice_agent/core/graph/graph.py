@@ -9,6 +9,7 @@ from voice_agent.core.graph.nodes.basic_info_extractor import node_basic_info_ex
 from voice_agent.core.graph.nodes.call_operator import node_call_operator
 from voice_agent.core.graph.nodes.user_intent import node_user_intent
 from voice_agent.core.graph.node_timing import with_node_timing
+from voice_agent.core.graph.nodes.verify_info import node_verify_info
 from voice_agent.core.types import CallEvent, CallState, AssistantIntent, NextAction, AssistantPhase
 from voice_agent.core.graph.nodes.greeting import node_on_call_started
 from voice_agent.core.graph.nodes.handoff import node_handoff_fallback
@@ -32,8 +33,9 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     add_timed_node("on_call_started", node_on_call_started)
     add_timed_node("call_operator", node_call_operator)
     add_timed_node("user_intent", node_user_intent)
-    add_timed_node('basic_info', partial(node_basic_info, sessionmaker=sessionmaker))
+    add_timed_node('basic_info', node_basic_info)
     add_timed_node("basic_info_extractor", node_basic_info_extractor)
+    add_timed_node('verify_info', partial(node_verify_info, sessionmaker=sessionmaker))
     add_timed_node("handoff_fallback", node_handoff_fallback)
     add_timed_node("handle_hangup", node_handle_hangup)
     add_timed_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
@@ -68,6 +70,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                 match assistant_phase:
                     case AssistantPhase.COLLECTING_USER_INTENT:
                         return 'user_intent'
+                    case AssistantPhase.VERIFYING_INFO:
+                        return 'verify_info'
                     case _:
                         return 'basic_info'
 
@@ -76,9 +80,29 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'handle_hangup': 'handle_hangup',
         'handoff_fallback': 'handoff_fallback',
         'user_intent': 'user_intent',
+        'verify_info': 'verify_info',
         'basic_info': 'basic_info',
     }
                                 )
+    def _after_verify_info(state: CallState):
+        next_action = state.get("next_action")
+        match  next_action:
+            case NextAction.CALL_OPERATOR:
+                return 'call_operator'
+            case NextAction.EXTRACT_INFO:
+                return 'basic_info'
+            case _:
+                return 'finalize_response'
+
+    graph.add_conditional_edges(
+        'verify_info',
+        _after_verify_info,
+        {
+            'finalize_response': 'finalize_response',
+            'call_operator': 'call_operator',
+            'basic_info': 'basic_info',
+        }
+    )
 
 
 

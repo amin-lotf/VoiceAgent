@@ -62,6 +62,7 @@ class NextAction(StrEnum):
     ASK_USER= 'ask_user'
     EXTRACT_INFO = 'extract_info'
     CHECK_INFO = 'check_info'
+    MARK_VERIFIED = 'mark_verified'
     EXTRACT_DATETIME = 'extract_datetime'
     HOLD_APPOINTMENT = 'hold_appointment'
     CALL_OPERATOR = 'call_operator'

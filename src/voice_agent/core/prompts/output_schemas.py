@@ -12,6 +12,10 @@ OPERATOR_OUTPUT_SCHEMA={
     AssistantPhase.COLLECTING_INFO:{
         "assistant_intent": AssistantIntent.CONTINUE,
         "next_action" : NextAction.ASK_USER
+    },
+    AssistantPhase.VERIFYING_INFO:{
+        "assistant_intent": AssistantIntent.CONTINUE,
+        "next_action" : NextAction.ASK_USER,
     }
 }
 
