@@ -16,6 +16,7 @@ from voice_agent.core.graph.node_timing import (
     reset_node_timing_data,
 )
 from voice_agent.core.graph.utils import RunControl, sanitize_spoken_text
+from voice_agent.core.settings import settings
 from voice_agent.core.store.redis_store import RedisStateStore
 from voice_agent.core.types import (
     CallEvent,
@@ -74,7 +75,7 @@ class InterviewEngine:
             *,
             role: str,
             content: str | None,
-            limit: int = 20,
+            limit: int = settings.MESSAGE_HISTORY_SIZE,
             replace_if_prefix: bool = False,
     ) -> list[dict[str, str]]:
         text = (content or "").strip()

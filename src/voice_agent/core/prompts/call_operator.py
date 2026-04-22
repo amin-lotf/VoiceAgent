@@ -39,11 +39,11 @@ def _format_messages(messages: list[dict]) -> str:
     return "\n".join(lines) if lines else "none"
 
 
-def _get_recent_messages(state: CallState, limit: int = 20) -> list[dict]:
+def _get_recent_messages(state: CallState) -> list[dict]:
     messages = state.get("messages") or []
     if not isinstance(messages, list):
         return []
-    return messages[-limit:]
+    return messages
 
 
 
@@ -54,7 +54,7 @@ def _get_recent_messages(state: CallState, limit: int = 20) -> list[dict]:
 def build_operator_prompt(state, *, internal_call: bool = False):
 
     user_text = (state.get("user_text") or "").strip()
-    recent_messages = _get_recent_messages(state, limit=20)
+    recent_messages = _get_recent_messages(state)
 
     all_rules = []
     extend_prompt_section(all_rules, "Global operator", GLOBAL_OPERATOR_RULES)

@@ -14,3 +14,12 @@ OPERATOR_OUTPUT_SCHEMA={
         "next_action" : NextAction.ASK_USER
     }
 }
+
+
+INFO_EXTRACTOR_OUTPUT_SCHEMA={
+    "name": NOT_SPECIFIED,
+    "phone": NOT_SPECIFIED,
+    "reason_for_visit": NOT_SPECIFIED,
+    "requested_time_text": NOT_SPECIFIED,
+    "notes": [],
+}

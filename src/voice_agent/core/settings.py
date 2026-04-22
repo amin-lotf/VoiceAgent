@@ -7,7 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from voice_agent.const import DEFAULT_SQLALCHEMY_DATABASE_URL, DEFAULT_TEST_SQLALCHEMY_DATABASE_URL, \
     DEFAULT_REPLY_PROVIDER, DEFAULT_REPLY_TEMPERATURE, DEFAULT_REPLY_MODEL, DEFAULT_REPLY_MAX_OUTPUT_TOKENS, \
-    DEFAULT_REPLY_MAX_CONTEXT_CHARS, DEFAULT_APPOINTMENT_DURATION_MIN, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME
+    DEFAULT_REPLY_MAX_CONTEXT_CHARS, DEFAULT_APPOINTMENT_DURATION_MIN, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME, \
+    DEFAULT_MESSAGE_HISTORY_SIZE
 from datetime import time
 
 
@@ -68,6 +69,7 @@ class Settings(BaseSettings):
         le=2.0,
         description="Temperature used for reply generation.",
     )
+
     REPLY_MODEL: str = Field(
         default=DEFAULT_REPLY_MODEL,
         min_length=1,
@@ -85,6 +87,12 @@ class Settings(BaseSettings):
     RANDOM_SEED: int | None = Field(
         default=None,
         description="Random seed for deterministic behavior. None for non-deterministic.",
+    )
+    MESSAGE_HISTORY_SIZE: int = Field(
+        default=DEFAULT_MESSAGE_HISTORY_SIZE,
+        ge=20,
+        le=50,
+        description="Length of each appointment slot in minutes.",
     )
     APPOINTMENT_DURATION_MIN: int = Field(
         default=DEFAULT_APPOINTMENT_DURATION_MIN,
