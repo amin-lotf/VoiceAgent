@@ -14,6 +14,26 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _build_sync_plan(
+    *,
+    appointment_status: AppointmentStatus | None,
+    held_id: int | None,
+    scheduled_id: int | None,
+) -> list[tuple[str, int, bool]]:
+    if appointment_status == AppointmentStatus.SCHEDULED:
+        if scheduled_id is not None:
+            return [("scheduled_appointment_view", scheduled_id, True)]
+        if held_id is not None:
+            return [("held_appointment_view", held_id, True)]
+        return []
+
+    plan: list[tuple[str, int, bool]] = []
+    if held_id is not None:
+        plan.append(("held_appointment_view", held_id, True))
+    if scheduled_id is not None and scheduled_id != held_id:
+        plan.append(("scheduled_appointment_view", scheduled_id, held_id is None))
+    return plan
+
 def _is_missing(value: object) -> bool:
     if value is None:
         return True
@@ -188,6 +208,8 @@ async def _sync_views_from_draft(
 
 async def node_basic_info(
         state: CallState,
+        *,
+        sessionmaker,
        ) -> dict[str, Any]:
     next_action = state.get('next_action')
     if next_action!=NextAction.CHECK_INFO:
@@ -232,6 +254,36 @@ async def node_basic_info(
             "field_changes": field_changes,
         },
     )
+
+    held_view = state.get("held_appointment_view") or {}
+    scheduled_view = state.get("scheduled_appointment_view") or {}
+    held_id = view_id(held_view)
+    scheduled_id = view_id(scheduled_view)
+    sync_plan = _build_sync_plan(
+        appointment_status=updated_appointment.get("status"),
+        held_id=held_id,
+        scheduled_id=scheduled_id,
+    )
+
+    try:
+        if sync_plan:
+            updated_views = await _sync_views_from_draft(
+                state,
+                sessionmaker=sessionmaker,
+                sync_plan=sync_plan,
+                appointment_draft=updated_appointment,
+            )
+            local_state.update(updated_views)
+
+            synced_held_id = view_id(
+                local_state.get("held_appointment_view") or state.get("held_appointment_view") or {})
+            synced_scheduled_id = view_id(
+                local_state.get("scheduled_appointment_view") or state.get("scheduled_appointment_view") or {}
+            )
+            local_state["current_appointment_id"] = synced_held_id or synced_scheduled_id
+
+    except Exception:
+        logger.exception("Failed to sync appointment details to DB")
 
     logger.warning("======\n basic_info: local state: %s \n ======", local_state)
     # logger.warning("======\n patch_resolver: state: %s \n ======", state)

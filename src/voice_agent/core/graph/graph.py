@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from voice_agent.core.graph.nodes.basic_info import node_basic_info
 from voice_agent.core.graph.nodes.basic_info_extractor import node_basic_info_extractor
 from voice_agent.core.graph.nodes.call_operator import node_call_operator
+from voice_agent.core.graph.nodes.datetime_extractor import node_datetime_extractor
+from voice_agent.core.graph.nodes.hold_appointment import node_hold_appointment
+from voice_agent.core.graph.nodes.schedule_patch_to_requested_time_iso import node_schedule_patch_to_requested_time_iso
 from voice_agent.core.graph.nodes.user_intent import node_user_intent
 from voice_agent.core.graph.node_timing import with_node_timing
 from voice_agent.core.graph.nodes.verify_info import node_verify_info
@@ -33,9 +36,12 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     add_timed_node("on_call_started", node_on_call_started)
     add_timed_node("call_operator", node_call_operator)
     add_timed_node("user_intent", node_user_intent)
-    add_timed_node('basic_info', node_basic_info)
+    add_timed_node('basic_info', partial(node_basic_info, sessionmaker=sessionmaker))
     add_timed_node("basic_info_extractor", node_basic_info_extractor)
-    add_timed_node('verify_info', partial(node_verify_info, sessionmaker=sessionmaker))
+    add_timed_node('verify_info', node_verify_info)
+    add_timed_node('datetime_extractor', node_datetime_extractor)
+    add_timed_node('schedule_patch_to_requested_time_iso', node_schedule_patch_to_requested_time_iso)
+    add_timed_node('hold_appointment', partial(node_hold_appointment, sessionmaker=sessionmaker))
     add_timed_node("handoff_fallback", node_handoff_fallback)
     add_timed_node("handle_hangup", node_handle_hangup)
     add_timed_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
@@ -72,6 +78,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                         return 'user_intent'
                     case AssistantPhase.VERIFYING_INFO:
                         return 'verify_info'
+                    case AssistantPhase.CONFIRMING_SLOT:
+                        return 'datetime_extractor'
                     case _:
                         return 'basic_info'
 
@@ -82,6 +90,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'user_intent': 'user_intent',
         'verify_info': 'verify_info',
         'basic_info': 'basic_info',
+        'datetime_extractor': 'datetime_extractor',
     }
                                 )
     def _after_verify_info(state: CallState):
@@ -91,6 +100,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                 return 'call_operator'
             case NextAction.EXTRACT_INFO:
                 return 'basic_info'
+            case NextAction.EXTRACT_DATETIME:
+                return 'datetime_extractor'
             case _:
                 return 'finalize_response'
 
@@ -101,9 +112,40 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
             'finalize_response': 'finalize_response',
             'call_operator': 'call_operator',
             'basic_info': 'basic_info',
+            'datetime_extractor': 'datetime_extractor',
         }
     )
 
+    def _after_datetime_extractor(state: CallState):
+        next_action = state.get("next_action")
+        match  next_action:
+            case NextAction.CALL_OPERATOR:
+                return 'call_operator'
+            case NextAction.HOLD_APPOINTMENT:
+                return 'schedule_patch_to_requested_time_iso'
+            case _:
+                return 'finalize_response'
+
+    graph.add_conditional_edges('datetime_extractor', _after_datetime_extractor, {
+        'finalize_response': 'finalize_response',
+        'call_operator': 'call_operator',
+        'schedule_patch_to_requested_time_iso': 'schedule_patch_to_requested_time_iso',
+    })
+
+    def _after_schedule_patch_to_requested_time_iso(state: CallState):
+        next_action = state.get("next_action")
+        match  next_action:
+            case NextAction.CALL_OPERATOR:
+                return 'call_operator'
+            case _:
+                return 'hold_appointment'
+
+    graph.add_conditional_edges('schedule_patch_to_requested_time_iso', _after_schedule_patch_to_requested_time_iso, {
+        'call_operator': 'call_operator',
+        'hold_appointment': 'hold_appointment',
+    })
+
+    graph.add_edge('hold_appointment', 'call_operator')
 
 
     def _after_user_intent(state: CallState):
