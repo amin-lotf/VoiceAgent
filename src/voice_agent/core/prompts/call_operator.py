@@ -10,7 +10,7 @@ from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
 from voice_agent.core.prompts.confirm_slot_blocks  import get_slot_confirmation_rules
-from voice_agent.core.prompts.utils import extend_prompt_section
+from voice_agent.core.prompts.utils import extend_prompt_section, format_offered_time_for_voice
 from voice_agent.core.prompts.verify_info_blocks import get_verification_rules
 from voice_agent.core.types import CallState, AppointmentStatus, AssistantPhase, FieldChange
 import logging
@@ -101,7 +101,8 @@ def build_operator_prompt(state, *, internal_call: bool = False):
 
     user_text = (state.get("user_text") or "").strip()
     recent_messages = _get_recent_messages(state)
-    appointment_info = format_appointment_info(state.get("appointment_draft"))
+    appointment_draft:AppointmentDraft = state.get("appointment_draft") or {}
+    appointment_info = format_appointment_info(appointment_draft)
     recent_changes = ""
     all_rules = []
     extend_prompt_section(all_rules, "Global operator", GLOBAL_OPERATOR_RULES)
@@ -138,6 +139,8 @@ def build_operator_prompt(state, *, internal_call: bool = False):
             recent_changes = build_field_changes_prompt(field_changes)
         case AssistantPhase.CONFIRMING_SLOT:
             all_rules.extend(get_slot_confirmation_rules())
+
+            recent_changes = format_offered_time_for_voice(appointment_draft.get('last_offered_slot_start_at'))
 
 
     extend_prompt_section(all_rules, "JSON rules", JSON_RULES)

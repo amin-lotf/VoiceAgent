@@ -86,13 +86,13 @@ def _normalize_schedule_patch(raw: dict[str, Any]) -> dict[str, str]:
 async def node_datetime_extractor(
         state: CallState,
 ) -> dict[str, Any]:
-
     next_action = state.get('next_action')
+    local_state = {}
     if next_action!=NextAction.EXTRACT_DATETIME:
         if next_action==NextAction.BOOK_APPOINTMENT:
             local_state = {'assistant_phase': AssistantPhase.BOOKING_APPOINTMENT}
-            logger.warning(f'datetime_extractor: next_action: {next_action}, local_state: {local_state}')
-            return local_state
+        logger.warning(f'datetime_extractor: next_action: {next_action}, local_state: {local_state}')
+        return local_state
 
     appointment: AppointmentDraft = dict(state.get("appointment_draft") or {})
     requested_time_text = (appointment.get("requested_time_text") or "").strip()
