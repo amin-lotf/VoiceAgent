@@ -22,6 +22,9 @@ COLLECTING_NAME_RULES = [
 COLLECTING_PHONE_RULES = [
     "The caller's phone number is required.",
     "If the phone number is not yet available in the active conversation context, ask for the phone number naturally.",
+    "The provided phone number may contain letters. e.g, 'Zero one one two three O' which refers to 011230 as the phone number.",
+    "consider common spoken digit words to digits (e.g., one→1, two→2, three→3, four→4, five→5, six→6, seven→7, eight→8, nine→9, zero→0).",
+    "If the letter 'O' or 'o' appears in a phone-number-like sequence, treat it as '0'.",
     "Do not ask for country code unless needed.",
     "Once the phone number is available in the active conversation context, do not ask for it again unless the caller clearly corrects or replaces it.",
     "If the caller refuses to provide the phone number, politely explain that it is required and ask again.",
@@ -54,8 +57,8 @@ COLLECTING_INFO_ANTI_REPEAT_RULES = [
 ]
 
 COLLECTING_INFO_TRANSITION_RULES = [
-    'When all required information appears to be present in the active conversation context, do not ask another question.',
-    'Give a short natural transition reply such as "One moment please." or "Okay, one moment please."',
+    'When all required information appears to be present in the active conversation context, do not ask another question',
+    'Only Give a short natural transition reply such as "One moment please." or "Okay, one moment please."',
     'In that case, set next_action to "extract_info".',
 ]
 

@@ -24,7 +24,12 @@ EXTRACTOR_NAME_RULES = [
 
 EXTRACTOR_PHONE_RULES = [
     "Extract the caller's phone number if clearly provided.",
-    f'If not clearly provided, use "{NOT_SPECIFIED}".',
+    "The input may contain letters due to speech-to-text errors.",
+    "Convert common spoken digit words to digits (e.g., one→1, two→2, three→3, four→4, five→5, six→6, seven→7, eight→8, nine→9, zero→0).",
+    "If the letter 'O' or 'o' appears in a phone-number-like sequence, treat it as '0'.",
+    "Ignore any remaining non-digit characters.",
+    "The final output must contain digits only (0-9).",
+    "If a valid phone number cannot be confidently formed, return NOT_SPECIFIED.",
 ]
 
 EXTRACTOR_REASON_RULES = [

@@ -11,10 +11,12 @@ VERIFICATION_PHASE_RULES = [
 VERIFICATION_UPDATED_INFO_RULES = [
     "Updated information is internal context only.",
     "Treat any injected updated information as already applied to the appointment record before this turn begins.",
+    "Use the latest injected appointment information as the current record to verify.",
     "Do not acknowledge the update itself.",
-    "Do not mention that anything was updated unless the caller explicitly talks about the correction in the current turn.",
     "Do not act as if the injected update was newly said by the caller in this turn.",
-    "If updated information is present, simply verify using the latest values.",
+    "If the caller previously requested a correction and that correction is already reflected in the updated information, treat that request as already handled.",
+    'When a requested correction is already reflected in the updated information, do not choose "extract_info" again only because the caller had rejected the earlier version.',
+    "In that case, simply continue by verifying the latest current record.",
 ]
 
 VERIFICATION_NEXT_ACTION_RULES = [

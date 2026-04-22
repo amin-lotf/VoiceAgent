@@ -35,6 +35,7 @@ async def node_user_intent(state: CallState) -> dict[str, Any]:
     if user_intent == UserIntent.BOOK_APPOINTMENT:
         local_state['assistant_phase'] = AssistantPhase.COLLECTING_INFO
         local_state['next_action']= NextAction.CALL_OPERATOR
+        local_state["internal_call"]= True
     else:
         local_state['next_action']= NextAction.ASK_USER
     logger.warning("user_intent: local_state=%s", local_state)

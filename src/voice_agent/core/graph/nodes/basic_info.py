@@ -222,7 +222,8 @@ async def node_basic_info(
     local_state: dict[str, Any] = {
         "appointment_draft": updated_appointment,
         "next_action": NextAction.CALL_OPERATOR,
-        "assistant_phase" : AssistantPhase.VERIFYING_INFO
+        "assistant_phase" : AssistantPhase.VERIFYING_INFO,
+        "internal_call":True
     }
     set_node_data(
         local_state,

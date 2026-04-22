@@ -104,45 +104,46 @@ def build_operator_prompt(state, *, internal_call: bool = False):
     recent_changes = ""
     all_rules = []
     extend_prompt_section(all_rules, "Global operator", GLOBAL_OPERATOR_RULES)
-    extend_prompt_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
-    extend_prompt_section(all_rules, "Office info rules", build_assistant_intent_rules())
+
 
 
     if internal_call:
        pass
     else:
-        assistant_phase = state.get("assistant_phase")
-        if not assistant_phase:
-            raise ValueError("No assistant phase in state")
-
-        output_schema = OPERATOR_OUTPUT_SCHEMA.get(assistant_phase, {})
-        if not output_schema:
-            raise ValueError(f"Undefined output schema for current phase: {assistant_phase}")
-
-        output_schema_text = json.dumps(output_schema, ensure_ascii=True, indent=2)
-
-        match assistant_phase:
-            case AssistantPhase.COLLECTING_USER_INTENT:
-                all_rules.extend(get_user_intent_rules())
-            case AssistantPhase.COLLECTING_INFO:
-                all_rules.extend(get_collecting_info_rules())
-            case AssistantPhase.VERIFYING_INFO:
-                basic_info_node= get_state_data(state, "basic_info")
-                field_changes= basic_info_node.get("field_changes") or []
-                recent_changes = build_field_changes_prompt(field_changes)
-
-                all_rules.extend(get_verification_rules())
-
-
+        extend_prompt_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
+        extend_prompt_section(all_rules, "Office info rules", build_assistant_intent_rules())
         extend_prompt_section(all_rules, "Out of scope rules", OUT_OF_SCOPE_RULES)
         extend_prompt_section(all_rules, "Capability explanation rules", CAPABILITY_EXPLANATION_RULES)
-        extend_prompt_section(all_rules, "JSON rules", JSON_RULES)
+
+    assistant_phase = state.get("assistant_phase")
+    if not assistant_phase:
+        raise ValueError("No assistant phase in state")
+
+    output_schema = OPERATOR_OUTPUT_SCHEMA.get(assistant_phase, {})
+    if not output_schema:
+        raise ValueError(f"Undefined output schema for current phase: {assistant_phase}")
+
+    output_schema_text = json.dumps(output_schema, ensure_ascii=True, indent=2)
+
+    match assistant_phase:
+        case AssistantPhase.COLLECTING_USER_INTENT:
+            all_rules.extend(get_user_intent_rules())
+        case AssistantPhase.COLLECTING_INFO:
+            all_rules.extend(get_collecting_info_rules())
+        case AssistantPhase.VERIFYING_INFO:
+            basic_info_node= get_state_data(state, "basic_info")
+            field_changes= basic_info_node.get("field_changes") or []
+            recent_changes = build_field_changes_prompt(field_changes)
+
+            all_rules.extend(get_verification_rules())
+
+    extend_prompt_section(all_rules, "JSON rules", JSON_RULES)
 
 
 
 
 
-        system = f"""
+    system = f"""
 You are a clinic call assistant.
 
 Rules:
@@ -163,7 +164,8 @@ Then {JSON_SENTINEL}
 Then JSON.
 """.strip()
 
-        human = f"""
+
+    human = f"""
 Active Conversation:
 {_format_messages(recent_messages)}
 
@@ -172,7 +174,7 @@ Updated information:
 
 
 Caller Now:
-{user_text or "none"}
+{user_text or "none" if not internal_call else "none"}
 
 {appointment_info}
 
