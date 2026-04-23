@@ -56,3 +56,27 @@ def format_offered_time_for_voice(iso_str: str|None, tz: str = DEFAULT_TZ) -> st
         time_part = f"{hour_12}:{minute:02d} {am_pm}"
 
     return f"{weekday}, {month} {day} at {time_part}"
+
+
+from typing import List
+
+def format_notes_for_prompt(notes: List[str] | None) -> str:
+    if not notes:
+        return ""
+
+    cleaned_notes = [
+        n.strip().rstrip(".")
+        for n in notes
+        if n and n.strip()
+    ]
+
+    if not cleaned_notes:
+        return ""
+
+    # Single note → simpler phrasing
+    if len(cleaned_notes) == 1:
+        return f"{cleaned_notes[0]} is noted."
+
+    # Multiple notes → slightly more natural flow
+    formatted = " ".join(f"{note} is noted." for note in cleaned_notes)
+    return formatted

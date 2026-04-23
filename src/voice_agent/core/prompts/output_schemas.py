@@ -4,27 +4,34 @@ from typing import TypedDict
 from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.types import AssistantPhase, NextAction, AssistantIntent
 
-OPERATOR_OUTPUT_SCHEMA={
-    AssistantPhase.COLLECTING_USER_INTENT:{
-            "assistant_intent": AssistantIntent.CONTINUE,
-            "user_intent": NOT_SPECIFIED,
-        },
-    AssistantPhase.COLLECTING_INFO:{
+OPERATOR_OUTPUT_SCHEMA = {
+    AssistantPhase.COLLECTING_USER_INTENT: {
         "assistant_intent": AssistantIntent.CONTINUE,
-        "next_action" : NextAction.ASK_USER
+        "user_intent": NOT_SPECIFIED,
     },
-    AssistantPhase.VERIFYING_INFO:{
+    AssistantPhase.COLLECTING_INFO: {
         "assistant_intent": AssistantIntent.CONTINUE,
-        "next_action" : NextAction.ASK_USER,
+        "next_action": NextAction.ASK_USER
     },
-    AssistantPhase.CONFIRMING_SLOT:{
+    AssistantPhase.VERIFYING_INFO: {
         "assistant_intent": AssistantIntent.CONTINUE,
-        "next_action" : NextAction.ASK_USER,
-    }
+        "next_action": NextAction.ASK_USER,
+    },
+    AssistantPhase.CONFIRMING_SLOT: {
+        "assistant_intent": AssistantIntent.CONTINUE,
+        "next_action": NextAction.ASK_USER,
+    },
+    AssistantPhase.BOOKING_APPOINTMENT: {
+        "assistant_intent": AssistantIntent.CONTINUE,
+        "next_action": NextAction.BOOK_APPOINTMENT,
+    },
+    AssistantPhase.COLLECTING_NOTES: {
+        "assistant_intent": AssistantIntent.CONTINUE,
+        "notes": [],
+    },
 }
 
-
-INFO_EXTRACTOR_OUTPUT_SCHEMA={
+INFO_EXTRACTOR_OUTPUT_SCHEMA = {
     "name": NOT_SPECIFIED,
     "phone": NOT_SPECIFIED,
     "reason_for_visit": NOT_SPECIFIED,

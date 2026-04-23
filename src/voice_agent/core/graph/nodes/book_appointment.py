@@ -10,29 +10,12 @@ from voice_agent.core.services.appointments import (
     ScheduleAppointmentResult,
     schedule_held_appointment,
 )
-from voice_agent.core.types import CallState, AppointmentDraft, AppointmentStatus, DirectiveKind, \
-    DirectiveSourceNode, AssistantPhase, AppointmentField, AssistantDirective, NextAction
+from voice_agent.core.types import (CallState, AppointmentDraft, AppointmentStatus
+, AssistantPhase, AppointmentField,  NextAction)
 
 logger = logging.getLogger(__name__)
 
 
-def _build_book_appointment_directives(
-    draft: AppointmentDraft,
-) -> list[AssistantDirective]:
-    directives = [
-        {
-            "kind": DirectiveKind.INFORM_SCHEDULED,
-            "priority": 100,
-            "source": DirectiveSourceNode.BOOK_APPOINTMENT,
-        },
-        {
-            "field": AppointmentField.NOTES,
-            "kind": DirectiveKind.REQUEST_MISSING_INFO,
-            "priority": 90,
-            "source": DirectiveSourceNode.BOOK_APPOINTMENT,
-        }
-    ]
-    return directives
 
 async def node_book_appointment(
         state: CallState,
@@ -75,18 +58,16 @@ async def node_book_appointment(
     draft["last_offered_slot_start_at"] = persisted_scheduled_view.get("start_at")
     draft["offered_time_confirmed"] = True
 
-    directives = _build_book_appointment_directives(draft)
+
 
     local_state = {
         "appointment_draft": draft,
         "scheduled_appointment_view": persisted_scheduled_view,
         "held_appointment_view": {},
         "current_appointment_id": int(persisted_scheduled_view["id"]) if persisted_scheduled_view.get("id") else None,
-        "assistant_phase": AssistantPhase.POST_APPOINTMENT,
+        "assistant_phase": AssistantPhase.COLLECTING_NOTES,
         "next_action": NextAction.CALL_OPERATOR,
     }
-    set_node_data(local_state, "book_appointment", {"directives": directives})
-    set_node_data(local_state, "book_appointment", {"exclusive_directives": True})
 
     logger.warning("book_appointment: local_state=%s", local_state)
     return local_state

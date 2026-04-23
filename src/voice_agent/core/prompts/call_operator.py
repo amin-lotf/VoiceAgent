@@ -4,13 +4,15 @@ import json
 from langchain_core.messages import SystemMessage, HumanMessage
 from voice_agent.const import JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import get_state_data
+from voice_agent.core.prompts.booking_appointment_blocks import get_book_appointment_rules
+from voice_agent.core.prompts.collecting_notes_blocks import get_collecting_notes_rules
 from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, OUT_OF_SCOPE_RULES, \
     CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
 from voice_agent.core.prompts.confirm_slot_blocks  import get_slot_confirmation_rules
-from voice_agent.core.prompts.utils import extend_prompt_section, format_offered_time_for_voice
+from voice_agent.core.prompts.utils import extend_prompt_section, format_offered_time_for_voice, format_notes_for_prompt
 from voice_agent.core.prompts.verify_info_blocks import get_verification_rules
 from voice_agent.core.types import CallState, AppointmentStatus, AssistantPhase, FieldChange
 import logging
@@ -139,8 +141,16 @@ def build_operator_prompt(state, *, internal_call: bool = False):
             recent_changes = build_field_changes_prompt(field_changes)
         case AssistantPhase.CONFIRMING_SLOT:
             all_rules.extend(get_slot_confirmation_rules())
-
             recent_changes = format_offered_time_for_voice(appointment_draft.get('last_offered_slot_start_at'))
+        case AssistantPhase.BOOKING_APPOINTMENT:
+            all_rules.extend(get_book_appointment_rules())
+        case AssistantPhase.COLLECTING_NOTES:
+            all_rules.extend(get_collecting_notes_rules())
+            recent_changes = format_notes_for_prompt(appointment_draft.get('notes') or [])
+        case _:
+            raise ValueError(f"Undefined assistant phase: {assistant_phase}")
+
+
 
 
     extend_prompt_section(all_rules, "JSON rules", JSON_RULES)

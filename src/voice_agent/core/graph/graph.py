@@ -6,9 +6,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from voice_agent.core.graph.nodes.basic_info import node_basic_info
 from voice_agent.core.graph.nodes.basic_info_extractor import node_basic_info_extractor
+from voice_agent.core.graph.nodes.book_appointment import node_book_appointment
 from voice_agent.core.graph.nodes.call_operator import node_call_operator
 from voice_agent.core.graph.nodes.datetime_extractor import node_datetime_extractor
 from voice_agent.core.graph.nodes.hold_appointment import node_hold_appointment
+from voice_agent.core.graph.nodes.collecting_note import node_collecting_note
 from voice_agent.core.graph.nodes.schedule_patch_to_requested_time_iso import node_schedule_patch_to_requested_time_iso
 from voice_agent.core.graph.nodes.user_intent import node_user_intent
 from voice_agent.core.graph.node_timing import with_node_timing
@@ -38,10 +40,11 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     add_timed_node("user_intent", node_user_intent)
     add_timed_node('basic_info', partial(node_basic_info, sessionmaker=sessionmaker))
     add_timed_node("basic_info_extractor", node_basic_info_extractor)
-    add_timed_node('verify_info', node_verify_info)
     add_timed_node('datetime_extractor', node_datetime_extractor)
     add_timed_node('schedule_patch_to_requested_time_iso', node_schedule_patch_to_requested_time_iso)
     add_timed_node('hold_appointment', partial(node_hold_appointment, sessionmaker=sessionmaker))
+    add_timed_node('book_appointment', partial(node_book_appointment, sessionmaker=sessionmaker))
+    add_timed_node('collecting_note', partial(node_collecting_note, sessionmaker=sessionmaker))
     add_timed_node("handoff_fallback", node_handoff_fallback)
     add_timed_node("handle_hangup", node_handle_hangup)
     add_timed_node('on_call_ended', partial(node_on_call_ended, sessionmaker=sessionmaker))
@@ -76,10 +79,12 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                 match assistant_phase:
                     case AssistantPhase.COLLECTING_USER_INTENT:
                         return 'user_intent'
-                    case AssistantPhase.VERIFYING_INFO:
-                        return 'verify_info'
                     case AssistantPhase.CONFIRMING_SLOT:
                         return 'datetime_extractor'
+                    case AssistantPhase.BOOKING_APPOINTMENT:
+                        return 'book_appointment'
+                    case AssistantPhase.COLLECTING_NOTES:
+                        return 'collecting_note'
                     case _:
                         return 'basic_info'
 
@@ -88,34 +93,12 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'handle_hangup': 'handle_hangup',
         'handoff_fallback': 'handoff_fallback',
         'user_intent': 'user_intent',
-        'verify_info': 'verify_info',
         'basic_info': 'basic_info',
+        'collecting_note': 'collecting_note',
         'datetime_extractor': 'datetime_extractor',
+        'book_appointment': 'book_appointment',
     }
                                 )
-    def _after_verify_info(state: CallState):
-        next_action = state.get("next_action")
-        match  next_action:
-            case NextAction.CALL_OPERATOR:
-                return 'call_operator'
-            case NextAction.EXTRACT_INFO:
-                return 'basic_info'
-            case NextAction.EXTRACT_DATETIME:
-                return 'datetime_extractor'
-            case _:
-                return 'finalize_response'
-
-    graph.add_conditional_edges(
-        'verify_info',
-        _after_verify_info,
-        {
-            'finalize_response': 'finalize_response',
-            'call_operator': 'call_operator',
-            'basic_info': 'basic_info',
-            'datetime_extractor': 'datetime_extractor',
-        }
-    )
-
     def _after_datetime_extractor(state: CallState):
         next_action = state.get("next_action")
         match  next_action:
@@ -123,6 +106,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                 return 'call_operator'
             case NextAction.HOLD_APPOINTMENT:
                 return 'schedule_patch_to_requested_time_iso'
+            case NextAction.BOOK_APPOINTMENT:
+                return 'book_appointment'
             case _:
                 return 'finalize_response'
 
@@ -130,6 +115,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'finalize_response': 'finalize_response',
         'call_operator': 'call_operator',
         'schedule_patch_to_requested_time_iso': 'schedule_patch_to_requested_time_iso',
+        'book_appointment': 'book_appointment',
     })
 
     def _after_schedule_patch_to_requested_time_iso(state: CallState):
@@ -146,6 +132,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     })
 
     graph.add_edge('hold_appointment', 'call_operator')
+    graph.add_edge('book_appointment', 'call_operator')
+    graph.add_edge('collecting_note', 'finalize_response')
 
 
     def _after_user_intent(state: CallState):
@@ -169,6 +157,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                 return 'call_operator'
             case NextAction.EXTRACT_INFO:
                 return 'basic_info_extractor'
+            case NextAction.EXTRACT_DATETIME:
+                return 'datetime_extractor'
             case _:
                 return 'finalize_response'
 
@@ -176,6 +166,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'finalize_response': 'finalize_response',
         'call_operator': 'call_operator',
         'basic_info_extractor': 'basic_info_extractor',
+        'datetime_extractor': 'datetime_extractor',
     })
 
     graph.add_edge('basic_info_extractor', 'basic_info')
