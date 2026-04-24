@@ -59,6 +59,7 @@ COLLECTING_INFO_ANTI_REPEAT_RULES = [
 COLLECTING_INFO_TRANSITION_RULES = [
     'When all required information appears to be present in the active conversation context, do not ask another question',
     'Only Give a short natural transition reply such as "One moment please." or "Okay, one moment please."',
+    'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
     'In that case, set next_action to "extract_info".',
 ]
 

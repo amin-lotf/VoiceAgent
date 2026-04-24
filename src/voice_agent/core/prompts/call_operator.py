@@ -7,7 +7,7 @@ from voice_agent.core.graph.nodes.utils import get_state_data
 from voice_agent.core.prompts.booking_appointment_blocks import get_book_appointment_rules
 from voice_agent.core.prompts.collecting_notes_blocks import get_collecting_notes_rules
 from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, OUT_OF_SCOPE_RULES, \
-    CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules
+    CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules, INTERRUPTION_HANDLING_RULES
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
@@ -18,6 +18,7 @@ from voice_agent.core.types import CallState, AppointmentStatus, AssistantPhase,
 import logging
 from typing import Optional
 from voice_agent.core.types import AppointmentDraft
+from voice_agent.core.utils import estimate_speech_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +54,24 @@ def format_appointment_info(draft: Optional[AppointmentDraft]) -> str:
     phone = draft.get("phone") or "not provided"
     reason = draft.get("reason_for_visit") or "not provided"
 
-    # Prefer natural user text over ISO
-    requested_time = draft.get("requested_time_text")
-    if not requested_time:
-        requested_time = draft.get("requested_time_iso")
-
+    requested_time = draft.get("requested_time_text") or draft.get("requested_time_iso")
     requested_time = requested_time or "not provided"
+
+    status = draft.get("status")
+    offered_slot = draft.get("last_offered_slot_start_at")
+
+    appointment_time_line = ""
+    if offered_slot:
+        formatted_offered_time = format_offered_time_for_voice(offered_slot)
+
+        if status == AppointmentStatus.HELD:
+            appointment_time_line = (
+                f"\n- Held appointment for: {formatted_offered_time}"
+            )
+        elif status == AppointmentStatus.SCHEDULED:
+            appointment_time_line = (
+                f"\n- Appointment is scheduled for: {formatted_offered_time}"
+            )
 
     return (
         "Current appointment information:\n"
@@ -66,6 +79,7 @@ def format_appointment_info(draft: Optional[AppointmentDraft]) -> str:
         f"- Phone: {phone}\n"
         f"- Reason for visit: {reason}\n"
         f"- Requested time: {requested_time}"
+        f"{appointment_time_line}"
     )
 
 
@@ -99,16 +113,21 @@ def _get_recent_messages(state: CallState) -> list[dict]:
 
 
 
-def build_operator_prompt(state, *, internal_call: bool = False):
+def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_call: bool = False):
 
     user_text = (state.get("user_text") or "").strip()
     recent_messages = _get_recent_messages(state)
     appointment_draft:AppointmentDraft = state.get("appointment_draft") or {}
     appointment_info = format_appointment_info(appointment_draft)
     recent_changes = ""
+    last_assistant_text=state.get('prev_assistant_text', 'none')
+    required_seconds = estimate_speech_seconds(last_assistant_text)
+    needs_repeat= not internal_call and heard_seconds and heard_seconds < required_seconds
     all_rules = []
     extend_prompt_section(all_rules, "Global operator", GLOBAL_OPERATOR_RULES)
-
+    if needs_repeat:
+        extend_prompt_section(all_rules, "Interrupted Message", INTERRUPTION_HANDLING_RULES)
+        recent_changes+= f"Interrupted by user: previous assistant message : {state.get('prev_assistant_text','none')}\n"
 
 
     if internal_call:
@@ -138,15 +157,15 @@ def build_operator_prompt(state, *, internal_call: bool = False):
             all_rules.extend(get_verification_rules())
             basic_info_node= get_state_data(state, "basic_info")
             field_changes= basic_info_node.get("field_changes") or []
-            recent_changes = build_field_changes_prompt(field_changes)
+            recent_changes += build_field_changes_prompt(field_changes)+'\n'
         case AssistantPhase.CONFIRMING_SLOT:
             all_rules.extend(get_slot_confirmation_rules())
-            recent_changes = format_offered_time_for_voice(appointment_draft.get('last_offered_slot_start_at'))
+            recent_changes += format_offered_time_for_voice(appointment_draft.get('last_offered_slot_start_at'))+'\n'
         case AssistantPhase.BOOKING_APPOINTMENT:
             all_rules.extend(get_book_appointment_rules())
         case AssistantPhase.COLLECTING_NOTES:
             all_rules.extend(get_collecting_notes_rules())
-            recent_changes = format_notes_for_prompt(appointment_draft.get('notes') or [])
+            recent_changes += format_notes_for_prompt(appointment_draft.get('notes') or [])+'\n'
         case _:
             raise ValueError(f"Undefined assistant phase: {assistant_phase}")
 
@@ -187,6 +206,8 @@ Active Conversation:
 
 Updated information:
 {recent_changes or "none"}
+
+
 
 
 Caller Now:

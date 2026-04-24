@@ -67,6 +67,7 @@ async def node_book_appointment(
         "current_appointment_id": int(persisted_scheduled_view["id"]) if persisted_scheduled_view.get("id") else None,
         "assistant_phase": AssistantPhase.COLLECTING_NOTES,
         "next_action": NextAction.CALL_OPERATOR,
+        "internal_call": True
     }
 
     logger.warning("book_appointment: local_state=%s", local_state)

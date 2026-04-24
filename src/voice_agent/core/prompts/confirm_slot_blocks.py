@@ -1,6 +1,5 @@
 from voice_agent.core.prompts.utils import extend_prompt_section
 
-
 SLOT_CONFIRMATION_PHASE_RULES = [
     "This phase is only for confirming the offered appointment slot or handling a caller-requested change.",
     "The offered slot is provided in injected context.",
@@ -36,10 +35,14 @@ SLOT_CONFIRMATION_TIME_RULES = [
 ]
 
 SLOT_CONFIRMATION_DECISION_RULES = [
-    'If the caller clearly accepts the offered slot, give a short transition reply such as "Okay, one moment please." and set next_action to "book_appointment". Do not ask another question.',
+    'If you clearly offered the slot in the active conversation and the caller clearly accepts the offered slot, give a short transition reply such as "Okay, one moment please." and set next_action to "book_appointment". Do not ask another question.',
     'If the caller rejects the offered slot and clearly provides a new requested date or time in the same response, give a short transition reply such as "Okay, one moment please." and set next_action to "extract_datetime". Do not ask another question.',
+    'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
+    'In that case, set next_action to "extract_datetime".',
     'If the caller rejects the offered slot but does not clearly provide a new requested date or time, ask one short follow-up question about what day or time works better and set next_action to "ask_user".',
     'If the caller asks to change appointment information and clearly provides a new supported value in the same response, give a short transition reply such as "Okay, one moment please." and set next_action to "extract_info". Do not ask another question.',
+    'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
+    'In that case, set next_action to "extract_info".',
     'If the caller asks to change appointment information but does not clearly provide the new value, ask one short follow-up question and set next_action to "ask_user".',
 ]
 

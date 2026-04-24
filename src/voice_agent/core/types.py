@@ -7,10 +7,9 @@ from typing import TypedDict, NotRequired, Required
 from uuid import UUID
 
 
-
 def merge_node_data(
-    left: dict[str, dict[str, Any]] | None,
-    right: dict[str, dict[str, Any]] | None,
+        left: dict[str, dict[str, Any]] | None,
+        right: dict[str, dict[str, Any]] | None,
 ) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = deepcopy(left or {})
     for node_name, payload in (right or {}).items():
@@ -20,6 +19,7 @@ def merge_node_data(
             out.setdefault(node_name, {})
             out[node_name].update(payload or {})
     return out
+
 
 class OperationStatus(StrEnum):
     SUCCESS = "success"
@@ -43,9 +43,11 @@ class CallPhase(StrEnum):
     INTENT_ROUTING = "intent_routing"
     DONE = "done"
 
+
 class UserIntent(StrEnum):
     BOOK_APPOINTMENT = "book_appointment"
     UNDECIDED = "undecided"
+
 
 class ConfirmationIntent(StrEnum):
     ACCEPT = "accept"
@@ -53,13 +55,16 @@ class ConfirmationIntent(StrEnum):
     UNCLEAR = "unclear"
     NOT_SPECIFIED = 'not_specified'
 
+
 class AssistantIntent(StrEnum):
     HUMAN_HANDOFF = "human_handoff"
     HANGUP = "hangup"
     CONTINUE = "continue"
 
+
 class NextAction(StrEnum):
-    ASK_USER= 'ask_user'
+    ASK_USER = 'ask_user'
+    PROCESS_INTENT = 'process_intent'
     EXTRACT_INFO = 'extract_info'
     CHECK_INFO = 'check_info'
     MARK_VERIFIED = 'mark_verified'
@@ -72,6 +77,15 @@ class NextAction(StrEnum):
     OTHER = 'other'
 
 
+INTERNAL_ACTIONS = {
+    NextAction.PROCESS_INTENT,
+    NextAction.EXTRACT_INFO,
+    NextAction.EXTRACT_DATETIME,
+    NextAction.BOOK_APPOINTMENT,
+    NextAction.CHECK_INFO,
+}
+
+
 class AssistantPhase(StrEnum):
     COLLECTING_USER_INTENT = "collecting_user_intent"
     COLLECTING_INFO = "collecting_info"
@@ -82,15 +96,14 @@ class AssistantPhase(StrEnum):
     DONE = "done"
 
 
-
-
 class PatientType(StrEnum):
     NEW = "new"
     EXISTING = "existing"
 
+
 class AppointmentStatus(StrEnum):
     PENDING = "PENDING"
-    HELD = "HELD"         # optional: temporary hold before confirmation
+    HELD = "HELD"  # optional: temporary hold before confirmation
     SCHEDULED = "SCHEDULED"
     CANCELLED = "CANCELLED"
 
@@ -101,8 +114,6 @@ class TimeSlot:
     end_at: datetime
 
 
-
-
 class AppointmentField(StrEnum):
     NAME = "name"
     PHONE = "phone"
@@ -110,8 +121,10 @@ class AppointmentField(StrEnum):
     NOTES = "notes"
     REQUESTED_TIME_TEXT = "requested_time_text"
 
+
 class ConfirmationTopic(StrEnum):
     HOLD_CONFIRMATION = "hold_confirmation"
+
 
 class RequiredAppointmentField(StrEnum):
     NAME = "name"
@@ -128,9 +141,7 @@ class FieldChange(TypedDict, total=False):
     source_node: str
 
 
-
-
-class AppointmentDraft(TypedDict,total=False):
+class AppointmentDraft(TypedDict, total=False):
     name: str | None
     phone: str | None
     reason_for_visit: str | None
@@ -141,12 +152,13 @@ class AppointmentDraft(TypedDict,total=False):
     offered_time_confirmed: bool | None
     status: AppointmentStatus
 
+
 class SchedulePatch(TypedDict):
     date_mode: str
     date_key: str
     time_pref: str
     exact_time_text: str
-    relative_to_offered:str
+    relative_to_offered: str
 
 
 class AppointmentPatch(TypedDict, total=False):
@@ -170,8 +182,6 @@ class AppointmentCreate(TypedDict):
     patient_type: PatientType  # CRM-derived
 
 
-
-
 class AppointmentView(TypedDict):
     id: int
     name: str
@@ -190,8 +200,6 @@ class AppointmentView(TypedDict):
 class EngineChunk:
     kind: ChunkKind
     data: Any
-
-
 
 
 class CallState(TypedDict, total=False):
@@ -226,10 +234,8 @@ class CallState(TypedDict, total=False):
     next_action: NotRequired[NextAction]
 
 
-
 @dataclass(frozen=True, slots=True)
 class RunResult:
     """Return type for non-streaming runs."""
     assistant_text: str
     state: CallState
-

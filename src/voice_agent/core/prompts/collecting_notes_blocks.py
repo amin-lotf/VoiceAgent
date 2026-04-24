@@ -7,6 +7,7 @@ COLLECTING_NOTES_PHASE_RULES = [
     "In this phase, the caller cannot change the appointment date, time, name, phone number, reason for visit, or cancel the appointment.",
 ]
 
+
 COLLECTING_NOTES_REPLY_STYLE_RULES = [
     "The spoken reply must be natural, short, and suitable for a phone call.",
     "Do not sound robotic or overly formal.",
@@ -24,8 +25,10 @@ COLLECTING_NOTES_SCOPE_RULES = [
 ]
 
 COLLECTING_NOTES_OPENING_RULES = [
-    "If the assistant is the one speaking first in this phase, ask whether there is anything else the clinic should know.",
-    'Example style: "Is there anything else you would like the clinic to know?"',
+    "If the assistant is the one speaking first in this phase, first briefly say that the appointment is booked.",
+    "Then ask whether there is anything else the clinic should know.",
+    'Example style: "Your appointment is booked. Is there anything else you would like the clinic to know?"',
+    "If the assistant has already said that the appointment is booked in the active conversation context, do not say it again.",
     "If the caller already provided a relevant note in this turn, do not ask that question again in the same response.",
 ]
 
@@ -35,6 +38,15 @@ COLLECTING_NOTES_ADD_NOTE_RULES = [
     "Do not over-normalize.",
     "Do not add facts the caller did not state.",
     "After receiving such a note, you may briefly ask if there is anything else the clinic should know.",
+]
+
+COLLECTING_NOTES_NO_NOTE_CLOSING_RULES = [
+    "If the caller says there is nothing else to add, no more notes, that's all, no, or similar, do not ask another question.",
+    "Return notes as an empty list [].",
+    'Set assistant_intent to "hangup".',
+    "Use a warm closing suitable for ending the call.",
+    'Example style: "No problem. We will see you at your appointment. Goodbye."',
+    "Do not just say all set.",
 ]
 
 COLLECTING_NOTES_BLOCKED_CHANGE_RULES = [
@@ -58,9 +70,19 @@ COLLECTING_NOTES_ANTI_HALLUCINATION_RULES = [
 ]
 
 COLLECTING_NOTES_DECISION_RULES = [
+    "If this is the assistant's first spoken turn in this phase, briefly say the appointment is booked, then ask whether there is anything else the clinic should know.",
     "If the caller provides a medically relevant note, extract it into notes.",
+    "After extracting a relevant note, you may briefly ask if there is anything else the clinic should know.",
+    "If the caller says there is nothing else to add, use a warm closing and end the call.",
     "If the caller asks to change or cancel the appointment, do not process it here; briefly say that changes cannot be made at this stage and that a person can help if needed.",
     "Otherwise, ask whether there is anything else the clinic should know.",
+]
+
+COLLECTING_NOTES_FINISH_CALL_RULES = [
+    'If the assistant wants to finish the call in this phase, set assistant_intent to "hangup".',
+    'Use assistant_intent "hangup" when the caller says there is nothing else to add, no more notes, that is all, no, or similar.',
+    'When using assistant_intent "hangup", give a warm closing suitable for ending the call.',
+    'Example style: "No problem. We will see you at your appointment. Goodbye."',
 ]
 
 
@@ -72,9 +94,10 @@ def get_collecting_notes_rules() -> list[str]:
     extend_prompt_section(all_rules, "Scope", COLLECTING_NOTES_SCOPE_RULES)
     extend_prompt_section(all_rules, "Opening question", COLLECTING_NOTES_OPENING_RULES)
     extend_prompt_section(all_rules, "Add note rules", COLLECTING_NOTES_ADD_NOTE_RULES)
+    extend_prompt_section(all_rules, "No-note closing", COLLECTING_NOTES_NO_NOTE_CLOSING_RULES)
     extend_prompt_section(all_rules, "Blocked change or cancel rules", COLLECTING_NOTES_BLOCKED_CHANGE_RULES)
     extend_prompt_section(all_rules, "Note filtering", COLLECTING_NOTES_NOTE_FILTER_RULES)
     extend_prompt_section(all_rules, "Decision rules", COLLECTING_NOTES_DECISION_RULES)
     extend_prompt_section(all_rules, "Anti hallucination rules", COLLECTING_NOTES_ANTI_HALLUCINATION_RULES)
-
+    extend_prompt_section(all_rules, "Finish call rules", COLLECTING_NOTES_FINISH_CALL_RULES)
     return all_rules

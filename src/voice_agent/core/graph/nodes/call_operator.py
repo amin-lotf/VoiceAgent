@@ -9,20 +9,30 @@ from typing import Any
 from langgraph.config import get_stream_writer
 
 from voice_agent.const import JSON_SENTINEL, NOT_SPECIFIED
-from voice_agent.core.graph.nodes.utils import set_node_data
+from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data
 from voice_agent.core.graph.utils import run_non_interruptible, commit_assistant_message
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.call_operator import build_operator_prompt
 from voice_agent.core.types import (
     AppointmentField,
     CallState,
-    AssistantIntent, ConfirmationIntent, UserIntent, NextAction,
+    AssistantIntent, ConfirmationIntent, UserIntent, NextAction, INTERNAL_ACTIONS,
 )
+from voice_agent.core.utils import estimate_speech_seconds
 
 logger = logging.getLogger(__name__)
 
 
 
+
+
+
+
+async def maybe_wait_for_transition_speech(next_action:NextAction, assistant_text: str) -> None:
+    if next_action not in INTERNAL_ACTIONS:
+        return
+
+    await asyncio.sleep(estimate_speech_seconds(assistant_text))
 
 
 
@@ -94,7 +104,20 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     internal_call = state.get("internal_call") or False
     if internal_call:
         local_state= commit_assistant_message(state)
-    prompt = build_operator_prompt(state, internal_call=internal_call)
+
+    operator_data = get_state_data(state, 'call_operator')
+    last_assistant_started_at = operator_data.get("last_assistant_started_at", None)
+    heard_seconds = None
+    if last_assistant_started_at:
+        heard_seconds = time.monotonic() - last_assistant_started_at
+    prompt = build_operator_prompt(state,heard_seconds=heard_seconds, internal_call=internal_call)
+    set_node_data(
+        local_state,
+        "call_operator",
+        {
+            "last_assistant_started_at": None,
+        }
+    )
     logger.warning(
         f"=====================\ncall_operator for internal_call={internal_call}: prompt=%s\n=====================",
         prompt,
@@ -132,7 +155,13 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
                                 if is_first_token:
                                     first_token_time = time.perf_counter()
                                     is_first_token = False
-
+                                    set_node_data(
+                                        local_state,
+                                        "call_operator",
+                                        {
+                                            "last_assistant_started_at": time.monotonic(),
+                                        }
+                                    )
                                 streamed_text_parts.append(speakable)
                                 writer(("assistant_token", speakable))
                             tail_buffer = tail_buffer[safe_prefix_len:]
@@ -156,7 +185,8 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         logger.warning("call_operator failed; using fallback", exc_info=True)
         return _fallback_state(state)
     end_time = time.perf_counter()
-    logger.warning("call_operator: LLM request to first token took %.2fs, total time %.2fs",
+    if first_token_time:
+        logger.warning("call_operator: LLM request to first token took %.2fs, total time %.2fs",
                    first_token_time - start_time, end_time - start_time)
 
     full_output = "".join(full_output_parts)
@@ -202,6 +232,8 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
             "total_seconds": None if end_time is None else end_time - start_time,
         },
     )
+    if assistant_text.strip():
+        await maybe_wait_for_transition_speech(next_action, assistant_text)
 
     logger.warning(
         f"call_operator: output={data}",

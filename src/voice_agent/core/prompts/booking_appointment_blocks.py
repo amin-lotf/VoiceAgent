@@ -1,6 +1,5 @@
 from voice_agent.core.prompts.utils import extend_prompt_section
 
-
 BOOK_APPOINTMENT_PHASE_RULES = [
     "This phase is for briefly holding the conversation while the appointment is being scheduled.",
     "Normally, give a short natural waiting message and do not ask a question.",
@@ -55,6 +54,8 @@ BOOK_APPOINTMENT_TIME_CHANGE_WITH_VALUE_RULES = [
     "Do not suggest alternatives.",
     'Give a short transition reply such as "Okay, one moment please."',
     'Set next_action to "extract_datetime".',
+    'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
+    'In that case, set next_action to "extract_datetime".',
 ]
 
 BOOK_APPOINTMENT_TIME_CHANGE_WITHOUT_VALUE_RULES = [
@@ -94,9 +95,11 @@ def get_book_appointment_rules() -> list[str]:
 
     extend_prompt_section(all_rules, "Default continue behavior", BOOK_APPOINTMENT_DEFAULT_CONTINUE_RULES)
     extend_prompt_section(all_rules, "Info change with value rules", BOOK_APPOINTMENT_INFO_CHANGE_WITH_VALUE_RULES)
-    extend_prompt_section(all_rules, "Info change without value rules", BOOK_APPOINTMENT_INFO_CHANGE_WITHOUT_VALUE_RULES)
+    extend_prompt_section(all_rules, "Info change without value rules",
+                          BOOK_APPOINTMENT_INFO_CHANGE_WITHOUT_VALUE_RULES)
     extend_prompt_section(all_rules, "Time change with value rules", BOOK_APPOINTMENT_TIME_CHANGE_WITH_VALUE_RULES)
-    extend_prompt_section(all_rules, "Time change without value rules", BOOK_APPOINTMENT_TIME_CHANGE_WITHOUT_VALUE_RULES)
+    extend_prompt_section(all_rules, "Time change without value rules",
+                          BOOK_APPOINTMENT_TIME_CHANGE_WITHOUT_VALUE_RULES)
 
     extend_prompt_section(all_rules, "Time handling", BOOK_APPOINTMENT_TIME_RULES)
     extend_prompt_section(all_rules, "Action guardrails", BOOK_APPOINTMENT_ACTION_GUARDRAILS)

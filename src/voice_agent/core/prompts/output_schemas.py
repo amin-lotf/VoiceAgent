@@ -8,6 +8,7 @@ OPERATOR_OUTPUT_SCHEMA = {
     AssistantPhase.COLLECTING_USER_INTENT: {
         "assistant_intent": AssistantIntent.CONTINUE,
         "user_intent": NOT_SPECIFIED,
+        "next_action": NextAction.ASK_USER
     },
     AssistantPhase.COLLECTING_INFO: {
         "assistant_intent": AssistantIntent.CONTINUE,
