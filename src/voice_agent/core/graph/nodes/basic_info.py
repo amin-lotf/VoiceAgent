@@ -224,7 +224,7 @@ async def node_basic_info(
         if next_action == NextAction.MARK_VERIFIED:
             local_state['assistant_phase'] = AssistantPhase.CONFIRMING_SLOT
             local_state['next_action'] = NextAction.EXTRACT_DATETIME
-        logger.warning(f'basic_info:next_action: {next_action}')
+        logger.warning(f'***********\nbasic_info:next_action: {next_action}\n***********')
         return local_state
     extractor_node_data = get_state_data(state, 'basic_info_extractor')
     node_status = extractor_node_data.get('node_status')

@@ -87,6 +87,9 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     - returns assistant_intent, end_call, appointment_patch, assistant_text
     - keeps raw/parsed LLM output in node_data
     """
+    logger.warning(
+        f"=====================\ncall_operator inputted state={state}\n=====================",
+    )
     local_state: dict[str, Any] = {}
     internal_call = state.get("internal_call") or False
     if internal_call:

@@ -14,7 +14,6 @@ from voice_agent.core.graph.nodes.collecting_note import node_collecting_note
 from voice_agent.core.graph.nodes.schedule_patch_to_requested_time_iso import node_schedule_patch_to_requested_time_iso
 from voice_agent.core.graph.nodes.user_intent import node_user_intent
 from voice_agent.core.graph.node_timing import with_node_timing
-from voice_agent.core.graph.nodes.verify_info import node_verify_info
 from voice_agent.core.types import CallEvent, CallState, AssistantIntent, NextAction, AssistantPhase
 from voice_agent.core.graph.nodes.greeting import node_on_call_started
 from voice_agent.core.graph.nodes.handoff import node_handoff_fallback

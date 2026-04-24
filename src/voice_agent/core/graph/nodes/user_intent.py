@@ -23,6 +23,7 @@ def _resolve_user_intent(
     return UserIntent.UNDECIDED
 
 async def node_user_intent(state: CallState) -> dict[str, Any]:
+    logger.warning("********************\nuser_intent: inputted state=%s\n******************", state)
     local_state = {}
     operator_data= get_state_data(state,'call_operator')
     operator_output = operator_data.get("operator_output",{})
@@ -38,5 +39,5 @@ async def node_user_intent(state: CallState) -> dict[str, Any]:
         local_state["internal_call"]= True
     else:
         local_state['next_action']= NextAction.ASK_USER
-    logger.warning("user_intent: local_state=%s", local_state)
+    logger.warning("********************\nuser_intent: local_state=%s\n******************", local_state)
     return local_state

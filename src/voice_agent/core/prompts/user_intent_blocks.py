@@ -1,4 +1,4 @@
-from voice_agent.core.graph.const import NOT_SPECIFIED
+from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.prompts.utils import extend_prompt_section
 from voice_agent.core.types import UserIntent
 
