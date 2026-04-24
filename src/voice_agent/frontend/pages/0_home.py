@@ -9,42 +9,13 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 from websocket import WebSocketApp
 
-def stream_for_rid(target_rid: int):
-    """
-    Generator yielding token chunks for a specific response_id.
-    Stops when content_complete=True for that response_id.
-    """
-    inbox: "queue.Queue[Dict[str, Any]]" = st.session_state["inbox"]
-
-    while True:
-        try:
-            obj = inbox.get(timeout=0.1)
-        except queue.Empty:
-            continue
-
-        # pass through connection / error events if you want (optional)
-        if obj.get("_type") == "error":
-            raise RuntimeError(obj.get("error", "ws error"))
-        if obj.get("_type") in ("open", "close"):
-            continue
-
-        # Ignore non-response frames (e.g. config)
-        if "response_id" not in obj:
-            continue
-
-        rid = int(obj["response_id"])
-        if rid != target_rid:
-            # IMPORTANT for barge-in: ignore chunks for other response_ids
-            continue
-
-        content = obj.get("content") or ""
-        complete = bool(obj.get("content_complete", False))
-
-        if content:
-            yield content
-
-        if complete:
-            break
+from voice_agent.frontend.stream_buffer import (
+    begin_response,
+    drain_inbox,
+    ensure_stream_state,
+    reset_stream_state,
+    stream_for_rid,
+)
 
 # -------------------------
 # Retell-like payload helpers
@@ -154,13 +125,13 @@ class WsClient:
 def ensure_state() -> None:
     st.session_state.setdefault("messages", [])          # chat log
     st.session_state.setdefault("transcript", [])        # Retell transcript (user-only ok for your server)
-    st.session_state.setdefault("streams", {})           # rid -> partial assistant text
     st.session_state.setdefault("response_id", 1)
     st.session_state.setdefault("client", None)
     st.session_state.setdefault("inbox", queue.Queue())
     st.session_state.setdefault("ws_status", "disconnected")
     st.session_state.setdefault("last_error", "")
     st.session_state.setdefault("stream_greeting_now", False)
+    ensure_stream_state(st.session_state)
 
 
 def send_user_message(text: str) -> None:
@@ -171,6 +142,7 @@ def send_user_message(text: str) -> None:
     # new response_id -> this is how you test barge-in
     rid = int(st.session_state["response_id"])
     st.session_state["response_id"] = rid + 1
+    begin_response(st.session_state, rid)
 
     # send request
     payload = make_response_required(rid, st.session_state["transcript"])
@@ -178,10 +150,11 @@ def send_user_message(text: str) -> None:
 
     # STREAM assistant for this rid
     with st.chat_message("assistant"):
-        final_text = st.write_stream(stream_for_rid(rid))
+        final_text = st.write_stream(stream_for_rid(st.session_state, rid))
 
     # persist assistant message
-    st.session_state["messages"].append({"role": "assistant", "content": final_text, "rid": rid})
+    if final_text:
+        st.session_state["messages"].append({"role": "assistant", "content": final_text, "rid": rid})
 
 
 
@@ -190,6 +163,7 @@ def send_user_message(text: str) -> None:
 # -------------------------
 st.set_page_config(page_title="Retell WS Tester", layout="centered")
 ensure_state()
+drain_inbox(st.session_state)
 
 st.title("Retell WS Tester (Streaming + Barge-in)")
 
@@ -213,6 +187,8 @@ with st.sidebar:
     with c1:
         if st.button("Connect", use_container_width=True, disabled=st.session_state["client"] is not None):
             st.session_state["inbox"] = queue.Queue()
+            reset_stream_state(st.session_state)
+            st.session_state["last_error"] = ""
             client = WsClient(url=ws_url, inbox=st.session_state["inbox"])
             client.connect()
             st.session_state["client"] = client
@@ -226,6 +202,7 @@ with st.sidebar:
             st.session_state["client"].close()
             st.session_state["client"] = None
             st.session_state["ws_status"] = "disconnected"
+            reset_stream_state(st.session_state)
 
     st.write(f"Status: **{st.session_state['ws_status']}**")
     if st.session_state.get("last_error"):
@@ -235,18 +212,19 @@ with st.sidebar:
     if st.button("Clear chat", use_container_width=True):
         st.session_state["messages"] = []
         st.session_state["transcript"] = []
-        st.session_state["streams"] = {}
         st.session_state["response_id"] = 1
-        st.session_state["current_assistant_text"] = ""
-        st.session_state["current_assistant_rid"] = None
+        st.session_state["last_error"] = ""
+        reset_stream_state(st.session_state)
 
 # Stream greeting in MAIN area (not sidebar)
 if st.session_state.get("stream_greeting_now"):
     st.session_state["stream_greeting_now"] = False
+    begin_response(st.session_state, 0)
 
     with st.chat_message("assistant"):
-        greeting = st.write_stream(stream_for_rid(0))
-    st.session_state["messages"].append({"role": "assistant", "content": greeting, "rid": 0})
+        greeting = st.write_stream(stream_for_rid(st.session_state, 0))
+    if greeting:
+        st.session_state["messages"].append({"role": "assistant", "content": greeting, "rid": 0})
 
     st.rerun()
 
@@ -266,4 +244,3 @@ prompt = st.chat_input("Type a message — send again while it streams to barge-
 if prompt and not disabled:
     send_user_message(prompt)
     st.rerun()
-
