@@ -121,9 +121,6 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     - returns assistant_intent, end_call, appointment_patch, assistant_text
     - keeps raw/parsed LLM output in node_data
     """
-    logger.warning(
-        f"=====================\ncall_operator inputted state={state}\n=====================",
-    )
     local_state: dict[str, Any] = {}
     internal_call = state.get("internal_call") or False
     if internal_call:
@@ -263,8 +260,6 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         "call_operator",
         {
             "llm_failed": False,
-            "raw_output": full_output,
-            "operator_output": data,
             "ttft_seconds": None if first_token_time is None else first_token_time - start_time,
             "total_seconds": None if end_time is None else end_time - start_time,
         },
@@ -272,7 +267,5 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     if assistant_text.strip():
         await maybe_wait_for_transition_speech(next_action, assistant_text)
 
-    logger.warning(
-        f"call_operator: local_state={local_state}",
-    )
+
     return local_state

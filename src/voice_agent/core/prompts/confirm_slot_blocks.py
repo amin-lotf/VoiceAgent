@@ -51,7 +51,7 @@ SLOT_CONFIRMATION_TIME_RULES = [
 SLOT_CONFIRMATION_DECISION_RULES = [
     'If you clearly offered the slot in the active conversation and the caller clearly accepts the offered slot, give a short transition reply such as "Okay, one moment please." and set next_action to "book_appointment". Do not ask another question.',
     'If the caller rejects the offered slot and clearly provides a new requested date or time in the same response, give a short transition reply such as "Okay, one moment please." and set next_action to "extract_datetime". Do not ask another question.',
-    'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
+    'If the caller gives a short acknowledgement such as "sure" after a transition reply, continue the same internal action only if Caller Now contains that acknowledgement. Do not apply this rule when Caller Now is "none".',
     'In that case, set next_action to "extract_datetime".',
      "If the caller's final requested   date or time is already shown  in the appointment information and is not being changed, do not output set next_action to 'extract_datetime'.",
     'If the caller rejects the offered slot but does not clearly provide a new requested date or time, ask one short follow-up question about what day or time works better and set next_action to "ask_user".',
@@ -59,6 +59,13 @@ SLOT_CONFIRMATION_DECISION_RULES = [
     'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
     'In that case, set next_action to "extract_info".',
     'If the caller asks to change appointment information but does not clearly provide the new value, ask one short follow-up question and set next_action to "ask_user".',
+]
+SLOT_CONFIRMATION_INTERNAL_CALL_RULES = [
+    'If Caller Now is "none", this is an internal continuation, not a caller acceptance.',
+    'Do not treat Caller Now "none" as yes, sure, okay, or any other confirmation.',
+    'If there is a held appointment that has not been clearly accepted by the caller, offer the held appointment and ask whether it works.',
+    'When asking the caller to confirm the held appointment, set next_action to "ask_user".',
+    'Use "book_appointment" only when the caller explicitly accepts the currently offered held appointment in the active conversation.',
 ]
 
 SLOT_CONFIRMATION_ACTION_GUARDRAILS = [
@@ -94,5 +101,5 @@ def get_slot_confirmation_rules() -> list[str]:
     extend_prompt_section(all_rules, "Action guardrails", SLOT_CONFIRMATION_ACTION_GUARDRAILS)
     extend_prompt_section(all_rules, "Anti hallucination rules", SLOT_CONFIRMATION_ANTI_HALLUCINATION_RULES)
     extend_prompt_section(all_rules,"Requested time text",SLOT_CONFIRMATION_REQUESTED_TIME_TEXT_RULES,)
-
+    extend_prompt_section(all_rules,"Internal call rules",SLOT_CONFIRMATION_INTERNAL_CALL_RULES,)
     return all_rules

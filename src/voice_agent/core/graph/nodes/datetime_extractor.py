@@ -90,7 +90,10 @@ async def node_datetime_extractor(
     local_state = {}
     if next_action!=NextAction.EXTRACT_DATETIME:
         if next_action==NextAction.BOOK_APPOINTMENT:
-            local_state = {'assistant_phase': AssistantPhase.BOOKING_APPOINTMENT}
+            local_state = {
+                'assistant_phase': AssistantPhase.BOOKING_APPOINTMENT,
+                'messages': []
+            }
         logger.warning(f'datetime_extractor: next_action: {next_action}, local_state: {local_state}')
         return local_state
 
