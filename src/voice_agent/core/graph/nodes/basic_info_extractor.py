@@ -8,7 +8,7 @@ from typing import Any
 from langchain_core.messages import AIMessage
 
 from voice_agent.const import NOT_SPECIFIED
-from voice_agent.core.graph.nodes.utils import set_node_data
+from voice_agent.core.graph.nodes.utils import set_node_data, normalize_value
 from voice_agent.core.llm.openai_llm import LLM_Non_stream
 from voice_agent.core.prompts.basic_info_extractor import build_basic_info_extractor_prompt
 from voice_agent.core.types import (
@@ -56,21 +56,7 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     raise ValueError("No valid JSON object found in info extractor response")
 
 
-def _normalize_patch_value(value: Any) -> str:
-    if value is None:
-        return NOT_SPECIFIED
 
-    if not isinstance(value, str):
-        value = str(value)
-
-    value = value.strip()
-    if not value:
-        return NOT_SPECIFIED
-
-    if value.lower() in {"none", "null", "not specified", "not_specified"}:
-        return NOT_SPECIFIED
-
-    return value
 
 
 def _normalize_notes(value: Any) -> list[str]:
@@ -101,10 +87,10 @@ def _normalize_notes(value: Any) -> list[str]:
 
 def _normalize_info_patch(raw: dict[str, Any]) -> AppointmentPatch:
     return {
-        "name": _normalize_patch_value(raw.get("name")),
-        "phone": _normalize_patch_value(raw.get("phone")),
-        "reason_for_visit": _normalize_patch_value(raw.get("reason_for_visit")),
-        "requested_time_text": _normalize_patch_value(raw.get("requested_time_text")),
+        "name": normalize_value(raw.get("name")),
+        "phone": normalize_value(raw.get("phone")),
+        "reason_for_visit": normalize_value(raw.get("reason_for_visit")),
+        "requested_time_text": normalize_value(raw.get("requested_time_text")),
         "notes": _normalize_notes(raw.get("notes")),
     }
 

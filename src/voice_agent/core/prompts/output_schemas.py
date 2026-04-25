@@ -21,6 +21,7 @@ OPERATOR_OUTPUT_SCHEMA = {
     AssistantPhase.CONFIRMING_SLOT: {
         "assistant_intent": AssistantIntent.CONTINUE,
         "next_action": NextAction.ASK_USER,
+        "requested_time_text": NOT_SPECIFIED,
     },
     AssistantPhase.BOOKING_APPOINTMENT: {
         "assistant_intent": AssistantIntent.CONTINUE,

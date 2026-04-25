@@ -44,6 +44,17 @@ def normalize_value(value: Any) -> str:
 
     return value
 
+def is_not_specified(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and value.strip().lower() in {
+        "",
+        "not_specified",
+        str(NOT_SPECIFIED).lower(),
+    }:
+        return True
+    return False
+
 
 
 def stream_text_response( text: str) -> dict:

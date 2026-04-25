@@ -9,20 +9,44 @@ from typing import Any
 from langgraph.config import get_stream_writer
 
 from voice_agent.const import JSON_SENTINEL, NOT_SPECIFIED
-from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data
+from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data, normalize_value, is_not_specified
 from voice_agent.core.graph.utils import run_non_interruptible, commit_assistant_message
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.call_operator import build_operator_prompt
 from voice_agent.core.types import (
     AppointmentField,
     CallState,
-    AssistantIntent, ConfirmationIntent, UserIntent, NextAction, INTERNAL_ACTIONS,
+    AssistantIntent, ConfirmationIntent, UserIntent, NextAction, INTERNAL_ACTIONS, AppointmentDraft, AssistantPhase,
 )
 from voice_agent.core.utils import estimate_speech_seconds
 
 logger = logging.getLogger(__name__)
 
 
+def _apply_requested_time_patch(
+        *,
+        appointment_draft: AppointmentDraft,
+        requested_time_text: str,
+) -> AppointmentDraft:
+    updated: AppointmentDraft = dict(appointment_draft or {})
+    if not is_not_specified(requested_time_text):
+        updated["requested_time_text"] = requested_time_text
+
+    return updated
+
+def _resolve_user_intent(
+        previous_intent: UserIntent,
+        extracted_intent_raw: str | None,
+) -> UserIntent:
+    if extracted_intent_raw and extracted_intent_raw != NOT_SPECIFIED:
+        try:
+            return UserIntent(extracted_intent_raw)
+        except Exception:
+            logger.warning("Invalid extracted_intent=%s", extracted_intent_raw)
+            return UserIntent.UNDECIDED
+    if previous_intent and previous_intent != NOT_SPECIFIED:
+        return previous_intent
+    return UserIntent.UNDECIDED
 
 
 
@@ -213,13 +237,26 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     except Exception:
         logger.warning("call_operator: invalid next_action=%s", next_action_raw)
         next_action = NextAction.REPORT_ERROR
+    assistant_phase = state.get("assistant_phase")
+    if assistant_phase == AssistantPhase.COLLECTING_USER_INTENT:
+        user_intent_raw = normalize_value(data.get("user_intent"))
+        previous_intent = state.get("user_intent") or UserIntent.UNDECIDED
+        user_intent = _resolve_user_intent(previous_intent, user_intent_raw)
+        local_state["user_intent"] = user_intent
 
-
-
+    if assistant_phase == AssistantPhase.CONFIRMING_SLOT:
+        requested_time_text = normalize_value(data.get("requested_time_text"))
+        appointment_draft: AppointmentDraft = state.get("appointment_draft") or {}
+        updated_appointment_draft = _apply_requested_time_patch(
+            appointment_draft=appointment_draft,
+            requested_time_text=requested_time_text
+        )
+        local_state["appointment_draft"] = updated_appointment_draft
 
     local_state["assistant_text"] = assistant_text
     local_state["assistant_intent"] = assistant_intent
     local_state["next_action"] = next_action
+
 
     set_node_data(
         local_state,
@@ -236,6 +273,6 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         await maybe_wait_for_transition_speech(next_action, assistant_text)
 
     logger.warning(
-        f"call_operator: output={data}",
+        f"call_operator: local_state={local_state}",
     )
     return local_state

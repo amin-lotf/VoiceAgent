@@ -5,7 +5,7 @@ from typing import Any
 from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.db.mappers import to_view
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
-from voice_agent.core.graph.nodes.utils import get_state_data, view_id, set_node_data
+from voice_agent.core.graph.nodes.utils import get_state_data, view_id, set_node_data, is_not_specified
 from voice_agent.core.graph.utils import run_non_interruptible
 from voice_agent.core.types import CallState, NextAction, AppointmentDraft, AppointmentPatch, AppointmentStatus, \
     AppointmentView, OperationStatus, AssistantPhase, FieldChange, RequiredAppointmentField
@@ -41,16 +41,7 @@ def _is_missing(value: object) -> bool:
         return True
     return False
 
-def _is_not_specified(value: object) -> bool:
-    if value is None:
-        return True
-    if isinstance(value, str) and value.strip().lower() in {
-        "",
-        "not_specified",
-        str(NOT_SPECIFIED).lower(),
-    }:
-        return True
-    return False
+
 
 def _merge_notes(
         current_notes: list[str] | None,
@@ -134,10 +125,10 @@ def apply_appointment_patch(
     patch: AppointmentPatch = dict(appointment_patch or {})
     for field in ("name", "phone", "reason_for_visit"):
         new_value = patch.get(field, NOT_SPECIFIED)
-        if not _is_not_specified(new_value):
+        if not is_not_specified(new_value):
             updated[field] = new_value
     requested_time_text = patch.get("requested_time_text")
-    if not _is_not_specified(requested_time_text):
+    if not is_not_specified(requested_time_text):
         updated["requested_time_text"] = requested_time_text
 
     patch_notes = patch.get("notes")
@@ -151,7 +142,7 @@ def apply_appointment_patch(
 
 def _has_updatable_core_fields(draft: AppointmentDraft) -> bool:
     return all(
-        not _is_not_specified(draft.get(field))
+        not is_not_specified(draft.get(field))
         for field in ("name", "phone", "reason_for_visit")
     )
 

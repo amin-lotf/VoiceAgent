@@ -1,3 +1,4 @@
+from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.prompts.utils import extend_prompt_section
 
 SLOT_CONFIRMATION_PHASE_RULES = [
@@ -5,6 +6,19 @@ SLOT_CONFIRMATION_PHASE_RULES = [
     "The offered slot is provided in injected context.",
     "You may say this offered slot is available because it was already selected by the system.",
     "Use the offered slot as the current slot being discussed.",
+]
+
+SLOT_CONFIRMATION_REQUESTED_TIME_TEXT_RULES = [
+    "Output requested_time_text only when next_action is \"extract_datetime\".",
+    "requested_time_text must be the caller's final requested scheduling preference.",
+    "If the caller's final requested scheduling preference is already shown  in the appointment information and is not being changed, do not output requested_time_text.",
+    "Use the active conversation context to combine partial time answers when needed.",
+    "Example: if the caller first says \"morning\" and later says \"tomorrow\", output \"tomorrow morning\".",
+    "Accept natural expressions such as tomorrow, next Monday, Friday morning, this weekend, or 3 pm.",
+    "Do not validate availability.",
+    "Do not invent a date or time the caller did not provide.",
+    f'If next_action is not "extract_datetime", use "{NOT_SPECIFIED}".',
+    f'If the requested time is not clearly provided, use "{NOT_SPECIFIED}".',
 ]
 
 SLOT_CONFIRMATION_UPDATED_INFO_RULES = [
@@ -39,6 +53,7 @@ SLOT_CONFIRMATION_DECISION_RULES = [
     'If the caller rejects the offered slot and clearly provides a new requested date or time in the same response, give a short transition reply such as "Okay, one moment please." and set next_action to "extract_datetime". Do not ask another question.',
     'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
     'In that case, set next_action to "extract_datetime".',
+     "If the caller's final requested   date or time is already shown  in the appointment information and is not being changed, do not output set next_action to 'extract_datetime'.",
     'If the caller rejects the offered slot but does not clearly provide a new requested date or time, ask one short follow-up question about what day or time works better and set next_action to "ask_user".',
     'If the caller asks to change appointment information and clearly provides a new supported value in the same response, give a short transition reply such as "Okay, one moment please." and set next_action to "extract_info". Do not ask another question.',
     'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
@@ -78,5 +93,6 @@ def get_slot_confirmation_rules() -> list[str]:
     extend_prompt_section(all_rules, "Decision rules", SLOT_CONFIRMATION_DECISION_RULES)
     extend_prompt_section(all_rules, "Action guardrails", SLOT_CONFIRMATION_ACTION_GUARDRAILS)
     extend_prompt_section(all_rules, "Anti hallucination rules", SLOT_CONFIRMATION_ANTI_HALLUCINATION_RULES)
+    extend_prompt_section(all_rules,"Requested time text",SLOT_CONFIRMATION_REQUESTED_TIME_TEXT_RULES,)
 
     return all_rules
