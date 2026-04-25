@@ -10,13 +10,15 @@ from langgraph.config import get_stream_writer
 
 from voice_agent.const import JSON_SENTINEL, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data, normalize_value, is_not_specified
-from voice_agent.core.graph.utils import run_non_interruptible, commit_assistant_message
+from voice_agent.core.graph.utils import run_non_interruptible, commit_assistant_message, record_node_error, \
+    mark_node_succeeded
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.call_operator import build_operator_prompt
 from voice_agent.core.types import (
     AppointmentField,
     CallState,
     AssistantIntent, ConfirmationIntent, UserIntent, NextAction, INTERNAL_ACTIONS, AppointmentDraft, AssistantPhase,
+    ErrorType,
 )
 from voice_agent.core.utils import estimate_speech_seconds
 
@@ -34,6 +36,7 @@ def _apply_requested_time_patch(
 
     return updated
 
+
 def _resolve_user_intent(
         previous_intent: UserIntent,
         extracted_intent_raw: str | None,
@@ -49,15 +52,11 @@ def _resolve_user_intent(
     return UserIntent.UNDECIDED
 
 
-
-
-
-async def maybe_wait_for_transition_speech(next_action:NextAction, assistant_text: str) -> None:
+async def maybe_wait_for_transition_speech(next_action: NextAction, assistant_text: str) -> None:
     if next_action not in INTERNAL_ACTIONS:
         return
 
     await asyncio.sleep(estimate_speech_seconds(assistant_text))
-
 
 
 def _parse_operator_output(full_text: str) -> tuple[str, dict[str, Any]]:
@@ -90,28 +89,6 @@ def _parse_operator_output(full_text: str) -> tuple[str, dict[str, Any]]:
 
     return assistant_text, {}
 
-def _fallback_state(state: CallState) -> dict[str, Any]:
-    fallback = "Sorry, there was an error. Please Wait for the operator to connect you."
-
-    local_state: dict[str, Any] = {
-        "assistant_text": fallback,
-        "assistant_streamed": False,
-        "assistant_intent": AssistantIntent.HUMAN_HANDOFF,
-
-    }
-    set_node_data(
-        local_state,
-        "call_operator",
-        {
-            "llm_failed": True,
-            "raw_output": "",
-            "parsed": {},
-        },
-    )
-    return local_state
-
-
-
 
 async def node_call_operator(state: CallState) -> dict[str, Any]:
     """
@@ -124,14 +101,14 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     local_state: dict[str, Any] = {}
     internal_call = state.get("internal_call") or False
     if internal_call:
-        local_state= commit_assistant_message(state)
+        local_state = commit_assistant_message(state)
 
     operator_data = get_state_data(state, 'call_operator')
     last_assistant_started_at = operator_data.get("last_assistant_started_at", None)
     heard_seconds = None
     if last_assistant_started_at:
         heard_seconds = time.monotonic() - last_assistant_started_at
-    prompt = build_operator_prompt(state,heard_seconds=heard_seconds, internal_call=internal_call)
+    prompt = build_operator_prompt(state, heard_seconds=heard_seconds, internal_call=internal_call)
     set_node_data(
         local_state,
         "call_operator",
@@ -202,13 +179,22 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
             full_output_parts.append(content)
             local_state["assistant_streamed"] = False
 
-    except Exception:
+    except Exception as exc:
         logger.warning("call_operator failed; using fallback", exc_info=True)
-        return _fallback_state(state)
+        local_state .update(
+            record_node_error(
+                state,
+                node_name="call_operator",
+                error_type=ErrorType.LLM_CALL,
+                error_message=str(exc)
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
+        return local_state
     end_time = time.perf_counter()
     if first_token_time:
         logger.warning("call_operator: LLM request to first token took %.2fs, total time %.2fs",
-                   first_token_time - start_time, end_time - start_time)
+                       first_token_time - start_time, end_time - start_time)
 
     full_output = "".join(full_output_parts)
     logger.warning(
@@ -224,16 +210,34 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     assistant_intent_raw = data.get("assistant_intent")
     try:
         assistant_intent = AssistantIntent(assistant_intent_raw)
-    except Exception:
+    except Exception as exc:
         logger.warning("call_operator: invalid assistant_intent=%s", assistant_intent_raw)
-        assistant_intent = AssistantIntent.CONTINUE
+        local_state.update(
+            record_node_error(
+                local_state,
+                node_name="call_operator",
+                error_type=ErrorType.PARSE_ERROR,
+                error_message=str(exc)
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
+        return local_state
 
     next_action_raw = data.get("next_action")
     try:
         next_action = NextAction(next_action_raw)
-    except Exception:
+    except Exception as exc:
         logger.warning("call_operator: invalid next_action=%s", next_action_raw)
-        next_action = NextAction.REPORT_ERROR
+        local_state.update(
+            record_node_error(
+                local_state,
+                node_name="call_operator",
+                error_type=ErrorType.PARSE_ERROR,
+                error_message=str(exc)
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
+        return local_state
     assistant_phase = state.get("assistant_phase")
     if assistant_phase == AssistantPhase.COLLECTING_USER_INTENT:
         user_intent_raw = normalize_value(data.get("user_intent"))
@@ -254,7 +258,6 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     local_state["assistant_intent"] = assistant_intent
     local_state["next_action"] = next_action
 
-
     set_node_data(
         local_state,
         "call_operator",
@@ -267,5 +270,5 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     if assistant_text.strip():
         await maybe_wait_for_transition_speech(next_action, assistant_text)
 
-
+    local_state = mark_node_succeeded(local_state, "call_operator")
     return local_state

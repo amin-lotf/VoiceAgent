@@ -9,13 +9,14 @@ from langchain_core.messages import AIMessage
 
 from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data, normalize_value
+from voice_agent.core.graph.utils import record_node_error
 from voice_agent.core.llm.openai_llm import LLM_Non_stream
 from voice_agent.core.prompts.basic_info_extractor import build_basic_info_extractor_prompt
 from voice_agent.core.types import (
     CallState,
     AppointmentPatch,
     OperationStatus,
-    NextAction,
+    NextAction, ErrorType,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,7 +141,7 @@ async def node_basic_info_extractor(
         local_state["next_action"] = NextAction.CHECK_INFO
         return local_state
 
-    except Exception:
+    except Exception as exc:
         logger.exception("basic_info_extractor failed")
 
         set_node_data(
@@ -151,5 +152,13 @@ async def node_basic_info_extractor(
                 "node_status": OperationStatus.FAILURE,
             },
         )
-        local_state["next_action"] = NextAction.CHECK_INFO
+        local_state.update(
+            record_node_error(
+                state,
+                node_name="basic_info_extractor",
+                error_type=ErrorType.LLM_CALL,
+                error_message=str(exc)
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
         return local_state

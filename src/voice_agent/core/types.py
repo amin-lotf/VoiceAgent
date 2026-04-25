@@ -107,6 +107,10 @@ class AppointmentStatus(StrEnum):
     SCHEDULED = "SCHEDULED"
     CANCELLED = "CANCELLED"
 
+class ErrorType(StrEnum):
+    LLM_CALL = "llm_call"
+    PARSE_ERROR = "parse_error"
+    DB_ERROR = "db_error"
 
 @dataclass(frozen=True)
 class TimeSlot:

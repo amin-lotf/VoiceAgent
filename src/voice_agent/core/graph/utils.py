@@ -5,6 +5,8 @@ import re
 from typing import Any, Awaitable, Callable, TypeVar
 import unicodedata
 from zoneinfo import ZoneInfo
+from copy import deepcopy
+from typing import Any, Dict
 
 from voice_agent.const import DEFAULT_TZ
 
@@ -69,6 +71,88 @@ async def run_non_interruptible(
     finally:
         if control is not None:
             control.set_interruptible(True)
+
+
+def mark_node_succeeded(
+    state: dict[str, Any],
+    node_name: str,
+) -> dict[str, Any]:
+    node_data = state.get("node_data", {})
+
+    err = node_data.get("error_handling", {})
+    counters = node_data.get("error_counters", {})
+
+    by_node = counters.get("by_node", {})
+    current_node_counter = by_node.get(node_name, {})
+
+    new_by_node = {
+        **by_node,
+        node_name: {
+            **current_node_counter,
+            "consecutive": 0,
+        },
+    }
+
+    local_state: dict[str, Any] = {
+        "node_data": {
+            "error_counters": {
+                **counters,
+                "by_node": new_by_node,
+            }
+        }
+    }
+
+    if err.get("failed_node") == node_name:
+        local_state["node_data"]["error_handling"] = {
+            "has_error": False,
+            "failed_node": None,
+            "error_type": None,
+            "error_message": None,
+            "retryable": None,
+        }
+
+    return local_state
+
+def record_node_error(
+    state: dict[str, Any],
+    node_name: str,
+    error_type: str,
+    error_message: str | None = None,
+    retryable: bool = True,
+) -> dict[str, Any]:
+    node_data = state.get("node_data", {})
+    counters = node_data.get("error_counters", {})
+
+    global_error_count = counters.get("global_error_count", 0)
+
+    by_node = counters.get("by_node", {})
+    current_node_counter = by_node.get(node_name, {})
+
+    new_by_node = {
+        **by_node,
+        node_name: {
+            **current_node_counter,
+            "consecutive": current_node_counter.get("consecutive", 0) + 1,
+            "total": current_node_counter.get("total", 0) + 1,
+        },
+    }
+
+    return {
+        "node_data": {
+            "error_handling": {
+                "has_error": True,
+                "failed_node": node_name,
+                "error_type": error_type,
+                "error_message": error_message,
+                "retryable": retryable,
+            },
+            "error_counters": {
+                **counters,
+                "global_error_count": global_error_count + 1,
+                "by_node": new_by_node,
+            },
+        }
+    }
 
 
 def _part_of_day_phrase(dt: datetime) -> str:
