@@ -2,7 +2,7 @@
 import sys
 from typing import Any
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from voice_agent.const import DEFAULT_SQLALCHEMY_DATABASE_URL, DEFAULT_TEST_SQLALCHEMY_DATABASE_URL, \
@@ -10,6 +10,7 @@ from voice_agent.const import DEFAULT_SQLALCHEMY_DATABASE_URL, DEFAULT_TEST_SQLA
     DEFAULT_REPLY_MAX_CONTEXT_CHARS, DEFAULT_APPOINTMENT_DURATION_MIN, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME, \
     DEFAULT_MESSAGE_HISTORY_SIZE
 from datetime import time
+from voice_agent.core.types import HubSpotObjectType
 
 
 class Settings(BaseSettings):
@@ -49,6 +50,72 @@ class Settings(BaseSettings):
     HUBSPOT_ACCESS_TOKEN: str | None = Field(
         default=None,
         description="HubSpot private app token (PAT).",
+    )
+    HUBSPOT_CRM_OBJECT_TYPE: HubSpotObjectType = Field(
+        default=HubSpotObjectType.DEAL,
+        description="HubSpot object created per appointment.",
+    )
+    HUBSPOT_DEAL_STAGE: str = Field(
+        default="appointmentscheduled",
+        description="HubSpot deal stage internal name used for appointment sync.",
+        min_length=1,
+    )
+    HUBSPOT_DEAL_CANCELLED_STAGE: str = Field(
+        default="closedlost",
+        description="HubSpot deal stage internal name used when an appointment is cancelled.",
+        min_length=1,
+    )
+    HUBSPOT_DEAL_PIPELINE: str | None = Field(
+        default=None,
+        description="Optional HubSpot deal pipeline internal ID.",
+    )
+    HUBSPOT_TICKET_STAGE: str | None = Field(
+        default=None,
+        description="HubSpot ticket stage internal ID when syncing appointments as tickets.",
+    )
+    HUBSPOT_TICKET_CANCELLED_STAGE: str | None = Field(
+        default=None,
+        description="HubSpot ticket stage internal ID used when a synced appointment is cancelled.",
+    )
+    HUBSPOT_TICKET_PIPELINE: str | None = Field(
+        default=None,
+        description="Optional HubSpot ticket pipeline internal ID.",
+    )
+    HUBSPOT_SYNC_POLL_INTERVAL_SECONDS: int = Field(
+        default=5,
+        ge=1,
+        le=300,
+        description="Polling interval for the background HubSpot sync worker.",
+    )
+    HUBSPOT_SYNC_BATCH_SIZE: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Maximum number of pending HubSpot sync events processed per poll.",
+    )
+    HUBSPOT_SYNC_INITIAL_DELAY_SECONDS: int = Field(
+        default=30,
+        ge=0,
+        le=3600,
+        description="Delay before a newly scheduled appointment is first synced to HubSpot.",
+    )
+    HUBSPOT_SYNC_RETRY_BASE_SECONDS: int = Field(
+        default=30,
+        ge=1,
+        le=3600,
+        description="Base retry delay for failed HubSpot sync events.",
+    )
+    HUBSPOT_SYNC_RETRY_MAX_SECONDS: int = Field(
+        default=1800,
+        ge=1,
+        le=86400,
+        description="Maximum retry delay for failed HubSpot sync events.",
+    )
+    HUBSPOT_SYNC_STALE_LOCK_SECONDS: int = Field(
+        default=300,
+        ge=30,
+        le=86400,
+        description="How long a processing CRM sync event can stay locked before it is re-claimed.",
     )
 
     CALENDLY_ACCESS_TOKEN: str | None = Field(
@@ -120,6 +187,24 @@ class Settings(BaseSettings):
             return None
         return v
 
+    @field_validator(
+        "HUGGINGFACEHUB_API_TOKEN",
+        "HUBSPOT_ACCESS_TOKEN",
+        "HUBSPOT_DEAL_CANCELLED_STAGE",
+        "HUBSPOT_DEAL_PIPELINE",
+        "HUBSPOT_TICKET_STAGE",
+        "HUBSPOT_TICKET_CANCELLED_STAGE",
+        "HUBSPOT_TICKET_PIPELINE",
+        "CALENDLY_ACCESS_TOKEN",
+        mode="before",
+    )
+    @classmethod
+    def _blank_string_to_none(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
 def load_settings_or_die() -> Settings:
     try:

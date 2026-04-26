@@ -115,6 +115,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'basic_info_extractor': 'basic_info_extractor',
         'basic_info': 'basic_info',
         'datetime_extractor': 'datetime_extractor',
+        'hold_appointment': 'hold_appointment',
+        'book_appointment': 'book_appointment',
     }
                                 )
 

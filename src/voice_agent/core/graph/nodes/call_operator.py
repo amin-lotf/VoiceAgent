@@ -14,6 +14,7 @@ from voice_agent.core.graph.utils import run_non_interruptible, commit_assistant
     mark_node_succeeded
 from voice_agent.core.llm.openai_llm import LLM
 from voice_agent.core.prompts.call_operator import build_operator_prompt
+from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.types import (
     AppointmentField,
     CallState,
@@ -222,23 +223,26 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
         return local_state
-
-    next_action_raw = data.get("next_action")
-    try:
-        next_action = NextAction(next_action_raw)
-    except Exception as exc:
-        logger.warning("call_operator: invalid next_action=%s", next_action_raw)
-        local_state.update(
-            record_node_error(
-                local_state,
-                node_name="call_operator",
-                error_type=ErrorType.PARSE_ERROR,
-                error_message=str(exc)
-            )
-        )
-        local_state['next_action'] = NextAction.REPORT_ERROR
-        return local_state
     assistant_phase = state.get("assistant_phase")
+    local_state["next_action"]=NextAction.ASK_USER
+    if 'next_action' in OPERATOR_OUTPUT_SCHEMA.get(assistant_phase):
+        next_action_raw = data.get("next_action")
+        try:
+            next_action = NextAction(next_action_raw)
+            local_state["next_action"] = next_action
+        except Exception as exc:
+            logger.warning("call_operator: invalid next_action=%s", next_action_raw)
+            local_state.update(
+                record_node_error(
+                    local_state,
+                    node_name="call_operator",
+                    error_type=ErrorType.PARSE_ERROR,
+                    error_message=str(exc)
+                )
+            )
+            local_state['next_action'] = NextAction.REPORT_ERROR
+            return local_state
+
     if assistant_phase == AssistantPhase.COLLECTING_USER_INTENT:
         user_intent_raw = normalize_value(data.get("user_intent"))
         previous_intent = state.get("user_intent") or UserIntent.UNDECIDED
@@ -256,19 +260,19 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
 
     local_state["assistant_text"] = assistant_text
     local_state["assistant_intent"] = assistant_intent
-    local_state["next_action"] = next_action
 
     set_node_data(
         local_state,
         "call_operator",
         {
             "llm_failed": False,
+            "operator_output": data,
             "ttft_seconds": None if first_token_time is None else first_token_time - start_time,
             "total_seconds": None if end_time is None else end_time - start_time,
         },
     )
     if assistant_text.strip():
-        await maybe_wait_for_transition_speech(next_action, assistant_text)
+        await maybe_wait_for_transition_speech(local_state["next_action"] , assistant_text)
 
-    local_state = mark_node_succeeded(local_state, "call_operator")
+    mark_node_succeeded(state,local_state, "call_operator")
     return local_state

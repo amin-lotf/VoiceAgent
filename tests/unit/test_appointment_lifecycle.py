@@ -204,9 +204,9 @@ async def test_node_book_appointment_promotes_held_and_clears_held_view(monkeypa
         captured["scheduled_appointment_id"] = scheduled_appointment_id
         return ScheduleAppointmentResult(
             scheduled_view=scheduled_view,
-            deleted_scheduled_view=_view(
+            cancelled_scheduled_view=_view(
                 appointment_id=7,
-                status=AppointmentStatus.SCHEDULED,
+                status=AppointmentStatus.CANCELLED,
                 start_at="2099-04-15T09:00:00+08:00",
                 end_at="2099-04-15T09:30:00+08:00",
             ),

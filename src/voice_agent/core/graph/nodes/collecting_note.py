@@ -5,7 +5,7 @@ from typing import Any
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data, normalize_value, view_id
-from voice_agent.core.graph.utils import run_non_interruptible, record_node_error
+from voice_agent.core.graph.utils import run_non_interruptible, record_node_error, mark_node_succeeded
 from voice_agent.core.services.appointments import update_appointment_notes
 from voice_agent.core.types import CallState, AppointmentDraft, AppointmentView, ErrorType, NextAction
 
@@ -72,10 +72,9 @@ async def node_collecting_note(
     operator_output = operator_data.get("operator_output", {})
     notes = _normalize_notes(operator_output.get("notes", []))
     merged_notes = _merge_notes(draft.get("notes"), notes)
+    logger.warning(f'*******\n notes: {notes}\n *******')
     scheduled_id = view_id(scheduled_view)
-    if scheduled_id is None:
-        logger.warning("book_appointment: scheduled_appointment_view missing")
-        return {}
+
 
     async def _commit() -> AppointmentView:
         async with sessionmaker() as session:
@@ -108,5 +107,6 @@ async def node_collecting_note(
             'next_action': NextAction.ASK_USER
         }
     )
+    mark_node_succeeded(state, local_state, "collecting_note")
     logger.warning(f'local_state: {local_state}')
     return local_state

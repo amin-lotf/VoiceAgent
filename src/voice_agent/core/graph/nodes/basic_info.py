@@ -6,7 +6,8 @@ from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.db.mappers import to_view
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.nodes.utils import get_state_data, view_id, set_node_data, is_not_specified
-from voice_agent.core.graph.utils import run_non_interruptible, record_node_error
+from voice_agent.core.graph.utils import run_non_interruptible, record_node_error, mark_node_succeeded
+from voice_agent.core.services.hubspot_sync import enqueue_hubspot_appointment_scheduled_event
 from voice_agent.core.types import CallState, NextAction, AppointmentDraft, AppointmentPatch, AppointmentStatus, \
     AppointmentView, OperationStatus, AssistantPhase, FieldChange, RequiredAppointmentField, ErrorType
 import logging
@@ -171,6 +172,12 @@ async def _update_active_view_from_draft(
 
     appt = await uow.appointments.update_fields(appointment_id, **fields)
     assert appt is not None
+    if appt.status == AppointmentStatus.SCHEDULED:
+        await enqueue_hubspot_appointment_scheduled_event(
+            uow,
+            appointment_id=appt.id,
+            delay_seconds=0,
+        )
     return to_view(appt)
 
 
@@ -280,6 +287,8 @@ async def node_basic_info(
                 local_state.get("scheduled_appointment_view") or state.get("scheduled_appointment_view") or {}
             )
             local_state["current_appointment_id"] = synced_held_id or synced_scheduled_id
+            mark_node_succeeded(state, local_state, "basic_info")
+            return local_state
 
     except Exception as exc:
         logger.exception("Failed to sync appointment details to DB")
@@ -292,10 +301,5 @@ async def node_basic_info(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
-
-    logger.warning("======\n basic_info: local state: %s \n ======", local_state)
-    # logger.warning("======\n patch_resolver: state: %s \n ======", state)
-    return local_state
-
-
+        return local_state
 

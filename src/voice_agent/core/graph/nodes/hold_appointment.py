@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
-from voice_agent.core.graph.utils import run_non_interruptible, record_node_error
+from voice_agent.core.graph.utils import run_non_interruptible, record_node_error, mark_node_succeeded
 from voice_agent.core.services.appointments import (
     HoldAppointmentResult,
     hold_requested_appointment,
@@ -22,13 +22,8 @@ async def node_hold_appointment(
 ) -> dict[str, Any]:
     local_state = {}
     draft: AppointmentDraft = dict(state.get("appointment_draft") or {})
-
-    requested_time_iso = str(draft.get("requested_time_iso") or "").strip()
-    if not requested_time_iso:
-        logger.warning("hold_appointment: requested_time_iso missing")
-        return {}
-
     try:
+        requested_time_iso = str(draft.get("requested_time_iso") or "").strip()
         requested_slot_start = datetime.fromisoformat(requested_time_iso)
     except ValueError as exc:
         logger.warning("hold_appointment: invalid requested_time_iso=%s", requested_time_iso)
@@ -42,7 +37,7 @@ async def node_hold_appointment(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
-        return {}
+        return local_state
 
     async def _commit() -> HoldAppointmentResult:
         async with sessionmaker() as session:
@@ -58,9 +53,18 @@ async def node_hold_appointment(
 
     try:
         result = await run_non_interruptible(state, _commit)
-    except Exception:
+    except Exception as exc:
         logger.exception("hold_appointment: failed to persist held appointment")
-        return {}
+        local_state.update(
+            record_node_error(
+                state,
+                node_name="hold_appointment",
+                error_type=ErrorType.DB_ERROR,
+                error_message=str(exc)
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
+        return local_state
 
     held_view = result.held_view
     scheduled_view = result.scheduled_view or {}
@@ -85,5 +89,6 @@ async def node_hold_appointment(
             "internal_call": True
         }
     )
+    mark_node_succeeded(state, local_state, "hold_appointment")
     logger.warning("hold_appointment: local_state=%s", local_state)
     return local_state

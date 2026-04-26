@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage
 
 from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data, normalize_value
-from voice_agent.core.graph.utils import record_node_error
+from voice_agent.core.graph.utils import record_node_error, mark_node_succeeded
 from voice_agent.core.llm.openai_llm import LLM_Non_stream
 from voice_agent.core.prompts.basic_info_extractor import build_basic_info_extractor_prompt
 from voice_agent.core.types import (
@@ -139,6 +139,7 @@ async def node_basic_info_extractor(
             },
         )
         local_state["next_action"] = NextAction.CHECK_INFO
+        mark_node_succeeded(state, local_state, "basic_info_extractor")
         return local_state
 
     except Exception as exc:

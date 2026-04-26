@@ -14,6 +14,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "bitsandbytes>=0.49.2",
     "fastapi>=0.128.6",
+    "httpx>=0.28.1",
     "langchain-huggingface>=1.2.0",
     "langchain[openai]>=1.2.9",
     "langgraph>=1.0.8",

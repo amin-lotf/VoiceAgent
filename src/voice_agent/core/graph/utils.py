@@ -9,9 +9,9 @@ from copy import deepcopy
 from typing import Any, Dict
 
 from voice_agent.const import DEFAULT_TZ
+from voice_agent.core.graph.nodes.utils import set_node_data
 
 T = TypeVar("T")
-
 
 _UNICODE_PUNCT_TRANSLATION = str.maketrans(
     {
@@ -46,8 +46,8 @@ class RunControl:
 
 
 async def run_non_interruptible(
-    state: dict[str, Any],
-    fn: Callable[[], Awaitable[T]],
+        state: dict[str, Any],
+        fn: Callable[[], Awaitable[T]],
 ) -> T:
     """
     Helper for critical sections inside LangGraph nodes.
@@ -74,8 +74,9 @@ async def run_non_interruptible(
 
 
 def mark_node_succeeded(
-    state: dict[str, Any],
-    node_name: str,
+        state: dict[str, Any],
+        local_state: dict[str, Any],
+        node_name: str,
 ) -> dict[str, Any]:
     node_data = state.get("node_data", {})
 
@@ -92,33 +93,44 @@ def mark_node_succeeded(
             "consecutive": 0,
         },
     }
-
-    local_state: dict[str, Any] = {
-        "node_data": {
+    set_node_data(local_state, "error_handling", {
             "error_counters": {
                 **counters,
                 "by_node": new_by_node,
             }
-        }
-    }
+        })
+    # local_state: dict[str, Any] = {
+    #     "node_data": {
+    #         "error_counters": {
+    #             **counters,
+    #             "by_node": new_by_node,
+    #         }
+    #     }
+    # }
 
     if err.get("failed_node") == node_name:
-        local_state["node_data"]["error_handling"] = {
+        set_node_data(local_state, "error_handling", {
             "has_error": False,
             "failed_node": None,
             "error_type": None,
             "error_message": None,
             "retryable": None,
-        }
+        })
+        # local_state["node_data"]["error_handling"] = {
+        #     "has_error": False,
+        #     "failed_node": None,
+        #     "error_type": None,
+        #     "error_message": None,
+        #     "retryable": None,
+        # }
 
-    return local_state
 
 def record_node_error(
-    state: dict[str, Any],
-    node_name: str,
-    error_type: str,
-    error_message: str | None = None,
-    retryable: bool = True,
+        state: dict[str, Any],
+        node_name: str,
+        error_type: str,
+        error_message: str | None = None,
+        retryable: bool = True,
 ) -> dict[str, Any]:
     node_data = state.get("node_data", {})
     counters = node_data.get("error_counters", {})
@@ -190,9 +202,10 @@ def sanitize_spoken_text(text: str) -> str:
     )
     return text
 
-def commit_assistant_message(state: dict,  limit: int = 20) -> dict:
-    clean= dict(state)
-    text= clean.get("assistant_text")
+
+def commit_assistant_message(state: dict, limit: int = 20) -> dict:
+    clean = dict(state)
+    text = clean.get("assistant_text")
     text = sanitize_spoken_text((text or "").strip())
     if not text:
         return {}
@@ -222,10 +235,10 @@ class SpokenTextStreamNormalizer:
         split_at = self._buffer.rfind(" ", 0, safe_limit)
         while split_at >= 0:
             emitted = self._buffer[: split_at + 1]
-            remaining = self._buffer[split_at + 1 :]
+            remaining = self._buffer[split_at + 1:]
             if not (
-                _TRAILING_TIME_RE.search(emitted)
-                and _LEADING_MERIDIEM_RE.match(remaining)
+                    _TRAILING_TIME_RE.search(emitted)
+                    and _LEADING_MERIDIEM_RE.match(remaining)
             ):
                 break
             split_at = self._buffer.rfind(" ", 0, split_at)
@@ -233,7 +246,7 @@ class SpokenTextStreamNormalizer:
             return ""
 
         chunk = self._buffer[: split_at + 1]
-        self._buffer = self._buffer[split_at + 1 :]
+        self._buffer = self._buffer[split_at + 1:]
 
         sanitized = sanitize_spoken_text(chunk)
         if sanitized and chunk.endswith(" "):
@@ -250,11 +263,11 @@ class SpokenTextStreamNormalizer:
 
 
 def iso_to_human_readable(
-    iso_str: str,
-    *,
-    tz: ZoneInfo = DEFAULT_TZ,
-    include_weekday: bool = True,
-    include_time: bool = True,
+        iso_str: str,
+        *,
+        tz: ZoneInfo = DEFAULT_TZ,
+        include_weekday: bool = True,
+        include_time: bool = True,
 ) -> str:
     dt = datetime.fromisoformat(iso_str)
 

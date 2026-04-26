@@ -5,8 +5,8 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_agent.common import utcnow
-from voice_agent.core.db.models import Appointment, CallRecord
-from voice_agent.core.types import TimeSlot, AppointmentStatus
+from voice_agent.core.db.models import Appointment, CallRecord, CrmSyncEvent
+from voice_agent.core.types import AppointmentStatus, CrmSyncStatus, TimeSlot
 
 
 class SqlAlchemyAppointmentRepository:
@@ -18,8 +18,6 @@ class SqlAlchemyAppointmentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    # ---- basic CRUD ----
-
     async def get(self, appointment_id: int) -> Optional[Appointment]:
         stmt = sa.select(Appointment).where(Appointment.id == appointment_id)
         res = await self._session.execute(stmt)
@@ -27,7 +25,6 @@ class SqlAlchemyAppointmentRepository:
 
     async def add(self, appt: Appointment) -> Appointment:
         self._session.add(appt)
-        # flush so appt.id is available without committing
         await self._session.flush()
         return appt
 
@@ -61,11 +58,7 @@ class SqlAlchemyAppointmentRepository:
         )
         return await self.add(appt)
 
-    async def update_fields(
-        self,
-        appointment_id: int,
-        **fields,
-    ) -> Optional[Appointment]:
+    async def update_fields(self, appointment_id: int, **fields) -> Optional[Appointment]:
         """
         Loads the row, mutates fields, flushes.
         Returns updated model (or None if not found).
@@ -74,21 +67,17 @@ class SqlAlchemyAppointmentRepository:
         if appt is None:
             return None
 
-        for k, v in fields.items():
-            if not hasattr(appt, k):
-                raise ValueError(f"Appointment has no field: {k}")
-            setattr(appt, k, v)
+        for key, value in fields.items():
+            if not hasattr(appt, key):
+                raise ValueError(f"Appointment has no field: {key}")
+            setattr(appt, key, value)
 
         await self._session.flush()
-        # Ensure server-updated/default columns are loaded (e.g. updated_at)
-        # so later attribute access does not trigger implicit async lazy IO.
         await self._session.refresh(appt)
         return appt
 
     async def set_status(self, appointment_id: int, status: AppointmentStatus) -> Optional[Appointment]:
         return await self.update_fields(appointment_id, status=status)
-
-    # ---- queries you asked for ----
 
     async def list_future_by_phone(
         self,
@@ -99,11 +88,6 @@ class SqlAlchemyAppointmentRepository:
         limit: int = 50,
         ascending: bool = True,
     ) -> list[Appointment]:
-        """
-        Future appointments for a specific phone number, from now onward.
-
-        By default includes all statuses; you can restrict via include_statuses.
-        """
         now = now or utcnow()
 
         stmt = sa.select(Appointment).where(
@@ -128,12 +112,6 @@ class SqlAlchemyAppointmentRepository:
         active_statuses: Sequence[AppointmentStatus] = (AppointmentStatus.HELD, AppointmentStatus.SCHEDULED),
         exclude_appointment_id: int | None = None,
     ) -> list[Appointment]:
-        """
-        Returns appointments that overlap [start_range, end_range)
-        and are considered "blocking" for availability (default: HELD, SCHEDULED).
-        """
-        # overlap condition for half-open intervals:
-        # busy.start < end_range AND busy.end > start_range
         stmt = (
             sa.select(Appointment)
             .where(
@@ -158,14 +136,6 @@ class SqlAlchemyAppointmentRepository:
         clamp_to_now: bool = True,
         now: datetime | None = None,
     ) -> list[TimeSlot]:
-        """
-        Computes free slots within [start_range, end_range) by subtracting busy intervals.
-
-        Notes:
-        - returns discrete slots of fixed length `slot_minutes`
-        - uses simple interval subtraction (no calendars/working hours)
-        - if clamp_to_now=True, start_range is bumped to max(start_range, now)
-        """
         if end_range <= start_range:
             return []
 
@@ -181,41 +151,37 @@ class SqlAlchemyAppointmentRepository:
             active_statuses=active_statuses,
         )
 
-        # merge busy intervals (they shouldn't overlap due to your constraint,
-        # but HELD+SCHEDULED across edges can still benefit from merging)
         merged: list[tuple[datetime, datetime]] = []
-        for b in busy:
-            s, e = max(b.start_at, start_range), min(b.end_at, end_range)
-            if e <= s:
+        for busy_item in busy:
+            start_at = max(busy_item.start_at, start_range)
+            end_at = min(busy_item.end_at, end_range)
+            if end_at <= start_at:
                 continue
-            if not merged or s > merged[-1][1]:
-                merged.append((s, e))
+            if not merged or start_at > merged[-1][1]:
+                merged.append((start_at, end_at))
             else:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end_at))
 
-        # free intervals = gaps between merged busy blocks
         free_intervals: list[tuple[datetime, datetime]] = []
         cursor = start_range
-        for s, e in merged:
-            if cursor < s:
-                free_intervals.append((cursor, s))
-            cursor = max(cursor, e)
+        for start_at, end_at in merged:
+            if cursor < start_at:
+                free_intervals.append((cursor, start_at))
+            cursor = max(cursor, end_at)
         if cursor < end_range:
             free_intervals.append((cursor, end_range))
 
-        # chop free intervals into fixed-size slots
-        step = sa.text("")  # dummy to avoid unused import lint in some setups
+        step = sa.text("")
         _ = step
 
         slot_seconds = slot_minutes * 60
         out: list[TimeSlot] = []
-        for s, e in free_intervals:
-            # align to the next slot boundary relative to s itself (simple)
-            t = s
-            while (t.timestamp() + slot_seconds) <= e.timestamp():
-                t2 = datetime.fromtimestamp(t.timestamp() + slot_seconds, tz=t.tzinfo)
-                out.append(TimeSlot(start_at=t, end_at=t2))
-                t = t2
+        for start_at, end_at in free_intervals:
+            current = start_at
+            while (current.timestamp() + slot_seconds) <= end_at.timestamp():
+                next_dt = datetime.fromtimestamp(current.timestamp() + slot_seconds, tz=current.tzinfo)
+                out.append(TimeSlot(start_at=current, end_at=next_dt))
+                current = next_dt
 
         return out
 
@@ -332,3 +298,147 @@ class SqlAlchemyCallRepository:
             await self._session.refresh(call)
 
         return call
+
+
+class SqlAlchemyCrmSyncEventRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, event_id: int) -> Optional[CrmSyncEvent]:
+        stmt = sa.select(CrmSyncEvent).where(CrmSyncEvent.id == event_id)
+        res = await self._session.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def get_for_appointment(
+        self,
+        *,
+        appointment_id: int,
+        provider: str,
+        event_type: str,
+    ) -> Optional[CrmSyncEvent]:
+        stmt = sa.select(CrmSyncEvent).where(
+            CrmSyncEvent.appointment_id == appointment_id,
+            CrmSyncEvent.provider == provider,
+            CrmSyncEvent.event_type == event_type,
+        )
+        res = await self._session.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def enqueue(
+        self,
+        *,
+        appointment_id: int,
+        provider: str,
+        event_type: str,
+        payload: dict | None = None,
+        next_attempt_at: datetime | None = None,
+    ) -> CrmSyncEvent:
+        existing = await self.get_for_appointment(
+            appointment_id=appointment_id,
+            provider=provider,
+            event_type=event_type,
+        )
+        if existing is not None:
+            existing.payload = dict(payload or existing.payload or {})
+            existing.status = CrmSyncStatus.PENDING
+            existing.attempt_count = 0
+            existing.locked_at = None
+            existing.last_error = None
+            existing.processed_at = None
+            existing.next_attempt_at = next_attempt_at or utcnow()
+            await self._session.flush()
+            await self._session.refresh(existing)
+            return existing
+
+        event = CrmSyncEvent(
+            appointment_id=appointment_id,
+            provider=provider,
+            event_type=event_type,
+            payload=dict(payload or {}),
+            status=CrmSyncStatus.PENDING,
+            next_attempt_at=next_attempt_at or utcnow(),
+        )
+        self._session.add(event)
+        await self._session.flush()
+        await self._session.refresh(event)
+        return event
+
+    async def claim_due(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 10,
+        stale_before: datetime | None = None,
+        provider: str | None = None,
+    ) -> list[CrmSyncEvent]:
+        now = now or utcnow()
+        stale_before = stale_before or now
+
+        due_filter = sa.or_(
+            sa.and_(
+                CrmSyncEvent.status.in_((CrmSyncStatus.PENDING, CrmSyncStatus.FAILED)),
+                CrmSyncEvent.next_attempt_at <= now,
+            ),
+            sa.and_(
+                CrmSyncEvent.status == CrmSyncStatus.PROCESSING,
+                CrmSyncEvent.locked_at.is_not(None),
+                CrmSyncEvent.locked_at <= stale_before,
+            ),
+        )
+
+        stmt = (
+            sa.select(CrmSyncEvent)
+            .where(due_filter)
+            .order_by(CrmSyncEvent.next_attempt_at.asc(), CrmSyncEvent.id.asc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        if provider:
+            stmt = stmt.where(CrmSyncEvent.provider == provider)
+
+        res = await self._session.execute(stmt)
+        rows = list(res.scalars().all())
+        for row in rows:
+            row.status = CrmSyncStatus.PROCESSING
+            row.locked_at = now
+            row.last_attempt_at = now
+            row.attempt_count = int(row.attempt_count or 0) + 1
+
+        if rows:
+            await self._session.flush()
+            for row in rows:
+                await self._session.refresh(row)
+        return rows
+
+    async def mark_completed(self, event_id: int, *, processed_at: datetime | None = None) -> Optional[CrmSyncEvent]:
+        event = await self.get(event_id)
+        if event is None:
+            return None
+        finished_at = processed_at or utcnow()
+        event.status = CrmSyncStatus.COMPLETED
+        event.locked_at = None
+        event.last_error = None
+        event.processed_at = finished_at
+        event.next_attempt_at = finished_at
+        await self._session.flush()
+        await self._session.refresh(event)
+        return event
+
+    async def mark_failed(
+        self,
+        event_id: int,
+        *,
+        last_error: str,
+        next_attempt_at: datetime,
+    ) -> Optional[CrmSyncEvent]:
+        event = await self.get(event_id)
+        if event is None:
+            return None
+        event.status = CrmSyncStatus.FAILED
+        event.locked_at = None
+        event.last_error = last_error
+        event.next_attempt_at = next_attempt_at
+        event.processed_at = None
+        await self._session.flush()
+        await self._session.refresh(event)
+        return event

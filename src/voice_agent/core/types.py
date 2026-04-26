@@ -108,6 +108,19 @@ class AppointmentStatus(StrEnum):
     SCHEDULED = "SCHEDULED"
     CANCELLED = "CANCELLED"
 
+
+class CrmSyncStatus(StrEnum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class HubSpotObjectType(StrEnum):
+    DEAL = "deal"
+    TICKET = "ticket"
+
+
 class ErrorType(StrEnum):
     LLM_CALL = "llm_call"
     PARSE_ERROR = "parse_error"

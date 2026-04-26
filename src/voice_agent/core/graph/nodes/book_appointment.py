@@ -5,7 +5,7 @@ from typing import Any
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.nodes.utils import set_node_data, view_id
-from voice_agent.core.graph.utils import run_non_interruptible, record_node_error
+from voice_agent.core.graph.utils import run_non_interruptible, record_node_error, mark_node_succeeded
 from voice_agent.core.services.appointments import (
     ScheduleAppointmentResult,
     schedule_held_appointment,
@@ -78,6 +78,6 @@ async def node_book_appointment(
             "internal_call": True
         }
     )
-
+    mark_node_succeeded(state, local_state, "book_appointment")
     logger.warning("book_appointment: local_state=%s", local_state)
     return local_state

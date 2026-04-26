@@ -8,6 +8,11 @@ from sqlalchemy.exc import IntegrityError
 
 from voice_agent.const import DEFAULT_DAYS
 from .exceptions import InvalidSlot, NotFound, SlotNotAvailable
+from .hubspot_sync import (
+    enqueue_hubspot_appointment_cancelled_event,
+    enqueue_hubspot_appointment_notes_updated_event,
+    enqueue_hubspot_appointment_scheduled_event,
+)
 from .utils import ceil_to_grid, iter_daily_slots
 from voice_agent.core.db.mappers import to_view
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
@@ -26,7 +31,7 @@ class HoldAppointmentResult:
 @dataclass(frozen=True, slots=True)
 class ScheduleAppointmentResult:
     scheduled_view: AppointmentView
-    deleted_scheduled_view: AppointmentView | None
+    cancelled_scheduled_view: AppointmentView | None
 
 
 def _ensure_tz(dt: datetime) -> None:
@@ -73,6 +78,15 @@ def _notes_from_appointment(appointment: object | None) -> list[str]:
     if appointment is None:
         return []
     return _normalize_notes(getattr(appointment, "notes", None))
+
+
+def _has_hubspot_artifacts(appointment: object | None) -> bool:
+    if appointment is None:
+        return False
+    return any(
+        getattr(appointment, field, None)
+        for field in ("hubspot_contact_id", "hubspot_deal_id", "hubspot_ticket_id", "hubspot_note_id")
+    )
 
 
 async def _find_first_available_slot(
@@ -321,21 +335,34 @@ async def schedule_held_appointment(
         if held_appt.status != AppointmentStatus.HELD:
             raise NotFound("Only HELD appointments can be scheduled")
 
-        deleted_scheduled_view: AppointmentView | None = None
+        cancelled_scheduled_view: AppointmentView | None = None
         if scheduled_appointment_id is not None and scheduled_appointment_id != held_appointment_id:
             scheduled_appt = await uow.appointments.get(scheduled_appointment_id)
             if scheduled_appt is not None and scheduled_appt.status == AppointmentStatus.SCHEDULED:
-                deleted_scheduled_view = to_view(scheduled_appt)
-                await uow.appointments.delete(scheduled_appointment_id)
+                scheduled_appt = await uow.appointments.update_fields(
+                    scheduled_appointment_id,
+                    status=AppointmentStatus.CANCELLED,
+                )
+                assert scheduled_appt is not None
+                cancelled_scheduled_view = to_view(scheduled_appt)
+                await enqueue_hubspot_appointment_cancelled_event(
+                    uow,
+                    appointment_id=scheduled_appt.id,
+                    delay_seconds=0,
+                )
 
         held_appt = await uow.appointments.update_fields(
             held_appointment_id,
             status=AppointmentStatus.SCHEDULED,
         )
         assert held_appt is not None
+        await enqueue_hubspot_appointment_scheduled_event(
+            uow,
+            appointment_id=held_appt.id,
+        )
         return ScheduleAppointmentResult(
             scheduled_view=to_view(held_appt),
-            deleted_scheduled_view=deleted_scheduled_view,
+            cancelled_scheduled_view=cancelled_scheduled_view,
         )
 
 
@@ -350,6 +377,11 @@ async def confirm_appointment(
             raise NotFound("Appointment not found")
         appt = await uow.appointments.set_status(appointment_id, AppointmentStatus.SCHEDULED)
         assert appt is not None
+        await enqueue_hubspot_appointment_scheduled_event(
+            uow,
+            appointment_id=appt.id,
+            delay_seconds=0,
+        )
         return to_view(appt)
 
 
@@ -362,8 +394,15 @@ async def cancel_appointment(
         appt = await uow.appointments.get(appointment_id)
         if appt is None:
             raise NotFound("Appointment not found")
+        should_queue_hubspot_cancel = appt.status == AppointmentStatus.SCHEDULED or _has_hubspot_artifacts(appt)
         appt = await uow.appointments.set_status(appointment_id, AppointmentStatus.CANCELLED)
         assert appt is not None
+        if should_queue_hubspot_cancel:
+            await enqueue_hubspot_appointment_cancelled_event(
+                uow,
+                appointment_id=appt.id,
+                delay_seconds=0,
+            )
         return to_view(appt)
 
 
@@ -390,6 +429,11 @@ async def reschedule_appointment(
                 status=AppointmentStatus.SCHEDULED,
             )
             assert appt is not None
+            await enqueue_hubspot_appointment_scheduled_event(
+                uow,
+                appointment_id=appt.id,
+                delay_seconds=0,
+            )
             return to_view(appt)
     except IntegrityError as e:
         raise SlotNotAvailable("That slot is already taken") from e
@@ -457,6 +501,12 @@ async def update_appointment_notes(
             notes=notes,
         )
         assert appt is not None
+        if appt.status == AppointmentStatus.SCHEDULED:
+            await enqueue_hubspot_appointment_notes_updated_event(
+                uow,
+                appointment_id=appt.id,
+                delay_seconds=0,
+            )
         return to_view(appt)
 
 
@@ -487,4 +537,10 @@ async def update_active_appointment_details(
             **fields,
         )
         assert appt is not None
+        if appt.status == AppointmentStatus.SCHEDULED:
+            await enqueue_hubspot_appointment_scheduled_event(
+                uow,
+                appointment_id=appt.id,
+                delay_seconds=0,
+            )
         return to_view(appt)
