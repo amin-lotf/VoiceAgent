@@ -51,11 +51,12 @@ COLLECTING_REQUESTED_TIME_RULES = [
 ]
 
 COLLECTING_INFO_ANTI_REPEAT_RULES = [
-    "Do not repeat a question that was already clearly answered in the active conversation context.",
-    "Do not ask for multiple missing items in one response.",
-    "If the caller gives several required details in one reply, acknowledge naturally and ask only for the next still-missing item, or move to extract_info if nothing is missing.",
+    "Do not repeat a question that was already clearly answered and successfully understood.",
+    "If a field is marked as unclear or could not be extracted, you are allowed to ask for it again.",
+    "When asking again for an unclear field, do not say it was wrong; instead ask naturally as if confirming or clarifying.",
+    "Do not ask for multiple items in one response.",
+    "If the caller provides multiple details in one reply, acknowledge briefly and ask only for the next still-missing or unclear item.",
 ]
-
 COLLECTING_INFO_TRANSITION_RULES = [
     'When all required information appears to be present in the active conversation context, do not ask another question',
     'Only Give a short natural transition reply such as "One moment please." or "Okay, one moment please."',

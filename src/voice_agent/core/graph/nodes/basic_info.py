@@ -147,6 +147,9 @@ def _has_updatable_core_fields(draft: AppointmentDraft) -> bool:
         for field in ("name", "phone", "reason_for_visit")
     )
 
+def _missing_required_fields(draft: AppointmentDraft) -> list:
+    return  [field.value  for field in RequiredAppointmentField if is_not_specified(draft.get(field)) ]
+
 
 
 async def _update_active_view_from_draft(
@@ -239,13 +242,16 @@ async def node_basic_info(
         source_node="basic_info",
     )
 
-
-    if not _has_updatable_core_fields(updated_appointment):
+    if True:
+    # if not _has_updatable_core_fields(updated_appointment):
         logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)
         local_state={
             "next_action": NextAction.CALL_OPERATOR,
         "assistant_phase" : AssistantPhase.COLLECTING_INFO,
         }
+        missing_fields = _missing_required_fields(updated_appointment)
+        missing_fields = ['phone']
+        set_node_data(local_state, "basic_info", {"missing_required_fields": missing_fields})
         return local_state
     local_state: dict[str, Any] = {
         "appointment_draft": updated_appointment,
@@ -287,8 +293,8 @@ async def node_basic_info(
                 local_state.get("scheduled_appointment_view") or state.get("scheduled_appointment_view") or {}
             )
             local_state["current_appointment_id"] = synced_held_id or synced_scheduled_id
-            mark_node_succeeded(state, local_state, "basic_info")
-            return local_state
+        mark_node_succeeded(state, local_state, "basic_info")
+        return local_state
 
     except Exception as exc:
         logger.exception("Failed to sync appointment details to DB")

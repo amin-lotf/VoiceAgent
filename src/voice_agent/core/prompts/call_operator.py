@@ -23,6 +23,21 @@ from voice_agent.core.utils import estimate_speech_seconds
 logger = logging.getLogger(__name__)
 
 
+def build_missing_required_fields_prompt(missing_fields: list[str]) -> str:
+    if not missing_fields:
+        return ""
+
+    lines: list[str] = [
+        "Recent updates:",
+        "Some fields could not be clearly understood.",
+        "You should ask for them again naturally.",
+        "Do not mention extraction or errors.",
+    ]
+
+    for field in missing_fields:
+        lines.append(f"- unclear field: {field}")
+
+    return "\n".join(lines)
 
 
 
@@ -153,6 +168,10 @@ def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_
             all_rules.extend(get_user_intent_rules())
         case AssistantPhase.COLLECTING_INFO:
             all_rules.extend(get_collecting_info_rules())
+            basic_info_node = get_state_data(state, "basic_info")
+            missing_fields = basic_info_node.get("missing_required_fields") or []
+            if missing_fields:
+                recent_changes += build_missing_required_fields_prompt(missing_fields) + '\n'
         case AssistantPhase.VERIFYING_INFO:
             all_rules.extend(get_verification_rules())
             basic_info_node= get_state_data(state, "basic_info")
