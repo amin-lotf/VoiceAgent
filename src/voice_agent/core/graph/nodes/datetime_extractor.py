@@ -11,9 +11,10 @@ from zoneinfo import ZoneInfo
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data, normalize_value
+from voice_agent.core.graph.utils import record_node_error
 from voice_agent.core.llm.openai_llm import LLM, LLM_Non_stream
 from voice_agent.core.prompts.datetime_extractor import build_time_resolution_prompt
-from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction, AssistantPhase
+from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction, AssistantPhase, ErrorType
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ async def node_datetime_extractor(
 ) -> dict[str, Any]:
     next_action = state.get('next_action')
     local_state = {}
-    if next_action!=NextAction.EXTRACT_DATETIME:
+    if next_action not in (NextAction.EXTRACT_DATETIME,NextAction.RETRY_ACTION):
         if next_action==NextAction.BOOK_APPOINTMENT:
             local_state = {
                 'assistant_phase': AssistantPhase.BOOKING_APPOINTMENT,
@@ -101,9 +102,6 @@ async def node_datetime_extractor(
     requested_time_text = (appointment.get("requested_time_text") or "").strip()
     tz_info: ZoneInfo = DEFAULT_TZ
     now = datetime.now(tz_info)
-    if not requested_time_text:
-        logger.info("datetime_extractor skipped: no requested_time_text")
-        return {}
 
     messages = build_time_resolution_prompt(
         state=state,
@@ -147,7 +145,7 @@ async def node_datetime_extractor(
         local_state['next_action'] = NextAction.HOLD_APPOINTMENT
         return local_state
 
-    except Exception:
+    except Exception as exc:
         logger.exception("datetime_extractor failed")
         set_node_data(
             local_state,
@@ -157,6 +155,13 @@ async def node_datetime_extractor(
                 "node_status": OperationStatus.FAILURE
             }
         )
-        local_state['next_action']=NextAction.CALL_OPERATOR
-        local_state['internal_call']=True
+        local_state.update(
+            record_node_error(
+                state,
+                node_name="datetime_extractor",
+                error_type=ErrorType.LLM_CALL,
+                error_message=str(exc)
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
         return local_state

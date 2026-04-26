@@ -7,7 +7,8 @@ from zoneinfo import ZoneInfo
 
 from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
 from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data
-from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction
+from voice_agent.core.graph.utils import record_node_error
+from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction, ErrorType
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +281,7 @@ async def node_schedule_patch_to_requested_time_iso(
         if requested_time_iso:
             updated_appointment["requested_time_iso"] = requested_time_iso
             node_status = OperationStatus.SUCCESS
+            local_state['next_action'] = NextAction.HOLD_APPOINTMENT
         else:
             updated_appointment["requested_time_iso"] = str(NOT_SPECIFIED)
             node_status = OperationStatus.FAILURE
@@ -304,7 +306,7 @@ async def node_schedule_patch_to_requested_time_iso(
 
         return local_state
 
-    except Exception:
+    except Exception as exc:
         logger.exception("schedule_patch_to_requested_time_iso failed")
 
         updated_appointment["requested_time_iso"] = str(NOT_SPECIFIED)
@@ -317,4 +319,14 @@ async def node_schedule_patch_to_requested_time_iso(
                 "node_status": OperationStatus.FAILURE
             },
         )
+        # Better to retry datetime extractor agent to see if error is fixed
+        local_state.update(
+            record_node_error(
+                state,
+                node_name="datetime_extractor",
+                error_type=ErrorType.LLM_CALL,
+                error_message=str(exc)
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
         return local_state

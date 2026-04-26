@@ -5,12 +5,12 @@ import logging
 from typing import Any
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
-from voice_agent.core.graph.utils import run_non_interruptible
+from voice_agent.core.graph.utils import run_non_interruptible, record_node_error
 from voice_agent.core.services.appointments import (
     HoldAppointmentResult,
     hold_requested_appointment,
 )
-from voice_agent.core.types import CallState, AppointmentDraft, AppointmentStatus, AssistantPhase, NextAction
+from voice_agent.core.types import CallState, AppointmentDraft, AppointmentStatus, AssistantPhase, NextAction, ErrorType
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ async def node_hold_appointment(
         *,
         sessionmaker,
 ) -> dict[str, Any]:
+    local_state = {}
     draft: AppointmentDraft = dict(state.get("appointment_draft") or {})
 
     requested_time_iso = str(draft.get("requested_time_iso") or "").strip()
@@ -29,8 +30,18 @@ async def node_hold_appointment(
 
     try:
         requested_slot_start = datetime.fromisoformat(requested_time_iso)
-    except ValueError:
+    except ValueError as exc:
         logger.warning("hold_appointment: invalid requested_time_iso=%s", requested_time_iso)
+        # Better to retry datetime extractor agent to see if error is fixed
+        local_state.update(
+            record_node_error(
+                state,
+                node_name="datetime_extractor",
+                error_type=ErrorType.LLM_CALL,
+                error_message=str(exc)
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
         return {}
 
     async def _commit() -> HoldAppointmentResult:
@@ -64,13 +75,15 @@ async def node_hold_appointment(
     draft["last_offered_slot_start_at"] = held_view.get("start_at")
     draft["offered_time_confirmed"] = False
 
-    local_state = {
-        "appointment_draft": draft,
-        "held_appointment_view": held_view,
-        "scheduled_appointment_view": scheduled_view,
-        "current_appointment_id": int(held_view["id"]) if held_view.get("id") else None,
-        "next_action": NextAction.CALL_OPERATOR,
-        "internal_call" : True
-    }
+    local_state.update(
+        {
+            "appointment_draft": draft,
+            "held_appointment_view": held_view,
+            "scheduled_appointment_view": scheduled_view,
+            "current_appointment_id": int(held_view["id"]) if held_view.get("id") else None,
+            "next_action": NextAction.CALL_OPERATOR,
+            "internal_call": True
+        }
+    )
     logger.warning("hold_appointment: local_state=%s", local_state)
     return local_state

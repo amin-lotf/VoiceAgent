@@ -211,7 +211,7 @@ async def node_basic_info(
         },
     )
     next_action = state.get('next_action')
-    if next_action != NextAction.CHECK_INFO:
+    if next_action not in  (NextAction.CHECK_INFO,NextAction.RETRY_ACTION):
         if next_action == NextAction.MARK_VERIFIED:
             local_state['assistant_phase'] = AssistantPhase.CONFIRMING_SLOT
             local_state['next_action'] = NextAction.EXTRACT_DATETIME

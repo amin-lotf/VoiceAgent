@@ -5,11 +5,12 @@ from typing import Any
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data, normalize_value, view_id
-from voice_agent.core.graph.utils import run_non_interruptible
+from voice_agent.core.graph.utils import run_non_interruptible, record_node_error
 from voice_agent.core.services.appointments import update_appointment_notes
-from voice_agent.core.types import CallState, AppointmentDraft, AppointmentView
+from voice_agent.core.types import CallState, AppointmentDraft, AppointmentView, ErrorType, NextAction
 
 logger = logging.getLogger(__name__)
+
 
 def _normalize_notes(value: Any) -> list[str]:
     if value is None:
@@ -35,6 +36,7 @@ def _normalize_notes(value: Any) -> list[str]:
         seen.add(text)
 
     return notes
+
 
 def _merge_notes(
         current_notes: list[str] | None,
@@ -63,16 +65,18 @@ async def node_collecting_note(
         *,
         sessionmaker,
 ) -> dict[str, Any]:
+    local_state = {}
     draft: AppointmentDraft = dict(state.get("appointment_draft") or {})
     scheduled_view = state.get("scheduled_appointment_view") or {}
     operator_data = get_state_data(state, 'call_operator')
     operator_output = operator_data.get("operator_output", {})
-    notes = _normalize_notes(operator_output.get("notes",[]))
+    notes = _normalize_notes(operator_output.get("notes", []))
     merged_notes = _merge_notes(draft.get("notes"), notes)
     scheduled_id = view_id(scheduled_view)
     if scheduled_id is None:
         logger.warning("book_appointment: scheduled_appointment_view missing")
         return {}
+
     async def _commit() -> AppointmentView:
         async with sessionmaker() as session:
             uow = SqlAlchemyUnitOfWork(session)
@@ -84,13 +88,25 @@ async def node_collecting_note(
 
     try:
         persisted_scheduled_view = await run_non_interruptible(state, _commit)
-    except Exception:
+    except Exception as exc:
         logger.exception("hold_appointment: failed to persist held appointment")
-        return {}
+        local_state.update(
+            record_node_error(
+                state,
+                node_name="collecting_note",
+                error_type=ErrorType.DB_ERROR,
+                error_message=str(exc)
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
+        return local_state
     draft["notes"] = list(persisted_scheduled_view.get("notes") or draft.get("notes") or [])
-    local_state = {
-        "appointment_draft": draft,
-        "scheduled_appointment_view": persisted_scheduled_view,
-    }
+    local_state.update(
+        {
+            "appointment_draft": draft,
+            "scheduled_appointment_view": persisted_scheduled_view,
+            'next_action': NextAction.ASK_USER
+        }
+    )
     logger.warning(f'local_state: {local_state}')
     return local_state

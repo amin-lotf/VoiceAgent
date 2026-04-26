@@ -1,6 +1,6 @@
 from voice_agent.const import GLOBAL_ERROR_THRESHOLD, CONSECUTIVE_ERROR_THRESHOLD
 from voice_agent.core.graph.nodes.utils import stream_text_response, set_node_data
-from voice_agent.core.types import CallState
+from voice_agent.core.types import CallState, NextAction
 
 
 def node_error_handling(state: CallState) -> dict:
@@ -43,6 +43,7 @@ def node_error_handling(state: CallState) -> dict:
         )
         # route back to failed node
         local_state["next_node"] = failed_node
+        local_state['next_action'] = NextAction.RETRY_ACTION
 
     else:
         local_state.update(

@@ -114,6 +114,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'handoff_fallback': 'handoff_fallback',
         'basic_info_extractor': 'basic_info_extractor',
         'basic_info': 'basic_info',
+        'datetime_extractor': 'datetime_extractor',
     }
                                 )
 
@@ -126,6 +127,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
                 return 'schedule_patch_to_requested_time_iso'
             case NextAction.BOOK_APPOINTMENT:
                 return 'book_appointment'
+            case NextAction.REPORT_ERROR:
+                return 'error_handling'
             case _:
                 return 'finalize_response'
 
@@ -134,6 +137,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'call_operator': 'call_operator',
         'schedule_patch_to_requested_time_iso': 'schedule_patch_to_requested_time_iso',
         'book_appointment': 'book_appointment',
+        'error_handling': 'error_handling',
     })
 
     def _after_schedule_patch_to_requested_time_iso(state: CallState):
@@ -141,6 +145,8 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         match next_action:
             case NextAction.CALL_OPERATOR:
                 return 'call_operator'
+            case NextAction.REPORT_ERROR:
+                return 'error_handling'
             case _:
                 return 'hold_appointment'
 
@@ -149,9 +155,42 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         'hold_appointment': 'hold_appointment',
     })
 
-    graph.add_edge('hold_appointment', 'call_operator')
-    graph.add_edge('book_appointment', 'call_operator')
-    graph.add_edge('collecting_note', 'finalize_response')
+    def _after_hold_appointment(state: CallState):
+        next_action = state.get("next_action")
+        match next_action:
+            case NextAction.REPORT_ERROR:
+                return 'error_handling'
+            case _:
+                return 'call_operator'
+
+    graph.add_conditional_edges('hold_appointment', _after_hold_appointment, {
+        'call_operator': 'call_operator',
+        'error_handling': 'error_handling'
+    })
+
+    def _after_book_appointment(state: CallState):
+        next_action = state.get("next_action")
+        match next_action:
+            case NextAction.REPORT_ERROR:
+                return 'error_handling'
+            case _:
+                return 'call_operator'
+    graph.add_conditional_edges('book_appointment', _after_book_appointment, {
+        'call_operator': 'call_operator',
+        'error_handling': 'error_handling'
+    })
+
+    def _after_collecting_note(state: CallState):
+        next_action = state.get("next_action")
+        match next_action:
+            case NextAction.REPORT_ERROR:
+                return 'error_handling'
+            case _:
+                return 'finalize_response'
+    graph.add_conditional_edges('collecting_note', _after_collecting_note, {
+        'error_handling': 'error_handling',
+        'finalize_response': 'finalize_response'
+    })
 
     def _after_user_intent(state: CallState):
         next_action = state.get("next_action")

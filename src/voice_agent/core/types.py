@@ -74,6 +74,7 @@ class NextAction(StrEnum):
     BOOK_APPOINTMENT = 'book_appointment'
     TAKE_NOTE = 'take_note'
     REPORT_ERROR = 'report_error'
+    RETRY_ACTION = 'retry_action'
     OTHER = 'other'
 
 
