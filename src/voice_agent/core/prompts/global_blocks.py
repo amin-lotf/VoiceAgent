@@ -1,4 +1,4 @@
-from voice_agent.const import NOT_SPECIFIED
+from voice_agent.const import NOT_SPECIFIED, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME
 from voice_agent.core.types import AssistantIntent
 
 GLOBAL_OPERATOR_RULES = [
@@ -53,10 +53,12 @@ JSON_RULES = [
 ]
 
 OFFICE_INFO = {
-    "hours": "Mon–Fri 9 AM–5 PM",
+    "hours": f"Mon–Sun {DEFAULT_OPENING_TIME}–{DEFAULT_CLOSING_TIME}",
     "address": "123 Main Street",
     "parking": "Available next to building",
 }
+
+
 
 
 def build_assistant_intent_rules() -> list[str]:

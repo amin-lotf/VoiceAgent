@@ -5,22 +5,16 @@ from datetime import datetime, date, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED
+from voice_agent.const import DEFAULT_TZ, NOT_SPECIFIED, AFTERNOON_MINUTE, AFTERNOON_HOUR, \
+    DAY_START_HOUR, DAY_START_MINUTE
 from voice_agent.core.graph.nodes.utils import set_node_data, get_state_data
 from voice_agent.core.graph.utils import record_node_error
 from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus, NextAction, ErrorType
 
 logger = logging.getLogger(__name__)
 
-# Conservative defaults
-DAY_START_HOUR = 9
-DAY_START_MINUTE = 0
 
-MORNING_HOUR = 9
-MORNING_MINUTE = 0
 
-AFTERNOON_HOUR = 12
-AFTERNOON_MINUTE = 0
 
 
 def _is_not_specified(value: object) -> bool:
@@ -99,11 +93,6 @@ def _combine_local(d: date, hour: int, minute: int, tz_info: ZoneInfo) -> dateti
 def _default_hour_minute_for_time_pref(time_pref: str) -> tuple[int, int]:
     if time_pref == "afternoon":
         return AFTERNOON_HOUR, AFTERNOON_MINUTE
-
-    if time_pref == "morning":
-        return MORNING_HOUR, MORNING_MINUTE
-
-    # If user only chose a day, assume the beginning of the day.
     return DAY_START_HOUR, DAY_START_MINUTE
 
 

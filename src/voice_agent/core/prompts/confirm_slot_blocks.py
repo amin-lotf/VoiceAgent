@@ -42,6 +42,12 @@ SLOT_CONFIRMATION_SCOPE_RULES = [
     "Do not invent or mention unsupported fields.",
 ]
 
+SLOT_CONFIRMATION_SCOPE_INTERNAL_RULES = [
+    'You must say this offered slot is available',
+    'Allowed next_action: "ask_user"',
+    f'Allow requested_time_text:  "{NOT_SPECIFIED}".',
+]
+
 SLOT_CONFIRMATION_TIME_RULES = [
     "For any new date or time mentioned by the caller, do not confirm, validate, or imply availability.",
     "Do not suggest alternative dates or times unless the caller rejected the offered slot without giving a new time and you are asking what works better.",
@@ -83,23 +89,27 @@ SLOT_CONFIRMATION_ANTI_HALLUCINATION_RULES = [
 ]
 
 SLOT_CONFIRMATION_OPENING_RULES = [
-    "When first offering the slot, tell the caller naturally that this slot is available and ask whether it works for them.",
+    "When first offering the slot  or the slot has updated and changed, tell the caller naturally that this slot is available and ask whether it works for them.",
     'Example style: "I have a slot available on [offered slot]. Would that work for you?"',
 ]
 
 
-def get_slot_confirmation_rules() -> list[str]:
+def get_slot_confirmation_rules(is_internal_call: bool=False) -> list[str]:
     all_rules: list[str] = []
 
     extend_prompt_section(all_rules, "Slot confirmation phase", SLOT_CONFIRMATION_PHASE_RULES)
     extend_prompt_section(all_rules, "Updated information handling", SLOT_CONFIRMATION_UPDATED_INFO_RULES)
     extend_prompt_section(all_rules, "Reply style", SLOT_CONFIRMATION_REPLY_STYLE_RULES)
     extend_prompt_section(all_rules, "Opening the slot confirmation", SLOT_CONFIRMATION_OPENING_RULES)
-    extend_prompt_section(all_rules, "Scope and next action", SLOT_CONFIRMATION_SCOPE_RULES)
-    extend_prompt_section(all_rules, "Time handling", SLOT_CONFIRMATION_TIME_RULES)
-    extend_prompt_section(all_rules, "Decision rules", SLOT_CONFIRMATION_DECISION_RULES)
-    extend_prompt_section(all_rules, "Action guardrails", SLOT_CONFIRMATION_ACTION_GUARDRAILS)
+
     extend_prompt_section(all_rules, "Anti hallucination rules", SLOT_CONFIRMATION_ANTI_HALLUCINATION_RULES)
-    extend_prompt_section(all_rules,"Requested time text",SLOT_CONFIRMATION_REQUESTED_TIME_TEXT_RULES,)
+    if is_internal_call:
+        extend_prompt_section(all_rules, "Scope and next action", SLOT_CONFIRMATION_SCOPE_INTERNAL_RULES)
+    if not is_internal_call:
+        extend_prompt_section(all_rules, "Scope and next action", SLOT_CONFIRMATION_SCOPE_RULES)
+        extend_prompt_section(all_rules, "Time handling", SLOT_CONFIRMATION_TIME_RULES)
+        extend_prompt_section(all_rules, "Decision rules", SLOT_CONFIRMATION_DECISION_RULES)
+        extend_prompt_section(all_rules,"Requested time text",SLOT_CONFIRMATION_REQUESTED_TIME_TEXT_RULES,)
+        extend_prompt_section(all_rules, "Action guardrails", SLOT_CONFIRMATION_ACTION_GUARDRAILS)
     extend_prompt_section(all_rules,"Internal call rules",SLOT_CONFIRMATION_INTERNAL_CALL_RULES,)
     return all_rules

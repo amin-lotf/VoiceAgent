@@ -173,7 +173,7 @@ def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_
             if missing_fields:
                 recent_changes += build_missing_required_fields_prompt(missing_fields) + '\n'
         case AssistantPhase.VERIFYING_INFO:
-            all_rules.extend(get_verification_rules())
+            all_rules.extend(get_verification_rules(is_internal_call=internal_call))
             basic_info_node= get_state_data(state, "basic_info")
             field_changes= basic_info_node.get("field_changes") or []
             recent_changes += build_field_changes_prompt(field_changes)+'\n'

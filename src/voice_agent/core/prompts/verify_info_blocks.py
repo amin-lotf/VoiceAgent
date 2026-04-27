@@ -26,6 +26,10 @@ VERIFICATION_NEXT_ACTION_RULES = [
     'Use "ask_user" when the caller rejects the information but does not clearly say what should be changed, or when a clarification question is still needed.',
 ]
 
+VERIFICATION_NEXT_ACTION_INTERNAL_RULES = [
+    'Allowed next_action: "ask_user".',
+]
+
 VERIFICATION_REPLY_STYLE_RULES = [
     "The spoken verification reply should sound natural and short.",
     'Use a natural style such as: "So I have your name as [name], your phone number as [phone], and the visit is for [reason] on [requested time]. Is that correct?"'
@@ -74,15 +78,19 @@ VERIFICATION_ANTI_HALLUCINATION_RULES = [
 ]
 
 
-def get_verification_rules() -> list[str]:
+def get_verification_rules(is_internal_call: bool=False) -> list[str]:
     all_verification_rules: list[str] = []
     extend_prompt_section(all_verification_rules, "Verification phase", VERIFICATION_PHASE_RULES)
     extend_prompt_section(all_verification_rules, "Verification updated info", VERIFICATION_UPDATED_INFO_RULES)
-    extend_prompt_section(all_verification_rules, "Verification next action", VERIFICATION_NEXT_ACTION_RULES)
+    if is_internal_call:
+        extend_prompt_section(all_verification_rules, "Verification next action internal", VERIFICATION_NEXT_ACTION_INTERNAL_RULES)
+    else:
+        extend_prompt_section(all_verification_rules, "Verification next action", VERIFICATION_NEXT_ACTION_RULES)
     extend_prompt_section(all_verification_rules, "Verification reply style", VERIFICATION_REPLY_STYLE_RULES)
     extend_prompt_section(all_verification_rules, "Verification confirm", VERIFICATION_CONFIRM_RULES)
-    extend_prompt_section(all_verification_rules, "Verification reject with correction", VERIFICATION_REJECT_WITH_CORRECTION_RULES)
-    extend_prompt_section(all_verification_rules, "Verification reject without correction", VERIFICATION_REJECT_WITHOUT_CORRECTION_RULES)
+    if not is_internal_call:
+        extend_prompt_section(all_verification_rules, "Verification reject with correction", VERIFICATION_REJECT_WITH_CORRECTION_RULES)
+        extend_prompt_section(all_verification_rules, "Verification reject without correction", VERIFICATION_REJECT_WITHOUT_CORRECTION_RULES)
     extend_prompt_section(all_verification_rules, "Verification scope", VERIFICATION_SCOPE_RULES)
     extend_prompt_section(all_verification_rules, "Verification time", VERIFICATION_TIME_RULES)
     extend_prompt_section(all_verification_rules, "Verification anti hallucination", VERIFICATION_ANTI_HALLUCINATION_RULES)

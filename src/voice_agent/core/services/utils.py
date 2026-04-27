@@ -19,7 +19,7 @@ def ceil_to_grid(dt: datetime, duration_min: int) -> datetime:
         return floored
     return floored + timedelta(minutes=duration_min)
 
-def iter_daily_slots(day: datetime, opening: time, closing: time, duration_min: int) -> Iterable[Slot]:
+def iter_daily_slots(day: datetime, opening: time, closing: time, duration_min: int):
     """
     Yields slots within a day using a fixed grid.
     Last-slot rule: we allow a slot whose start is before closing even if end exceeds closing.

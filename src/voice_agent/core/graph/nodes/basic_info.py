@@ -242,15 +242,14 @@ async def node_basic_info(
         source_node="basic_info",
     )
 
-    if True:
-    # if not _has_updatable_core_fields(updated_appointment):
+    # if True:
+    if not _has_updatable_core_fields(updated_appointment):
         logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)
         local_state={
             "next_action": NextAction.CALL_OPERATOR,
         "assistant_phase" : AssistantPhase.COLLECTING_INFO,
         }
         missing_fields = _missing_required_fields(updated_appointment)
-        missing_fields = ['phone']
         set_node_data(local_state, "basic_info", {"missing_required_fields": missing_fields})
         return local_state
     local_state: dict[str, Any] = {
