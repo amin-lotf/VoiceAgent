@@ -1,4 +1,5 @@
-from voice_agent.const import NOT_SPECIFIED, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME
+from voice_agent.const import NOT_SPECIFIED, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME, \
+    DEFAULT_APPOINTMENT_DURATION_MIN
 from voice_agent.core.types import AssistantIntent
 
 GLOBAL_OPERATOR_RULES = [
@@ -58,7 +59,20 @@ OFFICE_INFO = {
     "parking": "Available next to building",
 }
 
-
+APPOINTMENT_TIME_BOUNDARY_RULES = [
+    "Appointment requests must be within clinic working hours.",
+    f"The clinic opens at {DEFAULT_OPENING_TIME}.",
+    f"The clinic closes at {DEFAULT_CLOSING_TIME}.",
+    f"Each appointment takes {DEFAULT_APPOINTMENT_DURATION_MIN} minutes.",
+    "The requested appointment start time must be early enough that the appointment finishes by closing time.",
+    "Do not accept appointment requests before opening time.",
+    "Do not accept appointment requests at or after closing time.",
+    "Do not accept appointment requests that would end after closing time.",
+    "Do not accept appointment requests for dates before today.",
+    "Do not accept past times today. For example, if it is already afternoon, do not accept today morning or an earlier time today.",
+    "If the caller requests an unavailable past or out-of-hours time, briefly explain that it is outside clinic hours or already past, then ask for another day or time.",
+    "Do not search slots for requests that are clearly outside these boundaries.",
+]
 
 
 def build_assistant_intent_rules() -> list[str]:

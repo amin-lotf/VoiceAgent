@@ -7,7 +7,8 @@ from voice_agent.core.graph.nodes.utils import get_state_data
 from voice_agent.core.prompts.booking_appointment_blocks import get_book_appointment_rules
 from voice_agent.core.prompts.collecting_notes_blocks import get_collecting_notes_rules
 from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, OUT_OF_SCOPE_RULES, \
-    CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules, INTERRUPTION_HANDLING_RULES
+    CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules, INTERRUPTION_HANDLING_RULES, \
+    APPOINTMENT_TIME_BOUNDARY_RULES
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
@@ -148,6 +149,7 @@ def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_
     if internal_call:
        pass
     else:
+        extend_prompt_section(all_rules, "Time boundary rules", APPOINTMENT_TIME_BOUNDARY_RULES)
         extend_prompt_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
         extend_prompt_section(all_rules, "Office info rules", build_assistant_intent_rules())
         extend_prompt_section(all_rules, "Out of scope rules", OUT_OF_SCOPE_RULES)
