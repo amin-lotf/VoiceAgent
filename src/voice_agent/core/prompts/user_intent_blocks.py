@@ -15,7 +15,7 @@ REQUESTING_USER_INTENT_RULES = [
     "Do not proactively list supported actions unless the caller explicitly asks what you can help with.",
     "Do not assume the caller wants a new appointment unless they clearly say so.",
     "If the caller clearly states they want to book a new appointment, extract that intent and do not ask another intent question in the same response.",
-    'After extracting a clear booking intent, give a short natural transition reply such as "One moment please." or "Okay, one moment please."',
+    'After extracting a clear booking intent, give a short natural transition reply.',
 ]
 
 NEXT_ACTION_RULES = [
@@ -24,7 +24,7 @@ NEXT_ACTION_RULES = [
     'Use "ask_user" when user_intent is "{not_specified}".',
     'Use "process_intent" only when user_intent is a clear supported intent such as booking an appointment.',
     'When next_action is "process_intent", do not ask another question.',
-    'When next_action is "process_intent", the spoken reply should only be a short transition such as "One moment please."',
+    'When next_action is "process_intent", the spoken reply should only be a short transition."',
 ]
 
 
@@ -35,7 +35,7 @@ def _build_next_action_rules() -> list[str]:
         f'Use "process_intent" only when user_intent is not "{NOT_SPECIFIED}".',
         'When next_action is "ask_user", ask one short natural intent question if needed.',
         'When next_action is "process_intent", do not ask another question.',
-        'When next_action is "process_intent", the spoken reply should only be a short transition such as "One moment please."',
+        'When next_action is "process_intent", the spoken reply should only be a short transition."',
         'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
         'In that case, set next_action to "process_intent".',
     ]

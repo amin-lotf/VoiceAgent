@@ -8,12 +8,13 @@ from voice_agent.core.prompts.booking_appointment_blocks import get_book_appoint
 from voice_agent.core.prompts.collecting_notes_blocks import get_collecting_notes_rules
 from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, OUT_OF_SCOPE_RULES, \
     CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules, INTERRUPTION_HANDLING_RULES, \
-    APPOINTMENT_TIME_BOUNDARY_RULES
+    APPOINTMENT_TIME_BOUNDARY_RULES, COLLECTING_INFO_SPEECH_RULES, SHORT_TRANSITION_REPLY_EXAMPLES
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
 from voice_agent.core.prompts.confirm_slot_blocks  import get_slot_confirmation_rules
-from voice_agent.core.prompts.utils import extend_prompt_section, format_offered_time_for_voice, format_notes_for_prompt
+from voice_agent.core.prompts.utils import extend_prompt_section, format_offered_time_for_voice, \
+    format_notes_for_prompt, time_now
 from voice_agent.core.prompts.verify_info_blocks import get_verification_rules
 from voice_agent.core.types import CallState, AppointmentStatus, AssistantPhase, FieldChange
 import logging
@@ -141,6 +142,9 @@ def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_
     needs_repeat= not internal_call and heard_seconds and heard_seconds < required_seconds
     all_rules = []
     extend_prompt_section(all_rules, "Global operator", GLOBAL_OPERATOR_RULES)
+    extend_prompt_section(all_rules, "Collecting info speech rules", COLLECTING_INFO_SPEECH_RULES)
+    extend_prompt_section(all_rules, "Time Now", [time_now()])
+    extend_prompt_section(all_rules, "Examples of short transition replies", SHORT_TRANSITION_REPLY_EXAMPLES)
     if needs_repeat:
         extend_prompt_section(all_rules, "Interrupted Message", INTERRUPTION_HANDLING_RULES)
         recent_changes+= f"Interrupted by user: previous assistant message : {state.get('prev_assistant_text','none')}\n"

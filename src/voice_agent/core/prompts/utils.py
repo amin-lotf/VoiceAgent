@@ -1,5 +1,7 @@
-
-
+from voice_agent.const import DEFAULT_TZ
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from typing import List
 
 def _enum_values(enum_cls) -> str:
     return ", ".join(e.value for e in enum_cls)
@@ -11,13 +13,11 @@ def extend_prompt_section(rules: list[str], title: str, items: list[str]) -> Non
     rules.extend(items)
 
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
-DEFAULT_TZ = "Asia/Taipei"
 
 
-def format_offered_time_for_voice(iso_str: str|None, tz: str = DEFAULT_TZ) -> str:
+
+
+def format_offered_time_for_voice(iso_str: str|None, tz: ZoneInfo = DEFAULT_TZ) -> str:
     """
     Convert ISO datetime string into natural spoken format for voice agents (Retell-friendly).
 
@@ -34,9 +34,9 @@ def format_offered_time_for_voice(iso_str: str|None, tz: str = DEFAULT_TZ) -> st
 
     # Convert timezone if needed
     if dt.tzinfo:
-        dt = dt.astimezone(ZoneInfo(tz))
+        dt = dt.astimezone(tz)
     else:
-        dt = dt.replace(tzinfo=ZoneInfo(tz))
+        dt = dt.replace(tzinfo=tz)
 
     # Format parts
     weekday = dt.strftime("%A")
@@ -58,7 +58,9 @@ def format_offered_time_for_voice(iso_str: str|None, tz: str = DEFAULT_TZ) -> st
     return f"{weekday}, {month} {day} at {time_part}"
 
 
-from typing import List
+
+def time_now(tz: ZoneInfo = DEFAULT_TZ) -> str:
+    return format_offered_time_for_voice(datetime.now(tz).isoformat())
 
 def format_notes_for_prompt(notes: List[str] | None) -> str:
     if not notes:
