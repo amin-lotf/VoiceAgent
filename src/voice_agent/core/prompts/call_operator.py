@@ -65,7 +65,7 @@ def build_field_changes_prompt(changes: list[FieldChange]) -> str:
 
 def format_appointment_info(draft: Optional[AppointmentDraft]) -> str:
     if not draft:
-        return "Current appointment information:\nnone"
+        return ""
 
     name = draft.get("name") or "not provided"
     phone = draft.get("phone") or "not provided"

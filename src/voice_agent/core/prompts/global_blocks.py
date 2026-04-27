@@ -63,18 +63,16 @@ OFFICE_INFO = {
 }
 
 APPOINTMENT_TIME_BOUNDARY_RULES = [
-    "Appointment requests  where the user specifically requested the exact hour must be within clinic working hours.",
-    f"The clinic opens at {DEFAULT_OPENING_TIME}.",
-    f"The clinic closes at {DEFAULT_CLOSING_TIME}.",
-    f"Each appointment takes {DEFAULT_APPOINTMENT_DURATION_MIN} minutes.",
-    "The requested appointment start time must be early enough that the appointment finishes by closing time.",
-    "Do not accept appointment requests before opening time, if the user specifically requested the exact hour.",
-    "Do not accept appointment requests at or after closing time, if the user specifically requested the exact hour.",
-    "Do not accept appointment requests that would end after closing time, , if the user specifically requested the exact hour.",
-    "Do not accept appointment requests for dates before today.",
-    "Do not accept past times today. For example, if it is already afternoon, do not accept today morning or an earlier time today.",
-    "If the caller requests an unavailable past or out-of-hours time, briefly explain that it is outside clinic hours or already past, then ask for another day or time.",
-    "Do not search slots for requests that are clearly outside these boundaries.",
+    "Only enforce time boundaries when the caller gives an exact clock time (e.g., 9:00, 14:30).",
+    "Do not enforce boundaries for broad times (e.g., morning, afternoon, tomorrow, next week).",
+
+    f"Clinic hours are {DEFAULT_OPENING_TIME} to {DEFAULT_CLOSING_TIME}.",
+    f"Each appointment lasts {DEFAULT_APPOINTMENT_DURATION_MIN} minutes.",
+
+    "For exact times, the appointment must start and finish within clinic hours.",
+    "Reject exact times that are in the past or outside clinic hours, then ask for another time.",
+
+    "For broad times, proceed to search for valid slots without asking for clarification.",
 ]
 
 COLLECTING_INFO_SPEECH_RULES = [
