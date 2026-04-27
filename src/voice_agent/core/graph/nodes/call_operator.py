@@ -103,13 +103,16 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     internal_call = state.get("internal_call") or False
     if internal_call:
         local_state = commit_assistant_message(state)
+        messages=local_state.get("messages") or []
+    else:
+        messages=state.get("messages") or []
 
     operator_data = get_state_data(state, 'call_operator')
     last_assistant_started_at = operator_data.get("last_assistant_started_at", None)
     heard_seconds = None
     if last_assistant_started_at:
         heard_seconds = time.monotonic() - last_assistant_started_at
-    prompt = build_operator_prompt(state, heard_seconds=heard_seconds, internal_call=internal_call)
+    prompt = build_operator_prompt(state,recent_messages=messages, heard_seconds=heard_seconds, internal_call=internal_call)
     set_node_data(
         local_state,
         "call_operator",

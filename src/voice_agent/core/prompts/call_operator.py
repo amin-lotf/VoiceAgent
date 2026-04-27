@@ -118,11 +118,6 @@ def _format_messages(messages: list[dict]) -> str:
     return "\n".join(lines) if lines else "none"
 
 
-def _get_recent_messages(state: CallState) -> list[dict]:
-    messages = state.get("messages") or []
-    if not isinstance(messages, list):
-        return []
-    return messages
 
 
 
@@ -130,10 +125,10 @@ def _get_recent_messages(state: CallState) -> list[dict]:
 
 
 
-def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_call: bool = False):
+
+def build_operator_prompt(state:CallState, *,recent_messages:list[dict[str, Any]],heard_seconds:float=None, internal_call: bool = False):
 
     user_text = (state.get("user_text") or "").strip()
-    recent_messages = _get_recent_messages(state)
     appointment_draft:AppointmentDraft = state.get("appointment_draft") or {}
     appointment_info = format_appointment_info(appointment_draft)
     recent_changes = ""
