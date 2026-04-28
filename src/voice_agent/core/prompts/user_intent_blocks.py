@@ -5,7 +5,7 @@ from voice_agent.core.types import UserIntent
 INTENT_PHASE_BOUNDARY_RULES = [
     "This phase only identifies the caller's intent.",
     "Do not ask for appointment details such as name, phone number, reason for visit, or preferred time in this phase.",
-    "Once booking intent is clear, give a short transition reply and set next_action to process_intent.",
+    "Once booking intent is clear, give a short waiting reply and set next_action to process_intent.",
 ]
 
 REQUESTING_USER_INTENT_RULES = [
@@ -15,17 +15,9 @@ REQUESTING_USER_INTENT_RULES = [
     "Do not proactively list supported actions unless the caller explicitly asks what you can help with.",
     "Do not assume the caller wants a new appointment unless they clearly say so.",
     "If the caller clearly states they want to book a new appointment, extract that intent and do not ask another intent question in the same response.",
-    'After extracting a clear booking intent, give a short natural transition reply.',
+    'After extracting a clear booking intent, give a short natural waiting reply.',
 ]
 
-NEXT_ACTION_RULES = [
-    'Allowed next_action values: "ask_user", "process_intent".',
-    'Use "ask_user" when the caller intent is still missing or unclear.',
-    'Use "ask_user" when user_intent is "{not_specified}".',
-    'Use "process_intent" only when user_intent is a clear supported intent such as booking an appointment.',
-    'When next_action is "process_intent", do not ask another question.',
-    'When next_action is "process_intent", the spoken reply should only be a short transition."',
-]
 
 
 def _build_next_action_rules() -> list[str]:

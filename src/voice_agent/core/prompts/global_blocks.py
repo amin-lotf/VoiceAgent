@@ -25,13 +25,6 @@ INTERRUPTION_HANDLING_RULES = [
     "Keep it short and natural.",
     "Do not mention interruption explicitly.",
 ]
-SHORT_TRANSITION_REPLY_EXAMPLES = [
-    "One moment please.",
-    "Okay, one moment.",
-    "Just a moment.",
-    "Let me check that.",
-    "Hold on a second.",
-]
 
 OFFICE_INFO_RULES = [
     "If the user asks about office information, answer directly from office knowledge.",

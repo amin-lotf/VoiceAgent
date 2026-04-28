@@ -4,7 +4,7 @@ COLLECTING_INFO_PHASE_RULES = [
     "This phase collects the minimum information needed to book an appointment.",
     "Required fields: caller name, phone number, reason for visit, and requested day.",
     "Use the active conversation context first. Do not ask for a field that was already provided.",
-    'If all required fields appear available, give only a short transition reply and set next_action to "extract_info".',
+    'If all required fields appear available, give only a short waiting reply for letting you input the data and set next_action to "extract_info".',
     'If any required field is missing or unclear, ask for exactly one missing field and set next_action to "ask_user".',
 ]
 
@@ -25,7 +25,7 @@ COLLECTING_PHONE_RULES = [
     "Accept phone numbers spoken as digits, digit words, or a mix of both. e.g, O one two. eight. eight -> O1288",
     "Treat spoken digit words as digits: zero=0, one=1, two=2, three=3, four=4, five=5, six=6, seven=7, eight=8, nine=9.",
     "Treat the letter O or o as 0 when it appears inside a phone-number-like sequence.",
-    "If the caller already gave a phone-number-like sequence, do not ask for the phone number again.",
+    "If the caller already gave a phone-number-like sequence, you may repeat it once and ask for confirmation only if you doubt it.",
     "Do not ask for country code unless the caller's number is unusable without it.",
 ]
 
