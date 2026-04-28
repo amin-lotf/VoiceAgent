@@ -30,16 +30,10 @@ VERIFICATION_NEXT_ACTION_INTERNAL_RULES = [
     'Allowed next_action: "ask_user".',
 ]
 
-VERIFICATION_REPLY_STYLE_RULES = [
-    "The spoken verification reply should sound natural and short.",
-    'Use a natural style such as: "So I have your name as [name], your phone number as [phone], and the visit is for [reason] on [requested time]. Is that correct?"'
-    "Do not sound robotic or overly formal.",
-    "Do not repeat the same field labels mechanically unless needed for clarity.",
-]
 
 VERIFICATION_CONFIRM_RULES = [
     "If the caller clearly confirms that the information is correct, do not ask another question in the same response.",
-    'Give a short natural transition reply such as "One moment please." or "Okay, one moment please."',
+    'Give a short natural waiting reply to inform the user to wait a moment.',
     'Set next_action to "mark_verified".',
 ]
 
@@ -47,14 +41,13 @@ VERIFICATION_REJECT_WITH_CORRECTION_RULES = [
     "If the caller rejects the information and also clearly provides the correction in the same response, do not ask another question in the same response.",
     "Do not try to rewrite or normalize the corrected value in this phase.",
     "Do not argue, explain, or restate the full record again.",
-    'Give a short natural transition reply such as "Okay, one moment please."',
+    'Give a short waiting reply to inform user to wait for you to make the changes',
     'Set next_action to "extract_info".',
 ]
 
 VERIFICATION_REJECT_WITHOUT_CORRECTION_RULES = [
-    "If the caller rejects the information but does not clearly say what should be changed, ask one short natural follow-up question asking what should be corrected.",
-    'Example style: "Okay, what would you like me to correct?"',
-    'Set next_action to "ask_user".',
+    "If the caller rejects the information but does not clearly say what should be changed, ask one short natural   question asking what should be corrected, without repeating the user information.",
+    'In that case, set next_action to "ask_user".',
 ]
 
 VERIFICATION_SCOPE_RULES = [
@@ -86,7 +79,7 @@ def get_verification_rules(is_internal_call: bool=False) -> list[str]:
         extend_prompt_section(all_verification_rules, "Verification next action internal", VERIFICATION_NEXT_ACTION_INTERNAL_RULES)
     else:
         extend_prompt_section(all_verification_rules, "Verification next action", VERIFICATION_NEXT_ACTION_RULES)
-    extend_prompt_section(all_verification_rules, "Verification reply style", VERIFICATION_REPLY_STYLE_RULES)
+    # extend_prompt_section(all_verification_rules, "Verification reply style", VERIFICATION_REPLY_STYLE_RULES)
     extend_prompt_section(all_verification_rules, "Verification confirm", VERIFICATION_CONFIRM_RULES)
     if not is_internal_call:
         extend_prompt_section(all_verification_rules, "Verification reject with correction", VERIFICATION_REJECT_WITH_CORRECTION_RULES)

@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 from voice_agent.const import DEFAULT_TZ
 from voice_agent.core.graph.nodes.utils import set_node_data
+from voice_agent.core.types import NextAction
 
 T = TypeVar("T")
 
@@ -204,18 +205,27 @@ def sanitize_spoken_text(text: str) -> str:
 
 
 def commit_assistant_message(state: dict, limit: int = 20) -> dict:
-    clean = dict(state)
-    text = clean.get("assistant_text")
+    local_state = {}
+    text = state.get("assistant_text")
     text = sanitize_spoken_text((text or "").strip())
     if not text:
         return {}
 
     messages = list(state.get("messages") or [])
     messages.append({"role": "assistant", "content": text})
-    clean["messages"] = messages[-limit:]
-    clean["prev_assistant_text"] = text
-    clean["assistant_text"] = ""
-    return clean
+    local_state["messages"] = messages[-limit:]
+    local_state["prev_assistant_text"] = text
+    local_state["assistant_text"] = ""
+    return local_state
+
+def prep_internal_operator_call(state:dict, *,clear_messages:bool=False) -> dict:
+    local_state = commit_assistant_message(state)
+    if clear_messages:
+        local_state["messages"] = []
+    local_state["internal_call"] = True
+    local_state['next_action'] = NextAction.CALL_OPERATOR
+    return local_state
+
 
 
 class SpokenTextStreamNormalizer:

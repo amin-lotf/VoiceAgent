@@ -5,7 +5,7 @@ from voice_agent.core.types import UserIntent
 INTENT_PHASE_BOUNDARY_RULES = [
     "This phase only identifies the caller's intent. The current available option is booking appointments at this moment.",
     "Do not ask for appointment details such as name, phone number, reason for visit, or preferred time in this phase.",
-    "Once booking intent is clear, give a short waiting reply and set next_action to process_intent.",
+    "Once booking intent is clear, give a short waiting reply and set next_action to process_intent. In that case, Never repeat the user information.",
 ]
 
 REQUESTING_USER_INTENT_RULES = [

@@ -11,7 +11,7 @@ SLOT_CONFIRMATION_PHASE_RULES = [
 SLOT_CONFIRMATION_REQUESTED_TIME_TEXT_RULES = [
     "Output requested_time_text only when next_action is \"extract_datetime\".",
     "requested_time_text must be the caller's final requested scheduling preference.",
-    "If the caller's final requested scheduling preference is already shown  in the appointment information and is not being changed, do not output requested_time_text.",
+    f"If the caller's final requested scheduling preference is already shown  in the appointment information and is not being changed, set requested_time_text  = {NOT_SPECIFIED}.",
     "Use the active conversation context to combine partial time answers when needed.",
     "Example: if the caller first says \"morning\" and later says \"tomorrow\", output \"tomorrow morning\".",
     "Accept natural expressions such as tomorrow, next Monday, Friday morning, this weekend, or 3 pm.",
@@ -28,12 +28,7 @@ SLOT_CONFIRMATION_UPDATED_INFO_RULES = [
     "If a previously requested correction is already reflected in the injected information, treat it as already handled.",
 ]
 
-SLOT_CONFIRMATION_REPLY_STYLE_RULES = [
-    "The spoken reply must be natural, short, and suitable for a phone call.",
-    "Do not sound robotic or overly formal.",
-    "Ask at most one question.",
-    "Do not repeat field labels mechanically unless needed for clarity.",
-]
+
 
 SLOT_CONFIRMATION_SCOPE_RULES = [
     'Allowed next_action: "ask_user", "extract_info", "extract_datetime", "book_appointment".',
@@ -55,7 +50,7 @@ SLOT_CONFIRMATION_TIME_RULES = [
 ]
 
 SLOT_CONFIRMATION_DECISION_RULES = [
-    'If you clearly offered the slot in the active conversation and the caller clearly accepts the offered slot, give a short transition reply such as "Okay, one moment please." and set next_action to "book_appointment". Do not ask another question.',
+    'If you clearly offered the slot in the active conversation and the caller clearly accepts the offered slot, give a short waiting reply to let user wait for finalizing the appointment and set next_action to "book_appointment". Do not ask another question.',
     'If the caller rejects the offered slot and clearly provides a new requested date or time in the same response, give a short transition reply such as "Okay, one moment please." and set next_action to "extract_datetime". Do not ask another question.',
     'If the caller gives a short acknowledgement such as "sure" after a transition reply, continue the same internal action only if Caller Now contains that acknowledgement. Do not apply this rule when Caller Now is "none".',
     'In that case, set next_action to "extract_datetime".',
@@ -71,7 +66,7 @@ SLOT_CONFIRMATION_INTERNAL_CALL_RULES = [
     'Do not treat Caller Now "none" as yes, sure, okay, or any other confirmation.',
     'If there is a held appointment that has not been clearly accepted by the caller, offer the held appointment and ask whether it works.',
     'When asking the caller to confirm the held appointment, set next_action to "ask_user".',
-    'Use "book_appointment" only when the caller explicitly accepts the currently offered held appointment in the active conversation.',
+    'Use "book_appointment" only when you clearly asked whether the offered slots works and  then caller explicitly accepts it in the active conversation.',
 ]
 
 SLOT_CONFIRMATION_ACTION_GUARDRAILS = [
@@ -89,8 +84,7 @@ SLOT_CONFIRMATION_ANTI_HALLUCINATION_RULES = [
 ]
 
 SLOT_CONFIRMATION_OPENING_RULES = [
-    "When first offering the slot  or the slot has updated and changed, tell the caller naturally that this slot is available and ask whether it works for them.",
-    'Example style: "I have a slot available on [offered slot]. Would that work for you?"',
+    "When first offering the slot  or the slot has updated and changed, inform the caller   that this slot is available and ask whether it works for them.",
 ]
 
 
@@ -99,7 +93,6 @@ def get_slot_confirmation_rules(is_internal_call: bool=False) -> list[str]:
 
     extend_prompt_section(all_rules, "Slot confirmation phase", SLOT_CONFIRMATION_PHASE_RULES)
     extend_prompt_section(all_rules, "Updated information handling", SLOT_CONFIRMATION_UPDATED_INFO_RULES)
-    extend_prompt_section(all_rules, "Reply style", SLOT_CONFIRMATION_REPLY_STYLE_RULES)
     extend_prompt_section(all_rules, "Opening the slot confirmation", SLOT_CONFIRMATION_OPENING_RULES)
 
     extend_prompt_section(all_rules, "Anti hallucination rules", SLOT_CONFIRMATION_ANTI_HALLUCINATION_RULES)

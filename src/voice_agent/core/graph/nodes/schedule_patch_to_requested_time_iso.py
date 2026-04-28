@@ -274,7 +274,14 @@ async def node_schedule_patch_to_requested_time_iso(
         else:
             updated_appointment["requested_time_iso"] = str(NOT_SPECIFIED)
             node_status = OperationStatus.FAILURE
-            local_state['next_action'] = NextAction.CALL_OPERATOR
+            local_state.update(
+                record_node_error(
+                    state,
+                    node_name="datetime_extractor",
+                    error_type=ErrorType.LLM_CALL,
+                )
+            )
+            local_state['next_action'] = NextAction.REPORT_ERROR
 
         local_state["appointment_draft"] = updated_appointment
 

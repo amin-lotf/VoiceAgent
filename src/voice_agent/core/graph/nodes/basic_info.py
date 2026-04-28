@@ -6,7 +6,8 @@ from voice_agent.const import NOT_SPECIFIED
 from voice_agent.core.db.mappers import to_view
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.nodes.utils import get_state_data, view_id, set_node_data, is_not_specified
-from voice_agent.core.graph.utils import run_non_interruptible, record_node_error, mark_node_succeeded
+from voice_agent.core.graph.utils import run_non_interruptible, record_node_error, mark_node_succeeded, \
+    prep_internal_operator_call
 from voice_agent.core.services.hubspot_sync import enqueue_hubspot_appointment_scheduled_event
 from voice_agent.core.types import CallState, NextAction, AppointmentDraft, AppointmentPatch, AppointmentStatus, \
     AppointmentView, OperationStatus, AssistantPhase, FieldChange, RequiredAppointmentField, ErrorType
@@ -245,20 +246,15 @@ async def node_basic_info(
     # if True:
     if not _has_updatable_core_fields(updated_appointment):
         logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)
-        local_state={
-            "next_action": NextAction.CALL_OPERATOR,
-        "assistant_phase" : AssistantPhase.COLLECTING_INFO,
-            "internal_call":True,
-        }
+        local_state .update( prep_internal_operator_call(state, clear_messages=False))
+        local_state['assistant_phase'] = AssistantPhase.COLLECTING_INFO
         missing_fields = _missing_required_fields(updated_appointment)
         set_node_data(local_state, "basic_info", {"missing_required_fields": missing_fields})
         return local_state
-    local_state: dict[str, Any] = {
-        "appointment_draft": updated_appointment,
-        "next_action": NextAction.CALL_OPERATOR,
-        "assistant_phase" : AssistantPhase.VERIFYING_INFO,
-        "internal_call":True
-    }
+    local_state .update( prep_internal_operator_call(state,clear_messages=True))
+    local_state['appointment_draft']=updated_appointment
+    local_state['assistant_phase'] = AssistantPhase.VERIFYING_INFO
+
     set_node_data(
         local_state,
         "basic_info",

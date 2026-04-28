@@ -123,8 +123,6 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     def _after_datetime_extractor(state: CallState):
         next_action = state.get("next_action")
         match next_action:
-            case NextAction.CALL_OPERATOR:
-                return 'call_operator'
             case NextAction.HOLD_APPOINTMENT:
                 return 'schedule_patch_to_requested_time_iso'
             case NextAction.BOOK_APPOINTMENT:
@@ -136,7 +134,6 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
 
     graph.add_conditional_edges('datetime_extractor', _after_datetime_extractor, {
         'finalize_response': 'finalize_response',
-        'call_operator': 'call_operator',
         'schedule_patch_to_requested_time_iso': 'schedule_patch_to_requested_time_iso',
         'book_appointment': 'book_appointment',
         'error_handling': 'error_handling',
@@ -145,15 +142,12 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
     def _after_schedule_patch_to_requested_time_iso(state: CallState):
         next_action = state.get("next_action")
         match next_action:
-            case NextAction.CALL_OPERATOR:
-                return 'call_operator'
             case NextAction.REPORT_ERROR:
                 return 'error_handling'
             case _:
                 return 'hold_appointment'
 
     graph.add_conditional_edges('schedule_patch_to_requested_time_iso', _after_schedule_patch_to_requested_time_iso, {
-        'call_operator': 'call_operator',
         'hold_appointment': 'hold_appointment',
     })
 

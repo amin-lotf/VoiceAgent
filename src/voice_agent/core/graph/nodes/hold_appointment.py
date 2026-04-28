@@ -5,7 +5,8 @@ import logging
 from typing import Any
 
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
-from voice_agent.core.graph.utils import run_non_interruptible, record_node_error, mark_node_succeeded
+from voice_agent.core.graph.utils import run_non_interruptible, record_node_error, mark_node_succeeded, \
+    prep_internal_operator_call
 from voice_agent.core.services.appointments import (
     HoldAppointmentResult,
     hold_requested_appointment,
@@ -78,15 +79,13 @@ async def node_hold_appointment(
     draft["status"] = AppointmentStatus.HELD
     draft["last_offered_slot_start_at"] = held_view.get("start_at")
     draft["offered_time_confirmed"] = False
-
+    local_state.update(prep_internal_operator_call(state, clear_messages=True))
     local_state.update(
         {
             "appointment_draft": draft,
             "held_appointment_view": held_view,
             "scheduled_appointment_view": scheduled_view,
             "current_appointment_id": int(held_view["id"]) if held_view.get("id") else None,
-            "next_action": NextAction.CALL_OPERATOR,
-            "internal_call": True
         }
     )
     mark_node_succeeded(state, local_state, "hold_appointment")

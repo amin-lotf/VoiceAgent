@@ -101,11 +101,11 @@ async def node_call_operator(state: CallState) -> dict[str, Any]:
     """
     local_state: dict[str, Any] = {}
     internal_call = state.get("internal_call") or False
-    if internal_call:
-        local_state = commit_assistant_message(state)
-        messages=local_state.get("messages") or []
-    else:
-        messages=state.get("messages") or []
+    # if internal_call:
+    #     local_state = commit_assistant_message(state)
+    #     messages=local_state.get("messages") or []
+    # else:
+    messages=state.get("messages") or []
 
     operator_data = get_state_data(state, 'call_operator')
     last_assistant_started_at = operator_data.get("last_assistant_started_at", None)
