@@ -8,7 +8,7 @@ from voice_agent.core.prompts.booking_appointment_blocks import get_book_appoint
 from voice_agent.core.prompts.collecting_notes_blocks import get_collecting_notes_rules
 from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, OUT_OF_SCOPE_RULES, \
     CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules, INTERRUPTION_HANDLING_RULES, \
-    APPOINTMENT_TIME_BOUNDARY_RULES, COLLECTING_INFO_SPEECH_RULES
+    APPOINTMENT_TIME_BOUNDARY_RULES, SPEECH_RULES
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
@@ -131,13 +131,15 @@ def build_operator_prompt(state:CallState, *,recent_messages:list[dict[str, Any]
     user_text = (state.get("user_text") or "").strip()
     appointment_draft:AppointmentDraft = state.get("appointment_draft") or {}
     appointment_info = format_appointment_info(appointment_draft)
+    assistant_phase = state.get("assistant_phase")
     recent_changes = ""
     last_assistant_text=state.get('prev_assistant_text', 'none')
     required_seconds = estimate_speech_seconds(last_assistant_text)
     needs_repeat= not internal_call and heard_seconds and heard_seconds < required_seconds
     all_rules = []
     extend_prompt_section(all_rules, "Global operator", GLOBAL_OPERATOR_RULES)
-    extend_prompt_section(all_rules, "Collecting info speech rules", COLLECTING_INFO_SPEECH_RULES)
+    if assistant_phase != AssistantPhase.COLLECTING_NOTES:
+        extend_prompt_section(all_rules, "speech rules", SPEECH_RULES)
     extend_prompt_section(all_rules, "Time Now", [time_now()])
     if needs_repeat:
         extend_prompt_section(all_rules, "Interrupted Message", INTERRUPTION_HANDLING_RULES)

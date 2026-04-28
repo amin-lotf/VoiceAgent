@@ -248,6 +248,7 @@ async def node_basic_info(
         local_state={
             "next_action": NextAction.CALL_OPERATOR,
         "assistant_phase" : AssistantPhase.COLLECTING_INFO,
+            "internal_call":True,
         }
         missing_fields = _missing_required_fields(updated_appointment)
         set_node_data(local_state, "basic_info", {"missing_required_fields": missing_fields})

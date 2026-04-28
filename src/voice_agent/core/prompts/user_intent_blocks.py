@@ -3,7 +3,7 @@ from voice_agent.core.prompts.utils import extend_prompt_section
 from voice_agent.core.types import UserIntent
 
 INTENT_PHASE_BOUNDARY_RULES = [
-    "This phase only identifies the caller's intent.",
+    "This phase only identifies the caller's intent. The current available option is booking appointments at this moment.",
     "Do not ask for appointment details such as name, phone number, reason for visit, or preferred time in this phase.",
     "Once booking intent is clear, give a short waiting reply and set next_action to process_intent.",
 ]
@@ -28,7 +28,7 @@ def _build_next_action_rules() -> list[str]:
         'When next_action is "ask_user", ask one short natural intent question if needed.',
         'When next_action is "process_intent", do not ask another question.',
         'When next_action is "process_intent", the spoken reply should only be a short transition."',
-        'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply.',
+        'If the transition replied given, and caller now is Short acknowledgements, e.g., sure, from the caller which do not require a response, then In that case, do not produce any spoken reply  if next_action is not "ask_user".',
         'In that case, set next_action to "process_intent".',
     ]
 

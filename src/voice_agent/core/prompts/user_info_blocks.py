@@ -4,7 +4,7 @@ COLLECTING_INFO_PHASE_RULES = [
     "This phase collects the minimum information needed to book an appointment.",
     "Required fields: caller name, phone number, reason for visit, and requested day.",
     "Use the active conversation context first. Do not ask for a field that was already provided.",
-    'If all required fields appear available, give only a short waiting reply for letting you input the data and set next_action to "extract_info".',
+    'If all required fields appear available, always give  a short waiting reply for letting you input the data and set next_action to "extract_info".',
     'If any required field is missing or unclear, ask for exactly one missing field and set next_action to "ask_user".',
 ]
 
@@ -49,8 +49,6 @@ COLLECTING_INFO_TRANSITION_RULES = [
     "When all required fields appear present, do not ask another question.",
     "Give only a short natural waiting reply.",
     'Set next_action to "extract_info".',
-    "If the previous assistant reply was only a transition and the caller now gives a short acknowledgement such as sure, okay, or yes, do not produce a spoken reply.",
-    'In that case, still set next_action to "extract_info".',
 ]
 
 
