@@ -1,6 +1,6 @@
 from voice_agent.const import GLOBAL_ERROR_THRESHOLD, CONSECUTIVE_ERROR_THRESHOLD
 from voice_agent.core.graph.nodes.utils import stream_text_response, set_node_data
-from voice_agent.core.types import CallState, NextAction
+from voice_agent.core.types import CallState, NextAction, ErrorType
 
 
 def node_error_handling(state: CallState) -> dict:
@@ -23,7 +23,7 @@ def node_error_handling(state: CallState) -> dict:
     should_handoff = (
         global_count >= GLOBAL_ERROR_THRESHOLD
         or consecutive >= CONSECUTIVE_ERROR_THRESHOLD
-        or error_type in {"db_error", "booking_write_error"}
+        or error_type != ErrorType.FATAL_ERROR
     )
 
     local_state: dict = {}

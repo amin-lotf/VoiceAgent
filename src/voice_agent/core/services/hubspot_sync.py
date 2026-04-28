@@ -467,6 +467,7 @@ async def enqueue_hubspot_sync_event(
         event.id,
         chosen_object_type.value,
         next_attempt_at.isoformat(),
+
     )
 
 
@@ -778,7 +779,7 @@ async def sync_appointment_event_to_hubspot(
         )
 
     if appointment.status != AppointmentStatus.SCHEDULED:
-        logger.info(
+        logger.warning(
             "Skipping HubSpot sync appointment_id=%s event_type=%s because current_status=%s",
             appointment.id,
             event_type,
@@ -966,5 +967,5 @@ async def run_hubspot_sync_worker(
                 logger.exception("HubSpot sync worker iteration failed")
                 await asyncio.sleep(settings.HUBSPOT_SYNC_POLL_INTERVAL_SECONDS)
     except asyncio.CancelledError:
-        logger.info("HubSpot sync worker stopped")
+        logger.warning("HubSpot sync worker stopped")
         raise

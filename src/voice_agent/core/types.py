@@ -125,6 +125,7 @@ class ErrorType(StrEnum):
     LLM_CALL = "llm_call"
     PARSE_ERROR = "parse_error"
     DB_ERROR = "db_error"
+    FATAL_ERROR = "fatal_error"
 
 @dataclass(frozen=True)
 class TimeSlot:

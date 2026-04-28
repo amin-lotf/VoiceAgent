@@ -6,18 +6,9 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
+from voice_agent.const import TOTAL_DELAY_KEY, AI_DELAY_KEY, NON_AI_DELAY_KEY, INPUT_TOKENS_KEY, OUTPUT_TOKENS_KEY, \
+    TOTAL_TOKENS_KEY, FIRST_TOKEN_DELAY_KEY, DELAY_KEYS, TOKEN_KEYS, NODE_TIMING_KEYS
 from voice_agent.core.types import CallState
-
-TOTAL_DELAY_KEY = "total_delay_s"
-AI_DELAY_KEY = "ai_delay_s"
-NON_AI_DELAY_KEY = "non_ai_delay_s"
-INPUT_TOKENS_KEY = "input_tokens"
-OUTPUT_TOKENS_KEY = "output_tokens"
-TOTAL_TOKENS_KEY = "total_tokens"
-FIRST_TOKEN_DELAY_KEY = "first_token_delay_s"
-DELAY_KEYS = (TOTAL_DELAY_KEY, AI_DELAY_KEY, NON_AI_DELAY_KEY)
-TOKEN_KEYS = (INPUT_TOKENS_KEY, OUTPUT_TOKENS_KEY, TOTAL_TOKENS_KEY)
-NODE_TIMING_KEYS = DELAY_KEYS + TOKEN_KEYS
 
 
 @dataclass(slots=True)

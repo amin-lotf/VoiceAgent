@@ -305,12 +305,12 @@ class InterviewEngine:
         state: CallState,
         turn_total_delay_s: float,
     ) -> None:
-        logger.warning(
-            "delay summary for call_id=%s event=%s:\n%s\n%s",
-            call_id,
+        logger.info(
+            "delay summary for   event=%s:\n%s\n%s",
             event,
             format_turn_timing_summary(state=state, total_delay_s=turn_total_delay_s),
             format_node_timing_summary(state),
+            extra={"call_id": call_id},
         )
 
     async def _persist_or_delete(
@@ -405,10 +405,10 @@ class InterviewEngine:
                             final_state = cast(CallState, chunk)
 
                 except asyncio.CancelledError:
-                    logger.info("Graph run cancelled for call_id=%s", call_id)
+                    logger.info("Graph run cancelled", extra={"call_id": call_id})
                     raise
                 except Exception:
-                    logger.exception("Graph run failed for call_id=%s", call_id)
+                    logger.exception("Graph run failed", extra={"call_id": call_id})
                     raise
                 finally:
                     await aio_queue.put(None)
@@ -506,7 +506,6 @@ class InterviewEngine:
         Stream tokens/debug chunks and emit FINAL only after all deferred buffered
         text has been drained.
         """
-        logger.warning(f'user text: {user_text}')
         turn_started_at = perf_counter()
         self._last_final_state: CallState | None = None
 

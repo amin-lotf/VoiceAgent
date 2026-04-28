@@ -14,11 +14,9 @@ from voice_agent.core.api.v1.schemas import RetellResponseRequiredIn, RetellUpda
 from voice_agent.core.db.session import AsyncSessionLocal
 from voice_agent.core.graph.engine import InterviewEngine
 from voice_agent.core.graph.node_timing import (
-    FIRST_TOKEN_DELAY_KEY,
-    TOTAL_DELAY_KEY,
-    TOTAL_TOKENS_KEY,
     build_recorded_turn_metrics,
 )
+from voice_agent.const import TOTAL_DELAY_KEY, TOTAL_TOKENS_KEY, FIRST_TOKEN_DELAY_KEY
 from voice_agent.core.graph.utils import sanitize_spoken_text
 from voice_agent.core.services.call_history import CallHistoryRecorder
 from voice_agent.core.types import CallEvent, ChunkKind
@@ -170,12 +168,6 @@ async def stream_engine_to_retell(
                 first_token_delay_s = time.perf_counter() - turn_started_at
             full_text_parts.append(token_text)
 
-            # logger.warning(
-            #     "RETELL TOKEN | call_id=%s | response_id=%s | token=%r",
-            #     call_id,
-            #     response_id,
-            #     token_text,
-            # )
 
             await ws_send(
                 websocket,
@@ -280,21 +272,6 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
             )
         ),
     )
-    # begin = await engine.run_event(
-    #     call_id=call_id,
-    #     event=CallEvent.CALL_STARTED,
-    #     user_text=None,
-    #     meta={"retell_phase": "call_started"},
-    # )
-    #
-    # await ws_send(
-    #     websocket,
-    #     RetellResponseOut(
-    #         response_id=0,
-    #         content=begin.assistant_text or "",
-    #         content_complete=True,
-    #     ),
-    # )
 
     await ws_send(
         websocket,

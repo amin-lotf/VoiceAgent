@@ -14,6 +14,7 @@ COLLECTING_FIELD_RULES = [
     "If a field is unclear, ask again naturally without saying the caller was wrong.",
     "If the caller refuses a required field, briefly say it is needed to book the appointment and ask again.",
     "Do not repeat a question just because the answer was brief.",
+    "Never give a suggestion or an example of how a field should be answered unless the caller clearly asks for an example.",
 ]
 
 COLLECTING_NAME_RULES = [

@@ -5,11 +5,9 @@ from types import SimpleNamespace
 import pytest
 
 from voice_agent.core.graph.node_timing import (
-    INPUT_TOKENS_KEY,
-    OUTPUT_TOKENS_KEY,
-    TOTAL_TOKENS_KEY,
     with_node_timing,
 )
+from voice_agent.const import INPUT_TOKENS_KEY, OUTPUT_TOKENS_KEY, TOTAL_TOKENS_KEY
 from voice_agent.core.llm.openai_llm import _TimedChatOpenAI
 
 

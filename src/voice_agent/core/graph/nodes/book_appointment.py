@@ -30,8 +30,24 @@ async def node_book_appointment(
     held_id = view_id(held_view)
     scheduled_id = view_id(scheduled_view)
     if held_id is None:
-        logger.warning("book_appointment: held_appointment_view missing")
-        return {}
+        logger.exception(
+            "held appointment is missing",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'book_appointment',
+            }
+        )
+        local_state.update(
+            record_node_error(
+                state,
+                node_name="book_appointment",
+                error_type=ErrorType.FATAL_ERROR,
+                error_message='held appointment is missing'
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
+        return local_state
 
     async def _commit() -> ScheduleAppointmentResult:
         async with sessionmaker() as session:
@@ -45,7 +61,7 @@ async def node_book_appointment(
     try:
         result = await run_non_interruptible(state, _commit)
     except Exception as exc:
-        logger.exception("book_appointment: failed to schedule held appointment")
+
         local_state.update(
             record_node_error(
                 state,
@@ -55,6 +71,14 @@ async def node_book_appointment(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
+        logger.exception(
+            "Failed to schedule the held appointment",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'book_appointment',
+            }
+        )
         return local_state
 
     persisted_scheduled_view = result.scheduled_view
@@ -78,5 +102,12 @@ async def node_book_appointment(
         }
     )
     mark_node_succeeded(state, local_state, "book_appointment")
-    logger.warning("book_appointment: local_state=%s", local_state)
+    logger.info(
+        "Appointment scheduled successfully",
+        extra={
+            'call_id': state.get('call_id'),
+            'phase': state.get('assistant_phase'),
+            'node': 'book_appointment',
+        }
+    )
     return local_state

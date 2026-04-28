@@ -9,12 +9,10 @@ from pydantic import BaseModel
 from voice_agent.core.db.session import AsyncSessionLocal
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 from voice_agent.core.graph.node_timing import (
-    FIRST_TOKEN_DELAY_KEY,
-    TOTAL_DELAY_KEY,
-    TOTAL_TOKENS_KEY,
     get_recorded_turn_metrics,
     summarize_recorded_turn_metrics,
 )
+from voice_agent.const import TOTAL_DELAY_KEY, TOTAL_TOKENS_KEY, FIRST_TOKEN_DELAY_KEY
 
 router = APIRouter(prefix="/calls", tags=["calls"])
 

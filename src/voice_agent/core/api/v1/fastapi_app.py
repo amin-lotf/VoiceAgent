@@ -16,6 +16,7 @@ from voice_agent.core.graph.engine import InterviewEngine
 from voice_agent.core.services.hubspot_sync import run_hubspot_sync_worker
 from voice_agent.core.settings import settings
 from voice_agent.core.store.redis_store import RedisStateStore
+from voice_agent.logging import setup_logging
 
 logger = logging.getLogger('voice_agent')
 
@@ -36,7 +37,7 @@ def create_app() -> FastAPI:
                 name="hubspot-sync-worker",
             )
         else:
-            logger.info("HubSpot sync worker disabled because HUBSPOT_ACCESS_TOKEN is not configured")
+            logger.warning("HubSpot sync worker disabled because HUBSPOT_ACCESS_TOKEN is not configured")
 
         f_app.state.redis = r
         f_app.state.store = store
@@ -55,7 +56,7 @@ def create_app() -> FastAPI:
                 if active and not active.task.done():
                     active.task.cancel()
             await r.aclose()
-
+    setup_logging()
     f_app = FastAPI(
         title="Voice Agent API",
         description="Voice Agent API",

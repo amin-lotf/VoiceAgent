@@ -3,13 +3,6 @@ import asyncio
 import pytest
 
 from voice_agent.core.graph.node_timing import (
-    AI_DELAY_KEY,
-    FIRST_TOKEN_DELAY_KEY,
-    INPUT_TOKENS_KEY,
-    NON_AI_DELAY_KEY,
-    OUTPUT_TOKENS_KEY,
-    TOTAL_DELAY_KEY,
-    TOTAL_TOKENS_KEY,
     build_recorded_turn_metrics,
     build_turn_timing_payload,
     format_turn_timing_summary,
@@ -19,6 +12,8 @@ from voice_agent.core.graph.node_timing import (
     reset_node_timing_data,
     with_node_timing,
 )
+from voice_agent.const import TOTAL_DELAY_KEY, AI_DELAY_KEY, NON_AI_DELAY_KEY, INPUT_TOKENS_KEY, OUTPUT_TOKENS_KEY, \
+    TOTAL_TOKENS_KEY, FIRST_TOKEN_DELAY_KEY
 from voice_agent.core.graph.nodes.planner import node_planner
 
 

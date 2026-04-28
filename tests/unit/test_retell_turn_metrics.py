@@ -7,7 +7,7 @@ import pytest
 
 from voice_agent.core.api.v1.retell.router import stream_engine_to_retell
 from voice_agent.core.api.v1.schemas import RetellResponseOut
-from voice_agent.core.graph.node_timing import TOTAL_TOKENS_KEY
+from voice_agent.const import TOTAL_TOKENS_KEY
 from voice_agent.core.types import CallEvent, ChunkKind, EngineChunk
 
 

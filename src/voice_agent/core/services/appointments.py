@@ -458,31 +458,6 @@ async def delete_held_appointment(
         return await uow.appointments.delete(appointment_id)
 
 
-# async def update_held_appointment_details(
-#         uow: SqlAlchemyUnitOfWork,
-#         *,
-#         appointment_id: int,
-#         name: str,
-#         phone: str,
-#         reason_for_visit: str,
-#         notes: list[str],
-# ) -> AppointmentView:
-#     async with uow:
-#         appt = await uow.appointments.get(appointment_id)
-#         if appt is None:
-#             raise NotFound("Appointment not found")
-#         if appt.status != AppointmentStatus.HELD:
-#             raise NotFound("Only HELD appointments can be updated here")
-#         appt = await uow.appointments.update_fields(
-#             appointment_id,
-#             name=name,
-#             phone=phone,
-#             reason_for_visit=reason_for_visit,
-#             notes=notes,
-#         )
-#         assert appt is not None
-#         return to_view(appt)
-
 
 async def update_appointment_notes(
         uow: SqlAlchemyUnitOfWork,

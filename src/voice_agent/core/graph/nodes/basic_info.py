@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 def _build_sync_plan(
-    *,
-    appointment_status: AppointmentStatus | None,
-    held_id: int | None,
-    scheduled_id: int | None,
+        *,
+        appointment_status: AppointmentStatus | None,
+        held_id: int | None,
+        scheduled_id: int | None,
 ) -> list[tuple[str, int, bool]]:
     if appointment_status == AppointmentStatus.SCHEDULED:
         if scheduled_id is not None:
@@ -36,13 +36,13 @@ def _build_sync_plan(
         plan.append(("scheduled_appointment_view", scheduled_id, held_id is None))
     return plan
 
+
 def _is_missing(value: object) -> bool:
     if value is None:
         return True
     if isinstance(value, str) and not value.strip():
         return True
     return False
-
 
 
 def _merge_notes(
@@ -65,6 +65,8 @@ def _merge_notes(
             seen.add(text)
 
     return merged
+
+
 def _normalize_change_value(value: object) -> str | None:
     if value is None:
         return None
@@ -79,15 +81,15 @@ def _normalize_change_value(value: object) -> str | None:
 
 
 def build_field_changes(
-    *,
-    before: AppointmentDraft,
-    after: AppointmentDraft,
-    source_node: str,
+        *,
+        before: AppointmentDraft,
+        after: AppointmentDraft,
+        source_node: str,
 ) -> list[FieldChange]:
     changes: list[FieldChange] = []
 
     for field in RequiredAppointmentField:
-        old_value = _normalize_change_value(before.get(field.value,))
+        old_value = _normalize_change_value(before.get(field.value, ))
         new_value = _normalize_change_value(after.get(field.value))
 
         if new_value is None:
@@ -117,6 +119,7 @@ def build_field_changes(
             )
 
     return changes
+
 
 def apply_appointment_patch(
         *,
@@ -148,17 +151,17 @@ def _has_updatable_core_fields(draft: AppointmentDraft) -> bool:
         for field in ("name", "phone", "reason_for_visit")
     )
 
-def _missing_required_fields(draft: AppointmentDraft) -> list:
-    return  [field.value  for field in RequiredAppointmentField if is_not_specified(draft.get(field)) ]
 
+def _missing_required_fields(draft: AppointmentDraft) -> list:
+    return [field.value for field in RequiredAppointmentField if is_not_specified(draft.get(field))]
 
 
 async def _update_active_view_from_draft(
-    uow: SqlAlchemyUnitOfWork,
-    *,
-    appointment_id: int,
-    appointment_draft: AppointmentDraft,
-    include_notes: bool,
+        uow: SqlAlchemyUnitOfWork,
+        *,
+        appointment_id: int,
+        appointment_draft: AppointmentDraft,
+        include_notes: bool,
 ) -> AppointmentView:
     appt = await uow.appointments.get(appointment_id)
     if appt is None:
@@ -186,11 +189,11 @@ async def _update_active_view_from_draft(
 
 
 async def _sync_views_from_draft(
-    state: CallState,
-    *,
-    sessionmaker,
-    sync_plan: list[tuple[str, int, bool]],
-    appointment_draft: AppointmentDraft,
+        state: CallState,
+        *,
+        sessionmaker,
+        sync_plan: list[tuple[str, int, bool]],
+        appointment_draft: AppointmentDraft,
 ) -> dict[str, AppointmentView]:
     async def _commit() -> dict[str, AppointmentView]:
         async with sessionmaker() as session:
@@ -208,11 +211,12 @@ async def _sync_views_from_draft(
 
     return await run_non_interruptible(state, _commit)
 
+
 async def node_basic_info(
         state: CallState,
         *,
         sessionmaker,
-       ) -> dict[str, Any]:
+) -> dict[str, Any]:
     local_state = {}
     set_node_data(
         local_state,
@@ -222,12 +226,18 @@ async def node_basic_info(
         },
     )
     next_action = state.get('next_action')
-    if next_action not in  (NextAction.CHECK_INFO,NextAction.RETRY_ACTION):
+    if next_action not in (NextAction.CHECK_INFO, NextAction.RETRY_ACTION):
         if next_action == NextAction.MARK_VERIFIED:
             local_state['assistant_phase'] = AssistantPhase.CONFIRMING_SLOT
             local_state['next_action'] = NextAction.EXTRACT_DATETIME
-            local_state['messages']=[]
-        logger.warning(f'***********\nbasic_info:next_action: {next_action}\n***********')
+            local_state['messages'] = []
+            logger.info(
+                f'Info verified',
+                extra={
+                    'call_id': state.get('call_id'),
+                    'phase':state.get('assistant_phase'),
+                    'node': 'basic_info',
+                })
         return local_state
     extractor_node_data = get_state_data(state, 'basic_info_extractor')
     appointment_patch: AppointmentPatch = extractor_node_data.get('appointment_patch') or {}
@@ -245,14 +255,20 @@ async def node_basic_info(
 
     # if True:
     if not _has_updatable_core_fields(updated_appointment):
-        logger.warning("Skipping DB sync: appointment_draft still incomplete: %s", updated_appointment)
-        local_state .update( prep_internal_operator_call(state, clear_messages=False))
+        local_state.update(prep_internal_operator_call(state, clear_messages=False))
         local_state['assistant_phase'] = AssistantPhase.COLLECTING_INFO
         missing_fields = _missing_required_fields(updated_appointment)
         set_node_data(local_state, "basic_info", {"missing_required_fields": missing_fields})
+        logger.warning(
+            f'Verification incomplete: missing fields: {missing_fields}',
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'basic_info',
+            })
         return local_state
-    local_state .update( prep_internal_operator_call(state,clear_messages=True))
-    local_state['appointment_draft']=updated_appointment
+    local_state.update(prep_internal_operator_call(state, clear_messages=True))
+    local_state['appointment_draft'] = updated_appointment
     local_state['assistant_phase'] = AssistantPhase.VERIFYING_INFO
 
     set_node_data(
@@ -290,10 +306,16 @@ async def node_basic_info(
             )
             local_state["current_appointment_id"] = synced_held_id or synced_scheduled_id
         mark_node_succeeded(state, local_state, "basic_info")
+        logger.info(
+            f'Info updated',
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'basic_info',
+            })
         return local_state
 
     except Exception as exc:
-        logger.exception("Failed to sync appointment details to DB")
         local_state.update(
             record_node_error(
                 state,
@@ -303,5 +325,11 @@ async def node_basic_info(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
+        logger.exception(
+            f'Failed to update info: {str(exc)[:128]}',
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'basic_info',
+            })
         return local_state
-

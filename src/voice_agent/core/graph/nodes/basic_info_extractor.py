@@ -114,12 +114,15 @@ async def node_basic_info_extractor(
         parsed = _parse_json_object(raw_text)
         appointment_patch = _normalize_info_patch(parsed)
 
-        logger.warning(
-            "==========\n"
-            "basic_info_extractor: total generation time = %.3fs, parsed appointment_patch=%s\n"
-            "==========",
+        logger.info(
+            "basic_info_extractor: total generation time = %.3fs, parsed appointment_patch=%s",
             end_time - start_time,
             appointment_patch,
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'basic_info_extractor',
+            }
         )
 
         set_node_data(
@@ -143,8 +146,6 @@ async def node_basic_info_extractor(
         return local_state
 
     except Exception as exc:
-        logger.exception("basic_info_extractor failed")
-
         set_node_data(
             local_state,
             "basic_info_extractor",
@@ -162,4 +163,12 @@ async def node_basic_info_extractor(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
+        logger.exception(
+            f'Failed to extract the caller info',
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'basic_info_extractor',
+            }
+        )
         return local_state
