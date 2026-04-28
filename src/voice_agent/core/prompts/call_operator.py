@@ -126,10 +126,11 @@ def _format_messages(messages: list[dict]) -> str:
 
 
 
-def build_operator_prompt(state:CallState, *,recent_messages:list[dict[str, Any]],heard_seconds:float=None, internal_call: bool = False):
+def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_call: bool = False):
 
     user_text = (state.get("user_text") or "").strip()
     appointment_draft:AppointmentDraft = state.get("appointment_draft") or {}
+    recent_messages = state.get("messages") or []
     appointment_info = format_appointment_info(appointment_draft)
     assistant_phase = state.get("assistant_phase")
     recent_changes = ""

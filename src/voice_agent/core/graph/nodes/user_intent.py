@@ -11,9 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 async def node_user_intent(state: CallState) -> dict[str, Any]:
-    logger.warning("********************\nuser_intent: inputted state=%s\n******************", state)
     local_state = {}
-
     user_intent = state.get("user_intent") or UserIntent.UNDECIDED
 
     if user_intent == UserIntent.BOOK_APPOINTMENT:
@@ -21,5 +19,12 @@ async def node_user_intent(state: CallState) -> dict[str, Any]:
         local_state['assistant_phase'] = AssistantPhase.COLLECTING_INFO
     else:
         local_state['next_action']= NextAction.ASK_USER
-    logger.warning("********************\nuser_intent: local_state=%s\n******************", local_state)
+    logger.info(
+        f"Next action: {local_state['next_action']}",
+        extra={
+            'call_id': state.get('call_id'),
+            'phase': state.get('assistant_phase'),
+            'node': 'user_intent',
+
+        })
     return local_state

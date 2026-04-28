@@ -189,7 +189,7 @@ class InterviewEngine:
             return True
 
         if not force and not active.interruptible:
-            logger.info(
+            logger.warning(
                 "Skipping cancel for call_id=%s because active run is non-interruptible",
                 call_id,
             )
@@ -305,7 +305,7 @@ class InterviewEngine:
         state: CallState,
         turn_total_delay_s: float,
     ) -> None:
-        logger.info(
+        logger.debug(
             "delay summary for   event=%s:\n%s\n%s",
             event,
             format_turn_timing_summary(state=state, total_delay_s=turn_total_delay_s),

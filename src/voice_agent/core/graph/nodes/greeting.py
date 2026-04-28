@@ -39,10 +39,15 @@ async def node_on_call_started(state: CallState) -> dict[str, Any]:
             if is_first_token:
                 first_token_time = time.perf_counter()
                 is_first_token = False
-                logger.warning(
+                logger.debug(
                     "greeting: time to first token = %.3fs",
                     first_token_time - start_time,
-                )
+                    extra={
+                        'call_id': state.get('call_id'),
+                        'phase': state.get('assistant_phase'),
+                        'node': 'on_call_started',
+
+                    })
 
             greeting_parts.append(token)
 
@@ -52,14 +57,24 @@ async def node_on_call_started(state: CallState) -> dict[str, Any]:
         end_time = time.perf_counter()
         greeting_text = "".join(greeting_parts).strip()
 
-        logger.warning(
-            "greeting: total generation time = %.3fs, text=%s",
+        logger.debug(
+            "greeting: total generation time = %.3fs",
             end_time - start_time,
-            greeting_text,
-        )
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'on_call_started',
 
-    except Exception:
-        logger.warning("Greeting OpenAI streaming request failed", exc_info=True)
+            })
+
+    except Exception as exc:
+        logger.exception(
+            f"Greeting OpenAI streaming request failed: {str(exc)[:100]}", extra={
+            'call_id': state.get('call_id'),
+            'phase': state.get('assistant_phase'),
+            'node': 'on_call_started',
+
+        })
         greeting_text = ""
 
     greeting_text = greeting_text or "Hi, thanks for calling. How can I help you today?"
@@ -80,5 +95,13 @@ async def node_on_call_started(state: CallState) -> dict[str, Any]:
             "used_fallback": not bool(greeting_parts),
         },
     )
+    logger.info(
+        "greeting: %s",
+        greeting_text,
+        extra={
+            'call_id': state.get('call_id'),
+            'phase': state.get('assistant_phase'),
+            'node': 'on_call_started',
 
+        })
     return local_state

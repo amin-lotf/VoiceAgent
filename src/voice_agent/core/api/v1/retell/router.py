@@ -87,7 +87,8 @@ async def _safe_record(
     try:
         await operation
     except Exception:
-        logger.exception("Call history write failed | action=%s | call_id=%s", action, call_id)
+        logger.exception("Call history write failed | action=%s | call_id=%s", action, extra={"call_id": call_id})
+        raise
 
 
 async def run_engine_to_retell(
@@ -152,8 +153,7 @@ async def stream_engine_to_retell(
     ):
         if cancel_guard.is_set():
             logger.warning(
-                "RETELL STREAM CANCELLED | call_id=%s | response_id=%s | partial=%r",
-                call_id,
+                "RETELL STREAM CANCELLED  | response_id=%s | partial=%r",
                 response_id,
                 "".join(full_text_parts),
             )
@@ -191,11 +191,12 @@ async def stream_engine_to_retell(
         total_delay_s=time.perf_counter() - turn_started_at,
         first_token_delay_s=first_token_delay_s,
     )
-    logger.warning(
-        "RETELL FULL ASSISTANT | call_id=%s | response_id=%s | text=%r",
-        call_id,
+    logger.debug(
+        "RETELL FULL ASSISTANT |  response_id=%s | text=%r",
+
         response_id,
         full_text,
+        extra={"call_id": call_id}
     )
 
     final_text = full_text.strip()
@@ -394,7 +395,7 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
             try:
                 latest_state = await store.get(call_id)
             except Exception:
-                logger.exception("Call state read failed | action=disconnect_status | call_id=%s", call_id)
+                logger.exception("Call state read failed | action=disconnect_status",extra={"call_id": call_id})
         await _safe_record(
             "disconnect_call",
             call_id,

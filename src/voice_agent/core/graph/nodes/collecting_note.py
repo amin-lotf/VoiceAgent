@@ -72,7 +72,6 @@ async def node_collecting_note(
     operator_output = operator_data.get("operator_output", {})
     notes = _normalize_notes(operator_output.get("notes", []))
     merged_notes = _merge_notes(draft.get("notes"), notes)
-    logger.warning(f'*******\n notes: {notes}\n *******')
     scheduled_id = view_id(scheduled_view)
 
 
@@ -88,7 +87,6 @@ async def node_collecting_note(
     try:
         persisted_scheduled_view = await run_non_interruptible(state, _commit)
     except Exception as exc:
-        logger.exception("hold_appointment: failed to persist held appointment")
         local_state.update(
             record_node_error(
                 state,
@@ -98,6 +96,14 @@ async def node_collecting_note(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
+        logger.exception(
+            f" failed to persist held appointment: {str(exc)[:100]}",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'collecting_note',
+
+            })
         return local_state
     draft["notes"] = list(persisted_scheduled_view.get("notes") or draft.get("notes") or [])
     local_state.update(
@@ -108,5 +114,12 @@ async def node_collecting_note(
         }
     )
     mark_node_succeeded(state, local_state, "collecting_note")
-    logger.warning(f'local_state: {local_state}')
+    logger.info(
+        f"Notes collected: {merged_notes}",
+        extra={
+            'call_id': state.get('call_id'),
+            'phase': state.get('assistant_phase'),
+            'node': 'collecting_note',
+
+        })
     return local_state
