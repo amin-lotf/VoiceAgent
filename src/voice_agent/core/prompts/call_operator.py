@@ -8,7 +8,8 @@ from voice_agent.core.prompts.booking_appointment_blocks import get_book_appoint
 from voice_agent.core.prompts.collecting_notes_blocks import get_collecting_notes_rules
 from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, OUT_OF_SCOPE_RULES, \
     CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules, INTERRUPTION_HANDLING_RULES, \
-    APPOINTMENT_TIME_BOUNDARY_RULES, SPEECH_RULES, INTERNAL_CALL_CONTINUATION_RULES
+    APPOINTMENT_TIME_BOUNDARY_RULES, SPEECH_RULES, INTERNAL_CALL_CONTINUATION_RULES, AGENT_IDENTITY, \
+    AGENT_IDENTITY_RULES
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
@@ -152,7 +153,8 @@ def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_
     else:
         extend_prompt_section(all_rules, "Time boundary rules", APPOINTMENT_TIME_BOUNDARY_RULES)
         extend_prompt_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
-        extend_prompt_section(all_rules, "Office info rules", build_assistant_intent_rules())
+        extend_prompt_section(all_rules, "Agent identity rules", AGENT_IDENTITY_RULES)
+        extend_prompt_section(all_rules, "Assistant intent rules", build_assistant_intent_rules())
         extend_prompt_section(all_rules, "Out of scope rules", OUT_OF_SCOPE_RULES)
         extend_prompt_section(all_rules, "Capability explanation rules", CAPABILITY_EXPLANATION_RULES)
 
@@ -211,6 +213,9 @@ Rules:
 
 Output schema:
 {output_schema_text}
+
+Clinic_information
+{AGENT_IDENTITY}
 
 office_knowledge:
 {OFFICE_INFO}

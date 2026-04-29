@@ -6,6 +6,7 @@ COLLECTING_INFO_PHASE_RULES = [
     "Use the active conversation context first. Do not ask for a field that was already provided.",
     'If all required fields appear available, always give  a short waiting reply for letting you input the data and set next_action to "extract_info".',
     'Waiting replies must be sounds natural, without mentioning the next step.',
+    'If all required fields appear available, do not repeat them  again.',
     'If any required field is missing or unclear, ask for exactly one missing field and set next_action to "ask_user".',
 ]
 
@@ -29,7 +30,7 @@ COLLECTING_PHONE_RULES = [
     "Accept phone numbers spoken as digits, digit words, or a mix of both. e.g, O one two. eight. eight -> O1288",
     "Treat spoken digit words as digits: zero=0, one=1, two=2, three=3, four=4, five=5, six=6, seven=7, eight=8, nine=9.",
     "Treat the letter O or o as 0 when it appears inside a phone-number-like sequence.",
-    "If the caller already gave a phone-number-like sequence, you may repeat it once and ask for confirmation only if you doubt it.",
+    "If the caller already gave a phone-number-like sequence, you can only repeat it once.",
     "Do not ask for country code unless the caller's number is unusable without it.",
 ]
 
@@ -42,7 +43,7 @@ COLLECTING_REASON_FOR_VISIT_RULES = [
 
 COLLECTING_REQUESTED_DAY_RULES = [
     "Only collect the day or date preference.",
-    "Accept natural day expressions such as today, tomorrow, next Monday, Friday, this weekend, or next week.",
+    "Accept natural day expressions such as today, tomorrow, next Monday, Friday morning, this weekend, or next week.",
     "If the caller gives a specific clock time or time-of-day expression, accept it as part of their request, but do not ask for time details.",
     "Never ask what time, what hour, morning, afternoon, or any more specific timing question.",
     "Once any usable day or date expression is available, do not ask for the requested day again unless the caller clearly changes it.",
