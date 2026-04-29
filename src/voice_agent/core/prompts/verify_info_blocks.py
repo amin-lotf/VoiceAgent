@@ -5,7 +5,6 @@ VERIFICATION_PHASE_RULES = [
     "The information to verify is: caller name, phone number, reason for visit, and requested day or time.",
     "Use the latest injected appointment information as the current record to verify.",
     "Briefly restate the appointment information in a natural confirmation question.",
-    "Ask whether the information is correct.",
 ]
 
 VERIFICATION_UPDATED_INFO_RULES = [

@@ -8,7 +8,7 @@ from voice_agent.core.prompts.booking_appointment_blocks import get_book_appoint
 from voice_agent.core.prompts.collecting_notes_blocks import get_collecting_notes_rules
 from voice_agent.core.prompts.global_blocks import GLOBAL_OPERATOR_RULES, OFFICE_INFO_RULES, OUT_OF_SCOPE_RULES, \
     CAPABILITY_EXPLANATION_RULES, JSON_RULES, OFFICE_INFO, build_assistant_intent_rules, INTERRUPTION_HANDLING_RULES, \
-    APPOINTMENT_TIME_BOUNDARY_RULES, SPEECH_RULES
+    APPOINTMENT_TIME_BOUNDARY_RULES, SPEECH_RULES, INTERNAL_CALL_CONTINUATION_RULES
 from voice_agent.core.prompts.output_schemas import OPERATOR_OUTPUT_SCHEMA
 from voice_agent.core.prompts.user_info_blocks import get_collecting_info_rules
 from voice_agent.core.prompts.user_intent_blocks import get_user_intent_rules
@@ -128,7 +128,7 @@ def _format_messages(messages: list[dict]) -> str:
 
 def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_call: bool = False):
 
-    user_text = (state.get("user_text") or "").strip()
+    user_text = (state.get("user_text") or "none").strip()
     appointment_draft:AppointmentDraft = state.get("appointment_draft") or {}
     recent_messages = state.get("messages") or []
     appointment_info = format_appointment_info(appointment_draft)
@@ -148,7 +148,7 @@ def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_
 
 
     if internal_call:
-       pass
+       extend_prompt_section(all_rules, "Call continuation rules", INTERNAL_CALL_CONTINUATION_RULES)
     else:
         extend_prompt_section(all_rules, "Time boundary rules", APPOINTMENT_TIME_BOUNDARY_RULES)
         extend_prompt_section(all_rules, "Office info rules", OFFICE_INFO_RULES)
@@ -182,7 +182,7 @@ def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_
             recent_changes += build_field_changes_prompt(field_changes)+'\n'
         case AssistantPhase.CONFIRMING_SLOT:
             all_rules.extend(get_slot_confirmation_rules())
-            recent_changes += format_offered_time_for_voice(appointment_draft.get('last_offered_slot_start_at'))+'\n'
+            # recent_changes += format_offered_time_for_voice(appointment_draft.get('last_offered_slot_start_at'))+'\n'
         case AssistantPhase.BOOKING_APPOINTMENT:
             all_rules.extend(get_book_appointment_rules())
         case AssistantPhase.COLLECTING_NOTES:
@@ -231,9 +231,7 @@ Updated information:
 
 
 
-
-Caller Now:
-{user_text or "none" if not internal_call else "none"}
+{'Caller Now:\n'+user_text if  not internal_call else ''}
 
 {appointment_info}
 

@@ -15,6 +15,13 @@ GLOBAL_OPERATOR_RULES = [
     "Ignore short acknowledgements unless a reply is required.",
 ]
 
+INTERNAL_CALL_CONTINUATION_RULES = [
+    "This is a continuation of your previous reply in the same conversation.",
+    "Continue naturally from where you left off.",
+    "Do not restart, rephrase, or sound like a new turn.",
+    "Keep the tone, context, and flow consistent with the last assistant message.",
+]
+
 INTERRUPTION_HANDLING_RULES = [
     "The caller  interrupted before hearing most of the previous assistant message.",
     "Must briefly repeat the important part of your last message.",

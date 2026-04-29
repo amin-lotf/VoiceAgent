@@ -16,6 +16,7 @@ REQUESTING_USER_INTENT_RULES = [
     "Do not assume the caller wants a new appointment unless they clearly say so.",
     "If the caller clearly states they want to book a new appointment, extract that intent and do not ask another intent question in the same response.",
     'After extracting a clear booking intent, give a short natural waiting reply.',
+    'Waiting reply must be short, without repeating the caller request, and without mentioning the next step.',
 ]
 
 

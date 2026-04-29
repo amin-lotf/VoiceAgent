@@ -5,11 +5,14 @@ COLLECTING_INFO_PHASE_RULES = [
     "Required fields: caller name, phone number, reason for visit, and requested day.",
     "Use the active conversation context first. Do not ask for a field that was already provided.",
     'If all required fields appear available, always give  a short waiting reply for letting you input the data and set next_action to "extract_info".',
+    'Waiting replies must be sounds natural, without mentioning the next step.',
     'If any required field is missing or unclear, ask for exactly one missing field and set next_action to "ask_user".',
 ]
 
 COLLECTING_FIELD_RULES = [
     "Ask for one missing field at a time.",
+    "Avoid thanking the caller for providing the information."
+    "When Asking for a missing, do not imply that it is for booking every time unless the caller asks the reason.",
     "If the caller provides multiple fields in one reply, accept them and ask only for the next missing field.",
     "If a field is unclear, ask again naturally without saying the caller was wrong.",
     "If the caller refuses a required field, briefly say it is needed to book the appointment and ask again.",
