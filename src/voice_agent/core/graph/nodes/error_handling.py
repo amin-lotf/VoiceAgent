@@ -47,7 +47,7 @@ def node_error_handling(state: CallState) -> dict:
     should_handoff = (
         global_count >= GLOBAL_ERROR_THRESHOLD
         or consecutive >= CONSECUTIVE_ERROR_THRESHOLD
-        or error_type != ErrorType.FATAL_ERROR
+        or error_type == ErrorType.FATAL_ERROR
     )
 
 

@@ -94,7 +94,15 @@ async def node_datetime_extractor(
                 'assistant_phase': AssistantPhase.BOOKING_APPOINTMENT,
                 'messages': []
             }
-        logger.warning(f'datetime_extractor: next_action: {next_action}, local_state: {local_state}')
+        logger.info(
+            f"Offered time is approved by the caller",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'datetime_extractor',
+
+            }
+        )
         return local_state
 
     appointment: AppointmentDraft = dict(state.get("appointment_draft") or {})
@@ -107,8 +115,15 @@ async def node_datetime_extractor(
         now=now,
         tz_info=tz_info,
     )
+    logger.info(
+        f"Processing requested time: {requested_time_text}",
+        extra={
+            'call_id': state.get('call_id'),
+            'phase': state.get('assistant_phase'),
+            'node': 'datetime_extractor',
 
-    logger.warning("datetime_extractor input requested_time_text=%r", requested_time_text)
+        }
+    )
     start_time = time.perf_counter()
     end_time: float | None = None
     local_state = {}
@@ -117,7 +132,7 @@ async def node_datetime_extractor(
         llm_result: AIMessage = await LLM_Non_stream.ainvoke(messages)
         end_time = time.perf_counter()
         raw_text = _extract_json_text(llm_result.content)
-        parsed = _parse_json_object(raw_text)
+        parsed = _parse_json_object(state,raw_text)
         schedule_patch = _normalize_schedule_patch(parsed)
 
         logger.debug(

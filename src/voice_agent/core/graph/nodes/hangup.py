@@ -37,6 +37,14 @@ async def node_on_call_ended(state: CallState,
     held_view = state.get("held_appointment_view") or {}
     view_status = held_view.get("status")
     if view_status not in (AppointmentStatus.HELD, AppointmentStatus.PENDING):
+        logger.info(
+            f"No Data cleanup needed.",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'on_call_ended',
+            }
+        )
         return {}
 
     held_id = view_id(held_view)

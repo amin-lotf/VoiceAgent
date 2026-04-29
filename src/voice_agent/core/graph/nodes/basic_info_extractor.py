@@ -106,7 +106,6 @@ async def node_basic_info_extractor(
     try:
         messages = build_basic_info_extractor_prompt(state=state)
 
-        logger.warning("basic_info_extractor started")
         llm_result: AIMessage = await LLM_Non_stream.ainvoke(messages)
         end_time = time.perf_counter()
 
