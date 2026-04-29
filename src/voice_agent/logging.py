@@ -48,7 +48,7 @@ class AgentFormatter(logging.Formatter):
 
 
 def setup_logging() -> None:
-    level = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = os.getenv("LOG_LEVEL", "DEBUG").upper()
 
     handler = logging.StreamHandler()
     handler.setFormatter(
@@ -64,3 +64,13 @@ def setup_logging() -> None:
     root.setLevel(level)
     root.handlers.clear()
     root.addHandler(handler)
+    logging.getLogger("voice_agent").setLevel(logging.DEBUG)
+
+    for noisy_logger in (
+            "httpcore",
+            "httpx",
+            "openai",
+            "urllib3",
+            "asyncio",
+    ):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
