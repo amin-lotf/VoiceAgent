@@ -238,6 +238,13 @@ async def node_basic_info(
                     'phase':state.get('assistant_phase'),
                     'node': 'basic_info',
                 })
+        logger.info(
+            f'Next action: {next_action}',
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'basic_info',
+            })
         return local_state
     extractor_node_data = get_state_data(state, 'basic_info_extractor')
     appointment_patch: AppointmentPatch = extractor_node_data.get('appointment_patch') or {}

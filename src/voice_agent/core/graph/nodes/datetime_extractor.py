@@ -49,7 +49,7 @@ def _extract_json_text(content: Any) -> str:
     return str(content).strip()
 
 
-def _parse_json_object(text: str) -> dict[str, Any]:
+def _parse_json_object(state,text: str) -> dict[str, Any]:
     text = text.strip()
 
     try:
@@ -62,7 +62,6 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     if start != -1 and end != -1 and end > start:
         candidate = text[start: end + 1]
         return json.loads(candidate)
-
     raise ValueError("No valid JSON object found in datetime extractor response")
 
 
@@ -121,10 +120,15 @@ async def node_datetime_extractor(
         parsed = _parse_json_object(raw_text)
         schedule_patch = _normalize_schedule_patch(parsed)
 
-        logger.warning(
-            "==========\ndatetime_extractor: total generation time = %.3fs, parsed schedule_patch=%s\n =========",
-            end_time - start_time,
-            schedule_patch)
+        logger.debug(
+            f"Total generation time: {end_time - start_time}",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'datetime_extractor',
+
+            }
+        )
 
         set_node_data(
             local_state,
@@ -143,10 +147,18 @@ async def node_datetime_extractor(
             },
         )
         local_state['next_action'] = NextAction.HOLD_APPOINTMENT
+        logger.info(
+            f"Parsed schedule_patch: {schedule_patch}",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'datetime_extractor',
+
+            }
+        )
         return local_state
 
     except Exception as exc:
-        logger.exception("datetime_extractor failed")
         set_node_data(
             local_state,
             'datetime_extractor',
@@ -164,4 +176,13 @@ async def node_datetime_extractor(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
+        logger.exception(
+            f"Failed to parse operator JSON {str(exc)[:100]}",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'datetime_extractor',
+
+            }
+        )
         return local_state

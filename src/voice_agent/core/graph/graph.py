@@ -64,7 +64,7 @@ def build_call_graph(sessionmaker: async_sessionmaker[AsyncSession]):
         },
     )
 
-    graph.add_edge("on_call_started", END)
+    graph.add_edge("on_call_started", "finalize_response")
     graph.add_edge("handle_hangup", "finalize_response")
     graph.add_edge("handoff_fallback", 'finalize_response')
 
