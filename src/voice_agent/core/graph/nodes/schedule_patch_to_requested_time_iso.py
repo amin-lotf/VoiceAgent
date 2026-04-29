@@ -14,9 +14,6 @@ from voice_agent.core.types import CallState, AppointmentDraft, OperationStatus,
 logger = logging.getLogger(__name__)
 
 
-
-
-
 def _is_not_specified(value: object) -> bool:
     if value is None:
         return True
@@ -203,21 +200,33 @@ def _resolve_from_broad_date_mode(
 async def node_schedule_patch_to_requested_time_iso(
     state: CallState,
 ) -> dict[str, Any]:
-
+    local_state: dict[str, Any] = {}
     datetime_node_data= get_state_data(state,'datetime_extractor')
-    node_status = datetime_node_data.get('node_status')
-    if not node_status or node_status == OperationStatus.FAILURE:
-        return {}
-
-
     now = datetime.now(DEFAULT_TZ)
     appointment: AppointmentDraft = dict(state.get("appointment_draft") or {})
-    datetime_node = (state.get("node_data") or {}).get("datetime_extractor") or {}
-    raw_patch = datetime_node.get("schedule_patch") or {}
+    raw_patch = datetime_node_data.get("schedule_patch") or {}
 
     if not raw_patch:
         logger.warning("schedule_patch_to_requested_time_iso skipped: no schedule_patch")
-        return {}
+        local_state.update(
+            record_node_error(
+                state,
+                node_name="datetime_extractor",
+                error_type=ErrorType.LLM_CALL,
+                error_message='no schedule_patch'
+            )
+        )
+        local_state['next_action'] = NextAction.REPORT_ERROR
+        logger.exception(
+            f"Failed to parse operator JSON no schedule_patch",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'schedule_patch_to_requested_time_iso',
+
+            }
+        )
+        return local_state
 
     date_mode = str(raw_patch.get("date_mode", NOT_SPECIFIED))
     date_key = str(raw_patch.get("date_key", NOT_SPECIFIED))
@@ -229,7 +238,7 @@ async def node_schedule_patch_to_requested_time_iso(
         appointment.get("last_offered_slot_start_at", NOT_SPECIFIED)
     )
 
-    local_state: dict[str, Any] = {}
+
     updated_appointment = dict(appointment)
 
     requested_time_iso: str | None = None
@@ -292,19 +301,18 @@ async def node_schedule_patch_to_requested_time_iso(
                 'node_status': node_status,
             },
         )
+        logger.info(
+            f"Resolved requested_time_iso={requested_time_iso}, reason={resolution_reason}",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'schedule_patch_to_requested_time_iso',
 
-
-        logger.warning(
-            "schedule_patch_to_requested_time_iso resolved requested_time_iso=%r reason=%s",
-            requested_time_iso,
-            resolution_reason,
+            }
         )
-
         return local_state
 
     except Exception as exc:
-        logger.exception("schedule_patch_to_requested_time_iso failed")
-
         updated_appointment["requested_time_iso"] = str(NOT_SPECIFIED)
         local_state["appointment_draft"] = updated_appointment
 
@@ -325,4 +333,12 @@ async def node_schedule_patch_to_requested_time_iso(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
+        logger.exception(
+            f"Failed to resolve requested_time_iso: {str(exc)[:100]}",
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'schedule_patch_to_requested_time_iso',
+            }
+        )
         return local_state

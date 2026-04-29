@@ -26,7 +26,13 @@ def node_route_event(state: CallState) -> CallState:
         state["phase"] = CallPhase.DONE
     else:
         state["phase"] = CallPhase.INTENT_ROUTING
-
+    logger.info(
+        f'Call phase: {state["phase"]}',
+        extra={
+            'call_id': state.get('call_id'),
+            'phase': state.get('assistant_phase'),
+            'node': 'route_event',
+        })
     return state
 
 

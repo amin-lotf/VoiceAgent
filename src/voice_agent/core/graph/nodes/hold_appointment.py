@@ -27,7 +27,6 @@ async def node_hold_appointment(
         requested_time_iso = str(draft.get("requested_time_iso") or "").strip()
         requested_slot_start = datetime.fromisoformat(requested_time_iso)
     except ValueError as exc:
-        logger.warning("hold_appointment: invalid requested_time_iso=%s", requested_time_iso)
         # Better to retry datetime extractor agent to see if error is fixed
         local_state.update(
             record_node_error(
@@ -38,6 +37,13 @@ async def node_hold_appointment(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
+        logger.exception(
+            f'Invalid requested_time_iso: {requested_time_iso}',
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'hold_appointment',
+            })
         return local_state
 
     async def _commit() -> HoldAppointmentResult:
@@ -55,7 +61,6 @@ async def node_hold_appointment(
     try:
         result = await run_non_interruptible(state, _commit)
     except Exception as exc:
-        logger.exception("hold_appointment: failed to persist held appointment")
         local_state.update(
             record_node_error(
                 state,
@@ -65,6 +70,13 @@ async def node_hold_appointment(
             )
         )
         local_state['next_action'] = NextAction.REPORT_ERROR
+        logger.exception(
+            f'Failed to persist held appointment',
+            extra={
+                'call_id': state.get('call_id'),
+                'phase': state.get('assistant_phase'),
+                'node': 'hold_appointment',
+            })
         return local_state
 
     held_view = result.held_view
@@ -89,5 +101,11 @@ async def node_hold_appointment(
         }
     )
     mark_node_succeeded(state, local_state, "hold_appointment")
-    logger.warning("hold_appointment: local_state=%s", local_state)
+    logger.info(
+        f'Appointment with  ID {local_state["current_appointment_id"]} is now held.',
+        extra={
+            'call_id': state.get('call_id'),
+            'phase': state.get('assistant_phase'),
+            'node': 'hold_appointment',
+        })
     return local_state
