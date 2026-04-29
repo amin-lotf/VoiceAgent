@@ -190,6 +190,15 @@ class SqlAlchemyCallRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @staticmethod
+    def _normalize_scheduled_appointment(
+        scheduled_appointment: dict | None,
+    ) -> dict | None:
+        snapshot = dict(scheduled_appointment or {})
+        if not snapshot or snapshot.get("id") is None:
+            return None
+        return snapshot
+
     async def get_by_call_id(self, call_id: str) -> Optional[CallRecord]:
         stmt = sa.select(CallRecord).where(CallRecord.call_id == call_id)
         res = await self._session.execute(stmt)
@@ -265,6 +274,7 @@ class SqlAlchemyCallRepository:
         *,
         call_id: str,
         final_status: str | None = None,
+        scheduled_appointment: dict | None = None,
         ended_at: datetime | None = None,
         overwrite_existing: bool = False,
     ) -> CallRecord:
@@ -275,6 +285,9 @@ class SqlAlchemyCallRepository:
         call.ended_at = ended_at or utcnow()
         if final_status and (overwrite_existing or not call.final_status):
             call.final_status = final_status
+        normalized_appointment = self._normalize_scheduled_appointment(scheduled_appointment)
+        if normalized_appointment is not None:
+            call.scheduled_appointment = normalized_appointment
 
         await self._session.flush()
         await self._session.refresh(call)
@@ -285,17 +298,22 @@ class SqlAlchemyCallRepository:
         *,
         call_id: str,
         final_status: str | None,
+        scheduled_appointment: dict | None = None,
         overwrite_existing: bool = False,
     ) -> CallRecord:
         call = await self.create_or_get(call_id=call_id)
         status = (final_status or "").strip()
-        if not status:
+        normalized_appointment = self._normalize_scheduled_appointment(scheduled_appointment)
+        if normalized_appointment is None and not status:
             return call
 
-        if overwrite_existing or not call.final_status:
+        if status and (overwrite_existing or not call.final_status):
             call.final_status = status
-            await self._session.flush()
-            await self._session.refresh(call)
+        if normalized_appointment is not None:
+            call.scheduled_appointment = normalized_appointment
+
+        await self._session.flush()
+        await self._session.refresh(call)
 
         return call
 

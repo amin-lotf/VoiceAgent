@@ -159,6 +159,10 @@ class CallRecord(Base):
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     final_status: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    scheduled_appointment: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
 
     turns: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB,

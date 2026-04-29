@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -49,6 +50,7 @@ class CallHistoryRecorder:
         *,
         call_id: str,
         final_status: str | None = None,
+        scheduled_appointment: dict[str, Any] | None = None,
         ended_at: datetime | None = None,
         overwrite_existing: bool = False,
     ) -> None:
@@ -57,6 +59,7 @@ class CallHistoryRecorder:
                 await uow.calls.finish(
                     call_id=call_id,
                     final_status=final_status,
+                    scheduled_appointment=scheduled_appointment,
                     ended_at=ended_at,
                     overwrite_existing=overwrite_existing,
                 )
@@ -66,6 +69,7 @@ class CallHistoryRecorder:
         *,
         call_id: str,
         final_status: str | None,
+        scheduled_appointment: dict[str, Any] | None = None,
         overwrite_existing: bool = False,
     ) -> None:
         async with self._sessionmaker() as session:
@@ -73,5 +77,6 @@ class CallHistoryRecorder:
                 await uow.calls.update_status(
                     call_id=call_id,
                     final_status=final_status,
+                    scheduled_appointment=scheduled_appointment,
                     overwrite_existing=overwrite_existing,
                 )

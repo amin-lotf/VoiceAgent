@@ -75,8 +75,24 @@ class CallSummaryView:
 
 
 @dataclass(frozen=True)
+class ScheduledAppointmentView:
+    id: int
+    name: str | None
+    phone: str | None
+    reason_for_visit: str | None
+    start_at: str | None
+    end_at: str | None
+    notes: list[str]
+    status: str | None
+    patient_type: str | None
+    created_at: str | None
+    updated_at: str | None
+
+
+@dataclass(frozen=True)
 class CallDetailView(CallSummaryView):
     turns: list[CallTurnView]
+    scheduled_appointment: ScheduledAppointmentView | None = None
 
 
 class ApiClient:
@@ -182,6 +198,24 @@ class ApiClient:
             first_token_delay_s=j.get("first_token_delay_s"),
         )
 
+    @staticmethod
+    def _parse_scheduled_appointment(j: dict | None) -> ScheduledAppointmentView | None:
+        if not j or j.get("id") is None:
+            return None
+        return ScheduledAppointmentView(
+            id=int(j.get("id")),
+            name=j.get("name"),
+            phone=j.get("phone"),
+            reason_for_visit=j.get("reason_for_visit"),
+            start_at=j.get("start_at"),
+            end_at=j.get("end_at"),
+            notes=list(j.get("notes") or []),
+            status=j.get("status"),
+            patient_type=j.get("patient_type"),
+            created_at=j.get("created_at"),
+            updated_at=j.get("updated_at"),
+        )
+
     @classmethod
     def _parse_call_detail(cls, j: dict) -> CallDetailView:
         summary = cls._parse_call_summary(j)
@@ -195,4 +229,5 @@ class ApiClient:
             avg_total_delay_s=summary.avg_total_delay_s,
             avg_first_token_delay_s=summary.avg_first_token_delay_s,
             turns=[cls._parse_call_turn(turn) for turn in j.get("turns", [])],
+            scheduled_appointment=cls._parse_scheduled_appointment(j.get("scheduled_appointment")),
         )

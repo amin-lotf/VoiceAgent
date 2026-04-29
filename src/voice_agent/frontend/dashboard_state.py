@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from voice_agent.common import parse_dt
+from voice_agent.const import DEFAULT_TZ
+
 from typing import Sequence
 
 
@@ -20,3 +23,22 @@ def normalize_selected_call_id(
     if selected_call_id in call_ids:
         return selected_call_id
     return call_ids[0]
+
+
+def format_in_default_tz(
+    value: str | None,
+    *,
+    fmt: str,
+    missing: str = "-",
+) -> str:
+    if not value:
+        return missing
+
+    dt = parse_dt(value)
+    if dt is None:
+        return value
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=DEFAULT_TZ)
+
+    return dt.astimezone(DEFAULT_TZ).strftime(fmt)

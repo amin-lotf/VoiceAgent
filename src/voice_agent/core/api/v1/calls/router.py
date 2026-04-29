@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Annotated
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from voice_agent.core.db.session import AsyncSessionLocal
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
@@ -37,8 +37,23 @@ class CallSummaryOut(BaseModel):
     avg_first_token_delay_s: float | None = None
 
 
+class ScheduledAppointmentOut(BaseModel):
+    id: int
+    name: str | None = None
+    phone: str | None = None
+    reason_for_visit: str | None = None
+    start_at: str | None = None
+    end_at: str | None = None
+    notes: list[str] = Field(default_factory=list)
+    status: str | None = None
+    patient_type: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
 class CallDetailOut(CallSummaryOut):
     turns: list[CallTurnOut]
+    scheduled_appointment: ScheduledAppointmentOut | None = None
 
 
 def _to_iso(value: datetime | None) -> str | None:
@@ -77,11 +92,32 @@ def _to_summary_out(call: Any) -> CallSummaryOut:
     )
 
 
+def _to_scheduled_appointment_out(snapshot: dict[str, Any] | None) -> ScheduledAppointmentOut | None:
+    if not snapshot or snapshot.get("id") is None:
+        return None
+    return ScheduledAppointmentOut(
+        id=int(snapshot["id"]),
+        name=snapshot.get("name"),
+        phone=snapshot.get("phone"),
+        reason_for_visit=snapshot.get("reason_for_visit"),
+        start_at=snapshot.get("start_at"),
+        end_at=snapshot.get("end_at"),
+        notes=list(snapshot.get("notes") or []),
+        status=str(snapshot.get("status")) if snapshot.get("status") is not None else None,
+        patient_type=str(snapshot.get("patient_type")) if snapshot.get("patient_type") is not None else None,
+        created_at=snapshot.get("created_at"),
+        updated_at=snapshot.get("updated_at"),
+    )
+
+
 def _to_detail_out(call: Any) -> CallDetailOut:
     summary = _to_summary_out(call)
     return CallDetailOut(
         **summary.model_dump(),
         turns=[_to_turn_out(turn) for turn in (call.turns or [])],
+        scheduled_appointment=_to_scheduled_appointment_out(
+            getattr(call, "scheduled_appointment", None),
+        ),
     )
 
 

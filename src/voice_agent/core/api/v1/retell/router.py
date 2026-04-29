@@ -79,6 +79,18 @@ def _derive_disconnect_status(final_state: dict[str, Any] | None) -> str:
     return "disconnected"
 
 
+def _extract_scheduled_appointment_snapshot(
+    final_state: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    state = final_state or {}
+    snapshot = state.get("scheduled_appointment_view")
+    if not isinstance(snapshot, dict):
+        return None
+    if snapshot.get("id") is None:
+        return None
+    return dict(snapshot)
+
+
 async def _safe_record(
     action: str,
     call_id: str,
@@ -216,6 +228,7 @@ async def stream_engine_to_retell(
         )
 
     derived_status = _derive_call_status(final_state)
+    scheduled_appointment = _extract_scheduled_appointment_snapshot(final_state)
     if derived_status:
         await _safe_record(
             "call_status",
@@ -223,6 +236,7 @@ async def stream_engine_to_retell(
             recorder.record_status(
                 call_id=call_id,
                 final_status=derived_status,
+                scheduled_appointment=scheduled_appointment,
                 overwrite_existing=True,
             ),
         )
@@ -234,6 +248,7 @@ async def stream_engine_to_retell(
             recorder.finish_call(
                 call_id=call_id,
                 final_status=_derive_final_status(final_state),
+                scheduled_appointment=scheduled_appointment,
                 ended_at=utcnow(),
                 overwrite_existing=True,
             ),
@@ -396,12 +411,14 @@ async def retell_llm_ws(websocket: WebSocket, call_id: str):
                 latest_state = await store.get(call_id)
             except Exception:
                 logger.exception("Call state read failed | action=disconnect_status",extra={"call_id": call_id})
+        scheduled_appointment = _extract_scheduled_appointment_snapshot(latest_state)
         await _safe_record(
             "disconnect_call",
             call_id,
             recorder.finish_call(
                 call_id=call_id,
                 final_status=_derive_disconnect_status(latest_state),
+                scheduled_appointment=scheduled_appointment,
                 ended_at=utcnow(),
             ),
         )
