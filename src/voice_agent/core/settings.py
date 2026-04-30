@@ -1,16 +1,21 @@
 """Runtime configuration loaded from environment variables and .env."""
 import sys
-from typing import Any
+from datetime import time
+from typing import Any, get_args
 
-from pydantic import Field, ValidationError, field_validator
+from pydantic import Field, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from voice_agent.const import DEFAULT_SQLALCHEMY_DATABASE_URL, DEFAULT_TEST_SQLALCHEMY_DATABASE_URL, \
     DEFAULT_REPLY_PROVIDER, DEFAULT_REPLY_TEMPERATURE, DEFAULT_REPLY_MODEL, DEFAULT_REPLY_MAX_OUTPUT_TOKENS, \
     DEFAULT_REPLY_MAX_CONTEXT_CHARS, DEFAULT_APPOINTMENT_DURATION_MIN, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME, \
     DEFAULT_MESSAGE_HISTORY_SIZE
-from datetime import time
 from voice_agent.core.types import HubSpotObjectType
+
+
+def _is_optional_string(annotation: Any) -> bool:
+    args = get_args(annotation)
+    return len(args) == 2 and str in args and type(None) in args
 
 
 class Settings(BaseSettings):
@@ -28,6 +33,12 @@ class Settings(BaseSettings):
     SQLALCHEMY_DATABASE_URL: str = Field(
         default=DEFAULT_SQLALCHEMY_DATABASE_URL,
         description="Async database URL (PostgreSQL/asyncpg with pgvector).",
+        min_length=1,
+    )
+
+    REDIS_URL: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis URL for caching and message queue.",
         min_length=1,
     )
 
@@ -159,33 +170,21 @@ class Settings(BaseSettings):
 
 
 
-    @field_validator("OPENAI_API_KEY", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def _blank_api_key_to_none(cls, v: Any) -> str | None:
-        if v is None:
-            return None
-        if isinstance(v, str) and not v.strip():
-            return None
-        return v
+    def _blank_optional_strings_to_none(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
 
-    @field_validator(
-        "HUGGINGFACEHUB_API_TOKEN",
-        "HUBSPOT_ACCESS_TOKEN",
-        "HUBSPOT_DEAL_CANCELLED_STAGE",
-        "HUBSPOT_DEAL_PIPELINE",
-        "HUBSPOT_TICKET_STAGE",
-        "HUBSPOT_TICKET_CANCELLED_STAGE",
-        "HUBSPOT_TICKET_PIPELINE",
-        "CALENDLY_ACCESS_TOKEN",
-        mode="before",
-    )
-    @classmethod
-    def _blank_string_to_none(cls, v: Any) -> str | None:
-        if v is None:
-            return None
-        if isinstance(v, str) and not v.strip():
-            return None
-        return v
+        normalized = dict(data)
+        for field_name, field_info in cls.model_fields.items():
+            if not _is_optional_string(field_info.annotation):
+                continue
+
+            value = normalized.get(field_name)
+            if isinstance(value, str) and not value.strip():
+                normalized[field_name] = None
+        return normalized
 
 def load_settings_or_die() -> Settings:
     try:

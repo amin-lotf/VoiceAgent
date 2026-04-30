@@ -23,9 +23,8 @@ logger = logging.getLogger('voice_agent')
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(f_app: FastAPI):
-        r = redis.Redis(
-            host="localhost",
-            port=6379,
+        r = redis.Redis.from_url(
+            settings.REDIS_URL,
             decode_responses=True,
         )
         store = RedisStateStore(r, ttl_seconds=60 * 60)

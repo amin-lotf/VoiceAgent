@@ -130,6 +130,9 @@ def _format_messages(messages: list[dict]) -> str:
 def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_call: bool = False):
 
     user_text = (state.get("user_text") or "none").strip()
+    caller_now_text = ""
+    if not internal_call:
+        caller_now_text = f"Caller Now:\n{user_text}"
     appointment_draft:AppointmentDraft = state.get("appointment_draft") or {}
     recent_messages = state.get("messages") or []
     appointment_info = format_appointment_info(appointment_draft)
@@ -198,15 +201,12 @@ def build_operator_prompt(state:CallState, *,heard_seconds:float=None, internal_
 
     extend_prompt_section(all_rules, "JSON rules", JSON_RULES)
 
-
-
-
-
+    rules_text = "\n".join("- " + r for r in all_rules)
     system = f"""
 You are a clinic call assistant.
 
 Rules:
-{chr(10).join("- " + r for r in all_rules)}
+{rules_text}
 
 
 
@@ -236,7 +236,7 @@ Updated information:
 
 
 
-{'Caller Now:\n'+user_text if  not internal_call else ''}
+{caller_now_text}
 
 {appointment_info}
 
