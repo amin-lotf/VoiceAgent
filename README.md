@@ -76,6 +76,12 @@ VoiceAgent is built around a graph-based orchestration flow where each node hand
 - **Streaming layer**: Streams assistant tokens to the client for low-latency interaction
 - **Streamlit frontend**: Provides a tester UI and a calls dashboard
 
+## Workflow Graph
+
+The graph below is the current LangGraph workflow used by the agent runtime. It shows how the system routes events through response generation, extraction, appointment holding, booking, fallbacks, and finalization.
+
+![VoiceAgent workflow graph](assets/my_graph.png)
+
 ## Tech Stack
 
 - **Backend**: FastAPI, Python 3.11+
