@@ -154,37 +154,7 @@ Run tests:
 uv run pytest
 ```
 
-## Project Structure
 
-```text
-.
-├── assets/
-│   └── my_graph.png
-├── alembic/
-│   ├── env.py
-│   └── versions/
-├── src/voice_agent/
-│   ├── core/
-│   │   ├── api/v1/
-│   │   ├── db/
-│   │   ├── graph/
-│   │   ├── llm/
-│   │   ├── prompts/
-│   │   ├── services/
-│   │   └── store/
-│   ├── frontend/
-│   │   ├── pages/
-│   │   └── ui/
-│   ├── cli.py
-│   └── logging.py
-├── tests/
-│   ├── integration/
-│   └── unit/
-├── docker-compose.yml
-├── dockerfile
-├── pyproject.toml
-└── README.md
-```
 
 ## Design Decisions
 
@@ -194,13 +164,7 @@ uv run pytest
 - **Explicit state handling for corrections**: the system tracks draft appointment state, held appointments, scheduled appointments, and call state across turns
 - **Streaming for low latency**: token streaming and time-to-first-token tracking are built into the runtime
 
-## Use Cases
 
-- Clinic appointment booking
-- AI receptionist and inbound call automation
-- Scheduling workflows for service businesses
-- Front-desk load reduction for repetitive calls
-- CRM-connected follow-up workflows when HubSpot sync is enabled
 
 ## Roadmap
 
