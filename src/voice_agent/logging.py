@@ -2,7 +2,7 @@
 
 import logging
 import os
-
+from voice_agent.core.settings import settings
 
 RESET = "\033[0m"
 
@@ -48,7 +48,7 @@ class AgentFormatter(logging.Formatter):
 
 
 def setup_logging() -> None:
-    level = os.getenv("LOG_LEVEL", "DEBUG").upper()
+    level = os.getenv("LOG_LEVEL", settings.LOG_LEVEL).upper()
 
     handler = logging.StreamHandler()
     handler.setFormatter(

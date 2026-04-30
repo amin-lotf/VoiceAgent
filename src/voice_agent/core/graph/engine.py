@@ -103,7 +103,7 @@ class InterviewEngine:
             *,
             role: str,
             content: str | None,
-            limit: int = 20,
+            limit: int = settings.MESSAGE_HISTORY_SIZE,
     ) -> list[dict[str, str]]:
         text = (content or "").strip()
         if not text:
