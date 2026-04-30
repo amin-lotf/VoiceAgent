@@ -10,43 +10,65 @@ Coming soon: a short demo video showing a full patient call, real-time assistant
 
 <!-- Demo video will be added here -->
 
+## 🚀 Why This Project
+
+This project demonstrates how modern LLM systems can be integrated with real backend infrastructure to automate business workflows, not just generate text.
+
+It is designed as a foundation for production-ready AI voice assistants.
+
 ## What It Solves
 
-Clinics regularly miss calls or spend staff time on repetitive appointment requests. A voice assistant can handle those calls, collect the required information, check scheduling availability, and move the booking process forward without relying on a human for every step.
+Clinics lose revenue and time due to missed calls and manual appointment handling.
 
-VoiceAgent is designed as a practical prototype for real appointment-based businesses, with actual backend persistence, scheduling logic, and deployment workflows already in place.
+This system acts as an AI front-desk assistant that:
+- answers calls instantly
+- collects required patient information
+- schedules appointments automatically
+- reduces staff workload and missed bookings
+
+## 🧑‍💼 Use Cases
+
+- Clinics and medical centers
+- Appointment-based businesses
+- AI receptionist systems
+- Customer support automation
 
 ## What You Can Do
 
-- Run a natural clinic-call style conversation through a real FastAPI backend
-- Collect caller name, phone number, reason for visit, and requested time
-- Resolve natural time expressions into structured scheduling data
-- Search for available appointment slots
-- Hold a slot, confirm it, and persist the booking in PostgreSQL
-- Stream assistant responses in real time with low perceived latency
-- Use the Streamlit interface to test calls and inspect call outcomes
-- Start the full stack with Docker Compose
+- Handle real-time patient calls
+- Collect and validate booking information
+- Schedule appointments with backend integration
+- Respond naturally with low latency
 
 ## Key Features
 
-- State-driven conversation flow instead of a stateless chatbot loop
-- LangGraph orchestration across routing, extraction, scheduling, and fallback nodes
-- Speak-first, extract-after response design for smoother voice interactions
-- Structured JSON outputs for downstream actions and scheduling decisions
-- Database-backed scheduling with hold and confirmation logic
-- Streaming responses through a Retell-compatible WebSocket path
-- Dockerized local deployment with FastAPI, PostgreSQL, Redis, and Streamlit
-- Optional HubSpot CRM sync when credentials are configured
+- Graph-based conversation orchestration (LangGraph)
+- Speak-first, extract-after architecture
+- Structured JSON outputs for backend actions
+- Persistent state with PostgreSQL
+- Streaming responses for improved UX
+
+## 🧠 Design Highlights
+
+- **Speak-first architecture**  
+  The assistant responds immediately, then extracts structured data, reducing perceived latency.
+
+- **State-driven conversation**  
+  The system tracks partial information and handles corrections naturally.
+
+- **Separation of concerns**  
+  Conversation, extraction, and scheduling are handled by different components.
+
+- **Backend-controlled scheduling**  
+  Appointment logic is enforced outside the LLM for reliability.
 
 ## Architecture at a Glance
 
-- **FastAPI backend** for REST and WebSocket APIs
-- **Streamlit UI** for conversation testing and call monitoring
-- **LangGraph flow** for orchestration and state transitions
-- **LLM operator** for generating assistant responses and structured outputs
-- **Extractor and scheduler nodes** for info capture and appointment handling
-- **PostgreSQL database** for appointments, call logs, and CRM sync events
-- **Docker Compose** for local multi-service orchestration
+- FastAPI backend for API and orchestration
+- LangGraph manages conversation flow
+- LLM handles natural dialogue + structured output
+- PostgreSQL stores appointments and state
+- Streamlit UI for interaction
 
 ```mermaid
 flowchart LR
@@ -54,11 +76,11 @@ flowchart LR
     UI --> API
     API --> Graph
     Graph --> LLM
-    Graph --> Extractors
     Graph --> Scheduler
     Scheduler --> DB
-    API --> UI
 ```
+
+
 
 ### Workflow Graph
 
