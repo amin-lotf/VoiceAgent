@@ -16,15 +16,15 @@ This project demonstrates how modern LLM systems can be integrated with real bac
 
 It is designed as a foundation for production-ready AI voice assistants.
 
-## What It Solves
+## 💡 What It Solves
 
-Clinics lose revenue and time due to missed calls and manual appointment handling.
+Clinics lose time and revenue handling repetitive phone calls and missed bookings.
 
-This system acts as an AI front-desk assistant that:
+VoiceAgent acts as an AI front-desk assistant that:
 - answers calls instantly
 - collects required patient information
 - schedules appointments automatically
-- reduces staff workload and missed bookings
+- reduces staff workload and missed opportunities
 
 ## 🧑‍💼 Use Cases
 
@@ -50,17 +50,17 @@ This system acts as an AI front-desk assistant that:
 
 ## 🧠 Design Highlights
 
-- **Speak-first architecture**  
-  The assistant responds immediately, then extracts structured data, reducing perceived latency.
+- **Instant response (speak-first)**  
+  The assistant replies immediately, then extracts structured data — reducing perceived latency.
 
-- **State-driven conversation**  
-  The system tracks partial information and handles corrections naturally.
+- **State-aware conversations**  
+  Tracks partial information and handles corrections naturally.
 
-- **Separation of concerns**  
-  Conversation, extraction, and scheduling are handled by different components.
+- **Reliable scheduling logic**  
+  All appointment decisions are handled by the backend, not the LLM.
 
-- **Backend-controlled scheduling**  
-  Appointment logic is enforced outside the LLM for reliability.
+- **Modular architecture**  
+  Conversation, extraction, and scheduling are separated for robustness.
 
 ## Architecture at a Glance
 
