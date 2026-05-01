@@ -1,0 +1,9 @@
+{
+  "name": "voiceagent-react-wrapper",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix ../../src/voice_agent/frontend/react run dev --",
+    "build": "npm --prefix ../../src/voice_agent/frontend/react run build",
+    "preview": "npm --prefix ../../src/voice_agent/frontend/react run preview --"
+  }
+}

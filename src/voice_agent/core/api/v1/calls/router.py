@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Annotated
+from typing import Any, Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -24,6 +24,13 @@ class CallTurnOut(BaseModel):
     total_tokens: int | None = None
     total_delay_s: float | None = None
     first_token_delay_s: float | None = None
+
+
+class CallLogOut(BaseModel):
+    timestamp: str
+    level: Literal["debug", "info", "warning", "error"]
+    message: str
+    details: dict[str, Any] | None = None
 
 
 class CallSummaryOut(BaseModel):
@@ -53,6 +60,7 @@ class ScheduledAppointmentOut(BaseModel):
 
 class CallDetailOut(CallSummaryOut):
     turns: list[CallTurnOut]
+    logs: list[CallLogOut] = Field(default_factory=list)
     scheduled_appointment: ScheduledAppointmentOut | None = None
 
 
@@ -75,6 +83,40 @@ def _to_turn_out(turn: dict[str, Any]) -> CallTurnOut:
         total_tokens=metrics[TOTAL_TOKENS_KEY],
         total_delay_s=metrics[TOTAL_DELAY_KEY],
         first_token_delay_s=metrics[FIRST_TOKEN_DELAY_KEY],
+    )
+
+
+def _to_log_level(value: Any) -> Literal["debug", "info", "warning", "error"]:
+    normalized = str(value or "info").strip().lower()
+    if normalized == "critical":
+        return "error"
+    if normalized in {"debug", "info", "warning", "error"}:
+        return normalized
+    return "info"
+
+
+def _to_log_out(log: dict[str, Any]) -> CallLogOut:
+    raw_details = log.get("details")
+    if isinstance(raw_details, dict):
+        details = dict(raw_details)
+    else:
+        details = {}
+        if log.get("logger_name") is not None:
+            details["logger"] = str(log.get("logger_name"))
+        if log.get("call_id") is not None:
+            details["call_id"] = str(log.get("call_id"))
+        if log.get("node") is not None:
+            details["node"] = str(log.get("node"))
+        if log.get("phase") is not None:
+            details["phase"] = str(log.get("phase"))
+        if not details:
+            details = None
+
+    return CallLogOut(
+        timestamp=str(log.get("timestamp") or ""),
+        level=_to_log_level(log.get("level")),
+        message=str(log.get("message") or ""),
+        details=details,
     )
 
 
@@ -115,6 +157,7 @@ def _to_detail_out(call: Any) -> CallDetailOut:
     return CallDetailOut(
         **summary.model_dump(),
         turns=[_to_turn_out(turn) for turn in (call.turns or [])],
+        logs=[_to_log_out(log) for log in (getattr(call, "logs", None) or [])],
         scheduled_appointment=_to_scheduled_appointment_out(
             getattr(call, "scheduled_appointment", None),
         ),

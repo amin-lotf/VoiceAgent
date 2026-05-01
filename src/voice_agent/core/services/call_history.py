@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -80,6 +80,19 @@ class CallHistoryRecorder:
                     final_status=final_status,
                     scheduled_appointment=scheduled_appointment,
                     overwrite_existing=overwrite_existing,
+                )
+
+    async def record_logs(
+        self,
+        *,
+        call_id: str,
+        logs: Sequence[dict[str, Any]],
+    ) -> None:
+        async with self._sessionmaker() as session:
+            async with SqlAlchemyUnitOfWork(session) as uow:
+                await uow.calls.append_logs(
+                    call_id=call_id,
+                    logs=logs,
                 )
 
     async def get_call(self, *, call_id: str) -> CallRecord | None:

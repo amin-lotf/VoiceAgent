@@ -106,10 +106,10 @@ The image below is generated from the current LangGraph workflow in the codebase
 
 This repository now includes two UI paths:
 
-- `frontend/react` — the recommended demo UI. This is the new Vite + React + TypeScript dashboard for live streaming calls, appointment state, metrics, timeline events, logs, and recent saved calls.
+- `src/voice_agent/frontend/react` — the recommended demo UI. This is the Vite + React + TypeScript dashboard for live streaming calls, appointment state, metrics, timeline events, persisted logs, and recent saved calls.
 - `src/voice_agent/frontend` — the existing Streamlit UI, which remains the canonical Streamlit runtime path so the current `talk` command and Streamlit multipage routing keep working.
 
-There is also a small documentation wrapper at `frontend/streamlit` so both frontends are grouped under a shared top-level `frontend/` directory without breaking the existing Streamlit launch path.
+There is also a small documentation wrapper at `frontend/streamlit` so the Streamlit location is documented without changing its working runtime path.
 
 ## Quickstart with Docker Compose
 
@@ -184,10 +184,10 @@ uv run talk
 
 ### Run the React UI
 
-The React frontend lives in `frontend/react`.
+The React frontend lives in `src/voice_agent/frontend/react`.
 
 ```bash
-cd frontend/react
+cd src/voice_agent/frontend/react
 cp .env.example .env
 npm install
 npm run dev
@@ -206,7 +206,7 @@ Package scripts:
 
 ## Recommended Demo UI
 
-Use the React UI in `frontend/react` for demos.
+Use the React UI in `src/voice_agent/frontend/react` for demos.
 
 Use the Streamlit UI when you want the original reference implementation or need to compare behavior against the current baseline.
 
@@ -214,6 +214,7 @@ Use the Streamlit UI when you want the original reference implementation or need
 
 - Live chat/call simulation uses the websocket adapter at `/api/v1/live/ws/{call_id}`
 - Recent calls and detail pages use the existing REST endpoints at `/api/v1/calls` and `/api/v1/calls/{call_id}`
+- Call detail responses now include persisted logger output per call so the history view can show the saved transcript and saved logs together
 - The React app only displays fields already exposed by the backend; unavailable fields render as empty states rather than invented data
 
 Run tests:

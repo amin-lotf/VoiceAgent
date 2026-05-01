@@ -7,6 +7,8 @@ __pycache__
 .venv/
 frontend/react/node_modules
 frontend/react/dist
+src/voice_agent/frontend/react/node_modules
+src/voice_agent/frontend/react/dist
 .env
 .env.*
 .idea

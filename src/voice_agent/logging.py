@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Final
+from typing import Any, Callable, Final
 
 from voice_agent.core.settings import settings
 
@@ -115,10 +115,42 @@ class LiveLogBroker:
 
 
 _live_log_broker = LiveLogBroker()
+_live_log_persistence_callback: Callable[[LiveLogEvent], None] | None = None
+_live_log_persistence_lock = threading.Lock()
 
 
 def get_live_log_broker() -> LiveLogBroker:
     return _live_log_broker
+
+
+def configure_live_log_persistence(
+    callback: Callable[[LiveLogEvent], None] | None,
+) -> None:
+    global _live_log_persistence_callback
+
+    with _live_log_persistence_lock:
+        _live_log_persistence_callback = callback
+
+
+def clear_live_log_persistence() -> None:
+    configure_live_log_persistence(None)
+
+
+def _get_live_log_persistence_callback() -> Callable[[LiveLogEvent], None] | None:
+    with _live_log_persistence_lock:
+        return _live_log_persistence_callback
+
+
+def serialize_live_log_event(event: LiveLogEvent) -> dict[str, Any]:
+    return {
+        "timestamp": event.timestamp,
+        "level": event.level,
+        "logger_name": event.logger_name,
+        "message": event.message,
+        "call_id": event.call_id,
+        "node": event.node,
+        "phase": event.phase,
+    }
 
 
 def _normalize_log_field(value: object) -> str | None:
@@ -132,24 +164,31 @@ def _normalize_log_field(value: object) -> str | None:
 
 class LiveLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
-        call_id = _normalize_log_field(getattr(record, "call_id", None))
-        if not call_id:
-            return
+        try:
+            call_id = _normalize_log_field(getattr(record, "call_id", None))
+            if not call_id:
+                return
 
-        level = str(record.levelname or "INFO").strip().lower()
-        if level not in {"debug", "info", "warning", "error", "critical"}:
-            level = "info"
+            level = str(record.levelname or "INFO").strip().lower()
+            if level not in {"debug", "info", "warning", "error", "critical"}:
+                level = "info"
 
-        event = LiveLogEvent(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            level=level,
-            logger_name=record.name,
-            message=record.getMessage(),
-            call_id=call_id,
-            node=_normalize_log_field(getattr(record, "node", None)),
-            phase=_normalize_log_field(getattr(record, "phase", None)),
-        )
-        get_live_log_broker().publish(event)
+            event = LiveLogEvent(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                level=level,
+                logger_name=record.name,
+                message=record.getMessage(),
+                call_id=call_id,
+                node=_normalize_log_field(getattr(record, "node", None)),
+                phase=_normalize_log_field(getattr(record, "phase", None)),
+            )
+            get_live_log_broker().publish(event)
+
+            callback = _get_live_log_persistence_callback()
+            if callback is not None:
+                callback(event)
+        except Exception:
+            self.handleError(record)
 
 
 class AgentFormatter(logging.Formatter):

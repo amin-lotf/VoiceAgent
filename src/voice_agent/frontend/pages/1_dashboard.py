@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import importlib
+import json
 from typing import TYPE_CHECKING
 
 import streamlit as st
@@ -402,11 +403,46 @@ def _render_conversation(call: CallDetailView) -> None:
             st.markdown(turn.content or "")
 
 
+def _render_logs(call: CallDetailView) -> None:
+    st.markdown(
+        (
+            "<div class='conversation-header'>"
+            "<div class='section-label' style='margin: 0;'>Logs</div>"
+            f"<div class='conversation-count'>{len(call.logs)} saved entries</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+    if not call.logs:
+        st.info("No saved logs for this call yet.")
+        return
+
+    for entry in call.logs:
+        meta_parts = [
+            f"Level: {(entry.level or 'info').upper()}",
+            f"Time: {_format_timestamp(entry.timestamp)}",
+        ]
+        if entry.details and entry.details.get("logger"):
+            meta_parts.append(f"Logger: {entry.details.get('logger')}")
+        if entry.details and entry.details.get("node"):
+            meta_parts.append(f"Node: {entry.details.get('node')}")
+        if entry.details and entry.details.get("phase"):
+            meta_parts.append(f"Phase: {entry.details.get('phase')}")
+
+        with st.container(border=True):
+            st.markdown(f"**{entry.message or '-'}**")
+            st.caption(" | ".join(meta_parts))
+            if entry.details:
+                st.code(json.dumps(entry.details, indent=2), language="json")
+
+
 def _render_detail(call: CallDetailView) -> None:
     _render_call_information(call)
     if call.scheduled_appointment is not None:
         _render_scheduled_appointment(call.scheduled_appointment)
     _render_conversation(call)
+    _render_logs(call)
 
 
 def main() -> None:

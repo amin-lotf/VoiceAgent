@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -218,6 +218,7 @@ class SqlAlchemyCallRepository:
             call_id=call_id,
             started_at=started_at or utcnow(),
             turns=[],
+            logs=[],
         )
         self._session.add(call)
         await self._session.flush()
@@ -315,6 +316,25 @@ class SqlAlchemyCallRepository:
         await self._session.flush()
         await self._session.refresh(call)
 
+        return call
+
+    async def append_logs(
+        self,
+        *,
+        call_id: str,
+        logs: Sequence[dict[str, Any]],
+    ) -> CallRecord:
+        call = await self.create_or_get(call_id=call_id)
+        next_logs = [dict(item) for item in logs if isinstance(item, dict)]
+        if not next_logs:
+            return call
+
+        stored_logs = list(call.logs or [])
+        stored_logs.extend(next_logs)
+        call.logs = stored_logs
+
+        await self._session.flush()
+        await self._session.refresh(call)
         return call
 
 

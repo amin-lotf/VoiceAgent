@@ -1,5 +1,6 @@
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 import requests
@@ -63,6 +64,14 @@ class CallTurnView:
 
 
 @dataclass(frozen=True)
+class CallLogView:
+    timestamp: str
+    level: str
+    message: str
+    details: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
 class CallSummaryView:
     call_id: str
     started_at: str
@@ -92,6 +101,7 @@ class ScheduledAppointmentView:
 @dataclass(frozen=True)
 class CallDetailView(CallSummaryView):
     turns: list[CallTurnView]
+    logs: list[CallLogView] = field(default_factory=list)
     scheduled_appointment: ScheduledAppointmentView | None = None
 
 
@@ -199,6 +209,16 @@ class ApiClient:
         )
 
     @staticmethod
+    def _parse_call_log(j: dict) -> CallLogView:
+        details = j.get("details")
+        return CallLogView(
+            timestamp=j.get("timestamp", ""),
+            level=j.get("level", "info"),
+            message=j.get("message", ""),
+            details=dict(details) if isinstance(details, dict) else None,
+        )
+
+    @staticmethod
     def _parse_scheduled_appointment(j: dict | None) -> ScheduledAppointmentView | None:
         if not j or j.get("id") is None:
             return None
@@ -229,5 +249,6 @@ class ApiClient:
             avg_total_delay_s=summary.avg_total_delay_s,
             avg_first_token_delay_s=summary.avg_first_token_delay_s,
             turns=[cls._parse_call_turn(turn) for turn in j.get("turns", [])],
+            logs=[cls._parse_call_log(item) for item in j.get("logs", [])],
             scheduled_appointment=cls._parse_scheduled_appointment(j.get("scheduled_appointment")),
         )

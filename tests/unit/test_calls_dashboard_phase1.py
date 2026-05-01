@@ -26,6 +26,17 @@ def test_calls_router_serializes_summary_and_turns() -> None:
         started_at=started_at,
         ended_at=ended_at,
         final_status="completed",
+        logs=[
+            {
+                "timestamp": (started_at + timedelta(seconds=5)).isoformat(),
+                "level": "debug",
+                "logger_name": "voice_agent.core.graph.nodes.greeting",
+                "message": "Greeting streamed",
+                "call_id": "call-123",
+                "node": "greeting",
+                "phase": "intent_routing",
+            }
+        ],
         scheduled_appointment={
             "id": 88,
             "name": "Janet Doe",
@@ -77,6 +88,14 @@ def test_calls_router_serializes_summary_and_turns() -> None:
     assert detail.scheduled_appointment is not None
     assert detail.scheduled_appointment.name == "Janet Doe"
     assert detail.scheduled_appointment.notes == ["Bring insurance card"]
+    assert len(detail.logs) == 1
+    assert detail.logs[0].level == "debug"
+    assert detail.logs[0].details == {
+        "logger": "voice_agent.core.graph.nodes.greeting",
+        "call_id": "call-123",
+        "node": "greeting",
+        "phase": "intent_routing",
+    }
 
 
 def test_api_client_parses_call_detail_payload() -> None:
@@ -89,6 +108,19 @@ def test_api_client_parses_call_detail_payload() -> None:
         "total_tokens": 99,
         "avg_total_delay_s": 1.4,
         "avg_first_token_delay_s": 0.8,
+        "logs": [
+            {
+                "timestamp": "2026-04-15T10:00:05+00:00",
+                "level": "warning",
+                "message": "Missing patient phone",
+                "details": {
+                    "logger": "voice_agent.core.graph.nodes.basic_info",
+                    "call_id": "call-456",
+                    "node": "basic_info",
+                    "phase": "collecting_info",
+                },
+            }
+        ],
         "turns": [
             {
                 "role": "user",
@@ -126,6 +158,14 @@ def test_api_client_parses_call_detail_payload() -> None:
     assert detail.turns[0].total_delay_s is None
     assert detail.scheduled_appointment is not None
     assert detail.scheduled_appointment.reason_for_visit == "Cleaning"
+    assert len(detail.logs) == 1
+    assert detail.logs[0].message == "Missing patient phone"
+    assert detail.logs[0].details == {
+        "logger": "voice_agent.core.graph.nodes.basic_info",
+        "call_id": "call-456",
+        "node": "basic_info",
+        "phase": "collecting_info",
+    }
 
 
 def test_extract_scheduled_appointment_snapshot_only_returns_scheduled_view() -> None:

@@ -10,6 +10,7 @@ wheels/
 .venv
 
 
+
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
 # Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
 requirements.local.*
@@ -195,7 +196,7 @@ celerybeat.pid
 
 # Environments
 .env
-
+.env.docker
 venv/
 
 env.bak/
@@ -204,6 +205,20 @@ venv.bak/
 # Frontend build output
 frontend/react/node_modules/
 frontend/react/dist/
+frontend/react/.vite/
+src/voice_agent/frontend/react/node_modules/
+src/voice_agent/frontend/react/dist/
+src/voice_agent/frontend/react/.vite/
+src/voice_agent/frontend/react/*.tsbuildinfo
+
+
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
 
 # Spyder project settings
 .spyderproject
