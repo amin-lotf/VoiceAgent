@@ -47,7 +47,7 @@ class _LiveLogSubscriber:
     queue: asyncio.Queue[LiveLogEvent]
     loop: asyncio.AbstractEventLoop
 
-
+#Live
 class LiveLogBroker:
     def __init__(self, *, buffer_size: int = _BUFFER_SIZE, queue_size: int = _QUEUE_SIZE) -> None:
         self._buffer_size = buffer_size
