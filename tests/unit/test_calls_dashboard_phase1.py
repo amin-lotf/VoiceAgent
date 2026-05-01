@@ -15,7 +15,7 @@ from voice_agent.frontend.dashboard_state import (
     get_call_status,
     normalize_selected_call_id,
 )
-from voice_agent.frontend.api_clinet import ApiClient
+from voice_agent.frontend.api_client import ApiClient
 
 
 def test_calls_router_serializes_summary_and_turns() -> None:

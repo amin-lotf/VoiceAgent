@@ -1,7 +1,7 @@
 import uuid
 import streamlit as st
 
-from voice_agent.frontend.api_clinet import ApiClient, SessionView
+from voice_agent.frontend.api_client import ApiClient, SessionView
 from voice_agent.frontend.settings import BASE_URL
 
 st.set_page_config(page_title="Voice Agent", page_icon="🎤", layout="centered")

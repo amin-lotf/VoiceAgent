@@ -8,7 +8,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Calls Dashboard", layout="wide")
 
-import voice_agent.frontend.api_clinet as api_client_module
+import voice_agent.frontend.api_client as api_client_module
 from voice_agent.frontend.dashboard_state import (
     format_in_default_tz,
     get_call_status,
@@ -21,7 +21,7 @@ ApiClient = api_client_module.ApiClient
 ApiError = api_client_module.ApiError
 
 if TYPE_CHECKING:
-    from voice_agent.frontend.api_clinet import (
+    from voice_agent.frontend.api_client import (
         CallDetailView,
         CallSummaryView,
         ScheduledAppointmentView,
