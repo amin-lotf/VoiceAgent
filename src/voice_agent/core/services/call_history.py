@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from voice_agent.core.db.models import CallRecord
 from voice_agent.core.db.uow import SqlAlchemyUnitOfWork
 
 
@@ -80,3 +81,8 @@ class CallHistoryRecorder:
                     scheduled_appointment=scheduled_appointment,
                     overwrite_existing=overwrite_existing,
                 )
+
+    async def get_call(self, *, call_id: str) -> CallRecord | None:
+        async with self._sessionmaker() as session:
+            uow = SqlAlchemyUnitOfWork(session)
+            return await uow.calls.get_by_call_id(call_id)

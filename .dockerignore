@@ -4,6 +4,9 @@ __pycache__
 *.pyc
 
 .venv
+.venv/
+frontend/react/node_modules
+frontend/react/dist
 .env
 .env.*
 .idea
@@ -20,4 +23,3 @@ notebooks
 
 *.pt
 *.onnx
-

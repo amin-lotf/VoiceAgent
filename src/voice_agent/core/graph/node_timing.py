@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
+from langgraph.config import get_stream_writer
+
 from voice_agent.const import TOTAL_DELAY_KEY, AI_DELAY_KEY, NON_AI_DELAY_KEY, INPUT_TOKENS_KEY, OUTPUT_TOKENS_KEY, \
     TOTAL_TOKENS_KEY, FIRST_TOKEN_DELAY_KEY, DELAY_KEYS, TOKEN_KEYS, NODE_TIMING_KEYS
 from voice_agent.core.types import CallState
@@ -280,28 +282,54 @@ def with_node_timing(node_name: str, node_fn):
         token = _current_node_timing.set(ctx)
         started_at = perf_counter()
         result: Any = None
+        writer = get_stream_writer()
+        succeeded = False
+        state["active_node"] = node_name
+
+        if writer:
+            writer(("node_started", {"node": node_name}))
 
         try:
             result = node_fn(state)
             if inspect.isawaitable(result):
                 result = await result
+            succeeded = True
             return result
         finally:
             _current_node_timing.reset(token)
             target_state = result if isinstance(result, dict) else state
             if isinstance(target_state, dict):
+                timing_payload = build_node_timing_payload(
+                    previous_bucket=previous_bucket,
+                    total_delay_s=perf_counter() - started_at,
+                    ai_delay_s=ctx.ai_delay_s,
+                    input_tokens=ctx.input_tokens,
+                    output_tokens=ctx.output_tokens,
+                    total_tokens=ctx.total_tokens,
+                )
                 _set_node_timing(
                     target_state,
                     node_name=node_name,
-                    payload=build_node_timing_payload(
-                        previous_bucket=previous_bucket,
-                        total_delay_s=perf_counter() - started_at,
-                        ai_delay_s=ctx.ai_delay_s,
-                        input_tokens=ctx.input_tokens,
-                        output_tokens=ctx.output_tokens,
-                        total_tokens=ctx.total_tokens,
-                    ),
+                    payload=timing_payload,
                 )
+                target_state["active_node"] = None
+                if succeeded:
+                    target_state["last_completed_node"] = node_name
+                    target_state["last_failed_node"] = None
+                else:
+                    target_state["last_failed_node"] = node_name
+
+                if writer:
+                    writer(
+                        (
+                            "node_finished",
+                            {
+                                "node": node_name,
+                                "status": "success" if succeeded else "error",
+                                "timing": timing_payload,
+                            },
+                        )
+                    )
 
     return timed_node
 

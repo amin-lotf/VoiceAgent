@@ -201,6 +201,10 @@ venv/
 env.bak/
 venv.bak/
 
+# Frontend build output
+frontend/react/node_modules/
+frontend/react/dist/
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -224,4 +228,3 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
-

@@ -7,6 +7,7 @@ from typing import Annotated
 
 import redis.asyncio as redis
 from fastapi import FastAPI, Header,Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from voice_agent.core.api.v1.router import api_router
 from voice_agent.core.api.v1.session_store import init_session_store, get_public_state, _sid
@@ -61,6 +62,13 @@ def create_app() -> FastAPI:
         description="Voice Agent API",
         version="0.1.0",
         lifespan=lifespan,
+    )
+    f_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     init_session_store(f_app)
     f_app.include_router(api_router, prefix="/api/v1")

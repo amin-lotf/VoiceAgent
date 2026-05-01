@@ -251,6 +251,9 @@ class CallState(TypedDict, total=False):
     current_appointment_id: NotRequired[int | None]
     prev_assistant_text: NotRequired[str]
     next_action: NotRequired[NextAction]
+    active_node: NotRequired[str | None]
+    last_completed_node: NotRequired[str | None]
+    last_failed_node: NotRequired[str | None]
 
 
 @dataclass(frozen=True, slots=True)
