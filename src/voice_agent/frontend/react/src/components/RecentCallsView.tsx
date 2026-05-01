@@ -33,6 +33,7 @@ export function RecentCallsView() {
   const [calls, setCalls] = useState<CallSummary[]>([]);
   const [selectedCallId, setSelectedCallId] = useState<string>("");
   const [detail, setDetail] = useState<CallDetail | null>(null);
+  const [activeSavedTab, setActiveSavedTab] = useState<"transcript" | "logs">("transcript");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -250,75 +251,130 @@ export function RecentCallsView() {
             </Panel>
           ) : null}
 
-          <Panel title="Saved Transcript" subtitle="Persisted turns and timing metadata." icon={Timer}>
-            {!detail?.turns.length ? <p className="text-sm text-zinc-400">No turns stored for this call.</p> : null}
-            <div className="space-y-3">
-              {detail?.turns.map((turn, index) => (
-                <article key={`${turn.role}-${index}`} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm font-medium text-zinc-100">{turn.role}</div>
-                    <div className="flex flex-wrap gap-3 text-xs text-zinc-500">
-                      {buildTurnMeta(turn).map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-200">{turn.content}</p>
-                </article>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="Saved Logs" subtitle="Persisted Python logger output for the selected call." icon={Terminal}>
-            {!detail?.logs.length ? <p className="text-sm text-zinc-400">No logs stored for this call.</p> : null}
-            <div className="space-y-3">
-              {detail?.logs.map((entry, index) => (
-                <article
-                  key={`${entry.timestamp}-${entry.level}-${index}`}
+          <Panel
+            title="Saved Call Data"
+            subtitle="Persisted transcript turns and Python logger output for the selected call."
+            icon={activeSavedTab === "transcript" ? Timer : Terminal}
+            className="overflow-hidden"
+            bodyClassName="p-0"
+          >
+            <div className="border-b border-white/6 px-5 py-4">
+              <div className="inline-flex rounded-md border border-zinc-800 bg-zinc-950/60 p-1">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSavedTab === "transcript"}
+                  onClick={() => setActiveSavedTab("transcript")}
                   className={cx(
-                    "rounded-lg border px-4 py-3",
-                    entry.level === "error"
-                      ? "border-danger/30 bg-danger/10"
-                      : entry.level === "warning"
-                        ? "border-warn/30 bg-warn/10"
-                        : entry.level === "debug"
-                          ? "border-info/20 bg-info/5"
-                          : "border-zinc-800 bg-zinc-950/70",
+                    "inline-flex h-9 items-center rounded-md px-3 text-sm transition",
+                    activeSavedTab === "transcript"
+                      ? "bg-accent/10 text-accent"
+                      : "text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100",
                   )}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-zinc-100">{entry.message}</div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-                          {entry.level}
-                        </span>
-                        {typeof entry.details?.logger === "string" ? (
-                          <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[11px] text-zinc-400">
-                            {entry.details.logger}
-                          </span>
-                        ) : null}
-                        {typeof entry.details?.node === "string" ? (
-                          <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[11px] text-zinc-400">
-                            node {entry.details.node}
-                          </span>
-                        ) : null}
-                        {typeof entry.details?.phase === "string" ? (
-                          <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[11px] text-zinc-400">
-                            phase {entry.details.phase}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="text-xs text-zinc-500">{formatDateTime(entry.timestamp)}</div>
-                  </div>
-                  {entry.details ? (
-                    <pre className="mt-3 overflow-x-auto rounded-md border border-black/20 bg-black/20 p-3 text-xs text-zinc-300">
-                      {JSON.stringify(entry.details, null, 2)}
-                    </pre>
+                  Saved Transcript
+                  <span className="ml-2 text-xs text-zinc-500">{detail?.turns.length ?? 0}</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSavedTab === "logs"}
+                  onClick={() => setActiveSavedTab("logs")}
+                  className={cx(
+                    "inline-flex h-9 items-center rounded-md px-3 text-sm transition",
+                    activeSavedTab === "logs"
+                      ? "bg-info/10 text-info"
+                      : "text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100",
+                  )}
+                >
+                  Saved Logs
+                  <span className="ml-2 text-xs text-zinc-500">{detail?.logs.length ?? 0}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="scroll-surface h-[420px] overflow-y-auto px-5 py-4 lg:h-[520px]">
+              {!detail ? <p className="text-sm text-zinc-400">Select a call to inspect the saved data.</p> : null}
+
+              {detail && activeSavedTab === "transcript" ? (
+                <>
+                  {!detail.turns.length ? (
+                    <p className="text-sm text-zinc-400">No turns stored for this call.</p>
                   ) : null}
-                </article>
-              ))}
+                  <div className="space-y-3">
+                    {detail.turns.map((turn, index) => (
+                      <article
+                        key={`${turn.role}-${index}`}
+                        className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="text-sm font-medium text-zinc-100">{turn.role}</div>
+                          <div className="flex flex-wrap gap-3 text-xs text-zinc-500">
+                            {buildTurnMeta(turn).map((item) => (
+                              <span key={item}>{item}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-200">
+                          {turn.content}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+
+              {detail && activeSavedTab === "logs" ? (
+                <>
+                  {!detail.logs.length ? (
+                    <p className="text-sm text-zinc-400">No logs stored for this call.</p>
+                  ) : null}
+                  <div className="space-y-3">
+                    {detail.logs.map((entry, index) => (
+                      <article
+                        key={`${entry.timestamp}-${entry.level}-${index}`}
+                        className={cx(
+                          "rounded-lg border px-4 py-3",
+                          entry.level === "error"
+                            ? "border-danger/30 bg-danger/10"
+                            : entry.level === "warning"
+                              ? "border-warn/30 bg-warn/10"
+                              : entry.level === "debug"
+                                ? "border-info/20 bg-info/5"
+                                : "border-zinc-800 bg-zinc-950/70",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-zinc-100">{entry.message}</div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
+                                {entry.level}
+                              </span>
+                              {typeof entry.details?.logger === "string" ? (
+                                <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[11px] text-zinc-400">
+                                  {entry.details.logger}
+                                </span>
+                              ) : null}
+                              {typeof entry.details?.node === "string" ? (
+                                <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[11px] text-zinc-400">
+                                  node {entry.details.node}
+                                </span>
+                              ) : null}
+                              {typeof entry.details?.phase === "string" ? (
+                                <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2.5 py-1 text-[11px] text-zinc-400">
+                                  phase {entry.details.phase}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="text-xs text-zinc-500">{formatDateTime(entry.timestamp)}</div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </div>
           </Panel>
         </div>

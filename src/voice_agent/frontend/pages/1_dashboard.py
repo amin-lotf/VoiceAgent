@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import html
 import importlib
-import json
 from typing import TYPE_CHECKING
 
 import streamlit as st
@@ -366,16 +365,6 @@ def _render_scheduled_appointment(appointment: ScheduledAppointmentView) -> None
 
 
 def _render_conversation(call: CallDetailView) -> None:
-    st.markdown(
-        (
-            "<div class='conversation-header'>"
-            "<div class='section-label' style='margin: 0;'>Conversation</div>"
-            f"<div class='conversation-count'>{len(call.turns)} saved turns</div>"
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-
     if not call.turns:
         st.info("No saved turns for this call yet.")
         return
@@ -404,16 +393,6 @@ def _render_conversation(call: CallDetailView) -> None:
 
 
 def _render_logs(call: CallDetailView) -> None:
-    st.markdown(
-        (
-            "<div class='conversation-header'>"
-            "<div class='section-label' style='margin: 0;'>Logs</div>"
-            f"<div class='conversation-count'>{len(call.logs)} saved entries</div>"
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-
     if not call.logs:
         st.info("No saved logs for this call yet.")
         return
@@ -433,16 +412,28 @@ def _render_logs(call: CallDetailView) -> None:
         with st.container(border=True):
             st.markdown(f"**{entry.message or '-'}**")
             st.caption(" | ".join(meta_parts))
-            if entry.details:
-                st.code(json.dumps(entry.details, indent=2), language="json")
+
+
+def _render_saved_call_data(call: CallDetailView) -> None:
+    st.markdown("<div class='section-label'>Saved Call Data</div>", unsafe_allow_html=True)
+    transcript_tab, logs_tab = st.tabs(
+        [f"Saved Transcript ({len(call.turns)})", f"Saved Logs ({len(call.logs)})"]
+    )
+
+    with transcript_tab:
+        with st.container(height=480):
+            _render_conversation(call)
+
+    with logs_tab:
+        with st.container(height=480):
+            _render_logs(call)
 
 
 def _render_detail(call: CallDetailView) -> None:
     _render_call_information(call)
     if call.scheduled_appointment is not None:
         _render_scheduled_appointment(call.scheduled_appointment)
-    _render_conversation(call)
-    _render_logs(call)
+    _render_saved_call_data(call)
 
 
 def main() -> None:
