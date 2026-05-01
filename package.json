@@ -1,0 +1,10 @@
+{
+  "name": "voiceagent",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend/react run dev --",
+    "build": "npm --prefix frontend/react run build",
+    "preview": "npm --prefix frontend/react run preview --",
+    "react:install": "npm --prefix src/voice_agent/frontend/react ci"
+  }
+}
