@@ -68,11 +68,11 @@ VoiceAgent acts as an AI front-desk assistant that:
 - LangGraph manages conversation flow
 - LLM handles natural dialogue + structured output
 - PostgreSQL stores appointments and state
-- Streamlit UI for interaction
+- Optional Streamlit and React UIs
 
 ```mermaid
 flowchart LR
-    User --> UI
+    User --> UI["Optional UIs"]
     UI --> API
     API --> Graph
     Graph --> LLM
@@ -102,15 +102,6 @@ The image below is generated from the current LangGraph workflow in the codebase
 - Docker / Docker Compose
 - Optional HubSpot integration
 
-## Frontend UIs
-
-This repository now includes two UI paths:
-
-- `src/voice_agent/frontend/react` — the recommended demo UI. This is the Vite + React + TypeScript dashboard for live streaming calls, appointment state, metrics, timeline events, persisted logs, and recent saved calls.
-- `src/voice_agent/frontend` — the existing Streamlit UI, which remains the canonical Streamlit runtime path so the current `talk` command and Streamlit multipage routing keep working.
-
-There is also a small documentation wrapper at `frontend/streamlit` so the Streamlit location is documented without changing its working runtime path.
-
 ## Quickstart with Docker Compose
 
 Prerequisites:
@@ -124,24 +115,31 @@ cp .env.docker.example .env.docker
 
 # 2. Edit .env.docker and set OPENAI_API_KEY
 
-# 3. Start services
+# 3. Start core services
 docker compose up --build
 
-# Optional: run the React dev server as well
+# Optional: add Streamlit
+docker compose --profile streamlit up --build
+
+# Optional: add React
 docker compose --profile react up --build
+
+# Optional: run both UIs
+docker compose --profile streamlit --profile react up --build
 ```
 
 Access services:
 
 - FastAPI: `http://localhost:8000`
 - FastAPI docs: `http://localhost:8000/docs`
-- Streamlit UI: `http://localhost:8501`
+- Streamlit UI (optional `streamlit` profile): `http://localhost:8501`
 - React UI (optional `react` profile): `http://localhost:5173`
 
 Notes:
 
 - The Docker image tag used by the compose service is `aminook/voiceagent:0.1.0`
-- The container command runs `alembic upgrade head && talk`
+- `streamlit` and `react` are optional Compose profiles
+- The app container runs Alembic migrations before starting FastAPI
 - HubSpot sync stays disabled unless `HUBSPOT_ACCESS_TOKEN` is set
 
 ## Local Development
@@ -159,8 +157,8 @@ uv run alembic upgrade head
 Local URLs:
 
 - FastAPI: `http://localhost:8000`
-- Streamlit UI: `http://localhost:8501`
-- React UI: `http://localhost:5173`
+- Streamlit UI (optional): `http://localhost:8501`
+- React UI (optional): `http://localhost:5173`
 
 ### Run the Backend
 
@@ -168,28 +166,17 @@ Local URLs:
 uv run uvicorn voice_agent.core.api.v1.fastapi_app:fastapi_app --reload
 ```
 
-### Run the Streamlit UI
-
-Recommended if you want the original reference UI:
+### Run the Streamlit UI (optional)
 
 ```bash
 uv run streamlit run src/voice_agent/frontend/streamlit_app.py
 ```
 
-Or run both the FastAPI backend and Streamlit together:
+### Run the React UI (optional)
 
 ```bash
-uv run talk
-```
-
-### Run the React UI
-
-The React frontend lives in `src/voice_agent/frontend/react`.
-
-```bash
-cd src/voice_agent/frontend/react
-cp .env.example .env
-npm install
+cp src/voice_agent/frontend/react/.env.example src/voice_agent/frontend/react/.env
+npm run react:install
 npm run dev
 ```
 
@@ -203,19 +190,6 @@ Package scripts:
 - `npm run dev`
 - `npm run build`
 - `npm run preview`
-
-## Recommended Demo UI
-
-Use the React UI in `src/voice_agent/frontend/react` for demos.
-
-Use the Streamlit UI when you want the original reference implementation or need to compare behavior against the current baseline.
-
-## Backend Notes for the React UI
-
-- Live chat/call simulation uses the websocket adapter at `/api/v1/live/ws/{call_id}`
-- Recent calls and detail pages use the existing REST endpoints at `/api/v1/calls` and `/api/v1/calls/{call_id}`
-- Call detail responses now include persisted logger output per call so the history view can show the saved transcript and saved logs together
-- The React app only displays fields already exposed by the backend; unavailable fields render as empty states rather than invented data
 
 Run tests:
 

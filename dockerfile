@@ -26,4 +26,4 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
 
-CMD ["sh", "-c", "alembic upgrade head && talk"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn voice_agent.core.api.v1.fastapi_app:fastapi_app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000}"]

@@ -9,11 +9,27 @@ services:
       SQLALCHEMY_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voice_agent
       REDIS_URL: redis://redis:6379/0
     ports:
-      - "8000:8000"
-      - "8501:8501"
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
     depends_on:
       - db
       - redis
+
+  streamlit:
+    image: aminook/voiceagent:0.1.0
+    profiles:
+      - streamlit
+    env_file:
+      - .env.docker
+    environment:
+      API_BASE_URL: http://app:8000/api/v1
+    command: >
+      sh -c "streamlit run src/voice_agent/frontend/streamlit_app.py
+      --server.address ${STREAMLIT_HOST:-0.0.0.0}
+      --server.port ${STREAMLIT_PORT:-8501}"
+    ports:
+      - "${STREAMLIT_PORT:-8501}:${STREAMLIT_PORT:-8501}"
+    depends_on:
+      - app
 
   react:
     image: node:22-alpine
@@ -30,7 +46,7 @@ services:
       - .:/app
       - react_node_modules:/app/src/voice_agent/frontend/react/node_modules
     ports:
-      - "5173:5173"
+      - "${REACT_PORT:-5173}:${REACT_PORT:-5173}"
     depends_on:
       - app
 
