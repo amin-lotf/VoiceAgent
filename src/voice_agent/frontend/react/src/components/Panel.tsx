@@ -1,7 +1,7 @@
 import type { PropsWithChildren, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
-import { cx } from "../lib/utils";
+import { cx } from "../utils/utils";
 
 interface PanelProps extends PropsWithChildren {
   title: string;

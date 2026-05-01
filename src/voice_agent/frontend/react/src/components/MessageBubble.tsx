@@ -1,5 +1,5 @@
 import type { LiveMessage } from "../types/voice-agent";
-import { cx, formatDateTime, messageTone } from "../lib/utils";
+import { cx, formatDateTime, messageTone } from "../utils/utils";
 
 interface MessageBubbleProps {
   message: LiveMessage;

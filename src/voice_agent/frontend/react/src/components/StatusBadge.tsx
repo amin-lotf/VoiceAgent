@@ -1,4 +1,4 @@
-import { cx, formatStatusLabel } from "../lib/utils";
+import { cx, formatStatusLabel } from "../utils/utils";
 
 interface StatusBadgeProps {
   label?: string | null;

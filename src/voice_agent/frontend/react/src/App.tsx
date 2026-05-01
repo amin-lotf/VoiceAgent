@@ -17,7 +17,7 @@ import { MessageBubble } from "./components/MessageBubble";
 import { Panel } from "./components/Panel";
 import { RecentCallsView } from "./components/RecentCallsView";
 import { StatusBadge } from "./components/StatusBadge";
-import { appConfig } from "./lib/config";
+import { appConfig } from "./utils/config";
 import {
   cx,
   formatDateTime,
@@ -27,7 +27,7 @@ import {
   formatTokens,
   generateCallId,
   timelineTone,
-} from "./lib/utils";
+} from "./utils/utils";
 import { useVoiceAgentSocket } from "./hooks/useVoiceAgentSocket";
 
 type AppView = "live" | "history";

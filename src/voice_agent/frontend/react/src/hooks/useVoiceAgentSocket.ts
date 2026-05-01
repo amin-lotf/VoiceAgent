@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { appConfig } from "../lib/config";
+import { appConfig } from "../utils/config";
 import {
   formatPhaseLabel,
   formatTokens,
   generateCallId,
-} from "../lib/utils";
+} from "../utils/utils";
 import type {
   CallDetail,
   CallLog,

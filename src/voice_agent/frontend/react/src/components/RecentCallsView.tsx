@@ -10,7 +10,7 @@ import {
 
 import { Panel } from "./Panel";
 import { StatusBadge } from "./StatusBadge";
-import { appConfig } from "../lib/config";
+import { appConfig } from "../utils/config";
 import {
   buildTurnMeta,
   cx,
@@ -18,7 +18,7 @@ import {
   formatLatency,
   formatRelativeDuration,
   formatTokens,
-} from "../lib/utils";
+} from "../utils/utils";
 import type { CallDetail, CallSummary } from "../types/voice-agent";
 
 async function fetchJson<T>(path: string): Promise<T> {
