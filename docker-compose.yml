@@ -21,12 +21,14 @@ services:
     profiles:
       - react
     working_dir: /app/src/voice_agent/frontend/react
-    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
     environment:
       VITE_API_BASE_URL: http://localhost:8000/api/v1
       VITE_WS_URL: ws://localhost:8000/api/v1/live/ws
+      CHOKIDAR_USEPOLLING: "true"
     volumes:
       - .:/app
+      - react_node_modules:/app/src/voice_agent/frontend/react/node_modules
     ports:
       - "5173:5173"
     depends_on:
@@ -50,3 +52,4 @@ services:
 
 volumes:
   voice_agent_pgdata:
+  react_node_modules:
