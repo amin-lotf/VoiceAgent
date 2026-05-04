@@ -15,7 +15,9 @@ services:
       - redis
 
   streamlit:
+    build: .
     image: aminook/voiceagent:0.1.0
+    container_name: voice_agent_streamlit
     profiles:
       - streamlit
     env_file:
@@ -30,6 +32,7 @@ services:
       - "${STREAMLIT_PORT:-8501}:${STREAMLIT_PORT:-8501}"
     depends_on:
       - app
+
 
   react:
     image: node:22-alpine

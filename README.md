@@ -1,6 +1,6 @@
 ![Docker Pulls](https://img.shields.io/docker/pulls/aminook/voiceagent)
 
-# VoiceAgent — AI Phone Assistant for Clinics
+# VoiceAgent — AI phone-call agent backend for clinic scheduling
 
 An end-to-end AI voice assistant that handles clinic calls, collects patient information, and books appointments through a real backend system.
 
