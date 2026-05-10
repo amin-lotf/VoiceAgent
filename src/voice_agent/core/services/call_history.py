@@ -97,5 +97,5 @@ class CallHistoryRecorder:
 
     async def get_call(self, *, call_id: str) -> CallRecord | None:
         async with self._sessionmaker() as session:
-            uow = SqlAlchemyUnitOfWork(session)
-            return await uow.calls.get_by_call_id(call_id)
+            async with SqlAlchemyUnitOfWork(session) as uow:
+                return await uow.calls.get_by_call_id(call_id)
