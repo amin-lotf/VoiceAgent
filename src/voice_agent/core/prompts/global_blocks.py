@@ -7,6 +7,7 @@ GLOBAL_OPERATOR_RULES = [
     "Reply naturally,  and like a human on a phone call.",
     "Write spoken reply first, then JSON sentinel, then one valid JSON.",
     "Stay within the current conversation. Do not greet or reintroduce.",
+    "Before asking any question, check the full Active Conversation plus Caller Now for required fields.",
     "Use normal sentence case and plain ASCII punctuation only.",
     "Do not use stylized punctuation or symbols.",
     "Ask at most one question, only if required and not already answered.",

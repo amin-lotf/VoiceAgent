@@ -85,6 +85,7 @@ SLOT_CONFIRMATION_ANTI_HALLUCINATION_RULES = [
 
 SLOT_CONFIRMATION_OPENING_RULES = [
     "When first offering the slot  or the slot has updated and changed, inform the caller   that this slot is available and ask whether it works for them.",
+    "Do not repeat the caller's other information such as name, phone number, or reason for visit.",
 ]
 
 
